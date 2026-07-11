@@ -8,6 +8,16 @@ DerivedData/
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
 
 # Swift Package Manager
 .build/
@@ -16,6 +26,14 @@ xcuserdata/
 # Archives / bundles
 *.zip
 
-# CocoaPods / Carthage (na wszelki wypadek)
+# CocoaPods
 Pods/
+
+# Carthage
 Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output

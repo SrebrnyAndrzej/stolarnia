@@ -157,7 +157,7 @@ struct DWGImportPreviewView: View {
                     .foregroundStyle(.secondary)
 
                 Text(match.reason)
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -175,10 +175,10 @@ struct DWGImportPreviewView: View {
                 Spacer()
             }
             Text("Warstwa: \(match.detected.layer) • Blok: \(match.detected.sourceBlock)")
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Text(match.reason)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
@@ -188,7 +188,7 @@ struct DWGImportPreviewView: View {
     private func statLabel(_ etykieta: String, _ wartosc: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(etykieta)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Text(wartosc)
                 .font(.caption.monospaced())
@@ -201,7 +201,7 @@ struct DWGImportPreviewView: View {
                 .font(.title3.bold())
                 .foregroundStyle(kolor)
             Text(etykieta)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)

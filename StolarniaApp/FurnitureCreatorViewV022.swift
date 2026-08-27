@@ -853,7 +853,7 @@ struct FurnitureCreatorViewV022: View {
             Label("Wypełnienie drzwi", systemImage: "square.fill")
         } footer: {
             Text("Wybierz konkretne wypełnienie aby uzyskać precyzyjną wagę i ostrzeżenia o max. tafli.")
-                .font(.caption2)
+                .font(.footnote)
         }
 
         // Tryb montażu
@@ -916,7 +916,7 @@ struct FurnitureCreatorViewV022: View {
                                 .font(.caption.weight(.medium))
                             if !el.wymiarOpis.isEmpty {
                                 Text(el.wymiarOpis)
-                                    .font(.caption2)
+                                    .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -1008,7 +1008,7 @@ struct FurnitureCreatorViewV022: View {
             Label("Listwa przymykowa", systemImage: "rectangle.portrait.lefthalf.inset.filled")
         } footer: {
             Text("Listwa przymykowa zakrywa otwarte skrzydło od strony ściany lub boku sąsiedniego mebla.")
-                .font(.caption2)
+                .font(.footnote)
         }
     }
 
@@ -1034,7 +1034,7 @@ struct FurnitureCreatorViewV022: View {
                 "Poniżej zalecanych \(Int(minMM)) mm",
                 systemImage: "exclamationmark.triangle"
             )
-            .font(.caption2)
+            .font(.footnote)
             .foregroundStyle(.orange)
         }
     }
@@ -1102,7 +1102,7 @@ struct FurnitureCreatorViewV022: View {
         } footer: {
             if !draft.wneki.isEmpty {
                 Text("Wymiary wnęk pojawiają się na karcie technicznej i w notatkach produkcyjnych. Nie zmieniają automatycznie rozkroju płyt.")
-                    .font(.caption2)
+                    .font(.footnote)
             }
         }
     }
@@ -1120,7 +1120,7 @@ struct FurnitureCreatorViewV022: View {
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Szer.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Szer.").font(.footnote).foregroundStyle(.secondary)
                     TextField(
                         "mm",
                         value: wneka.szerokoscMM,
@@ -1130,7 +1130,7 @@ struct FurnitureCreatorViewV022: View {
                     .frame(maxWidth: .infinity)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Wys.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Wys.").font(.footnote).foregroundStyle(.secondary)
                     TextField(
                         "mm",
                         value: wneka.wysokoscMM,
@@ -1140,7 +1140,7 @@ struct FurnitureCreatorViewV022: View {
                     .frame(maxWidth: .infinity)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Głęb.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Głęb.").font(.footnote).foregroundStyle(.secondary)
                     TextField(
                         "mm",
                         value: wneka.glebokoscMM,
@@ -1437,7 +1437,7 @@ struct FurnitureCreatorViewV022: View {
             Text("Materiał z bazy (opcjonalnie)")
         } footer: {
             Text("Materiał z bazy zastępuje wzornik uproszczony w wycenie i karcie technicznej.")
-                .font(.caption2)
+                .font(.footnote)
         }
     }
 
@@ -1721,7 +1721,7 @@ struct FurnitureCreatorViewV022: View {
             Text(
                 "\(compartment.kind.title) \(Int(compartment.heightMM.rounded())) mm"
             )
-            .font(.caption2)
+            .font(.footnote)
             .position(
                 x: rect.maxX + 42,
                 y:

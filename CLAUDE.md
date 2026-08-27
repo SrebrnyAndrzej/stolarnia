@@ -2,6 +2,122 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Handoff 2026-08-27 22:00 CEST
+
+### Stare menu wygaszone: trzy kolumny zeszły do dwóch
+
+Zgłoszenie było krótkie: „przebijają się stare układy głównego menu". I tak
+było — pulpit kaflowy stał się ekranem startowym, ale **dawna nawigacja
+została pod spodem w całości**. Pasek boczny z dwiema pozycjami („Klienci
+i projekty" / „Firma i bazy") i menu firmy z czterema pozycjami dublowały
+kafle pulpitu co do jednego celu, a przy otwartym pasku zabierały ćwierć
+szerokości iPada.
+
+`PanelGlownyView`: 580 → 394 linii. Usunięte `mainSidebar`, `companyMenu`,
+`secondaryColumn`, `detailColumn` oraz `selectMainSection` /
+`selectCompanySection`. Razem z nimi wyleciał `StolarniaNavigationRow` —
+komponent istniejący **wyłącznie** dla tych menu; zostawiony w bibliotece
+zapraszałby do odtworzenia układu, który właśnie wygasiliśmy.
+
+Nowa struktura wejścia:
+
+- **bazy wchodzą na pełny ekran** — nie mają listy do przeglądania, więc
+  nie mają po co być w układzie kolumnowym;
+- **projekty zostają dwukolumnowe** — listę projektów naprawdę się
+  przegląda (szukanie, długie zestawienia).
+
+**Pułapka, którą to odsłoniło:** wejście z pulpitu ustawia
+`columnVisibility = .detailOnly`. Ścieżka „nowy projekt" musi jednak
+ustawić `.all`, bo **arkusz nowego projektu stawia `ProjektListaView`** —
+przy ukrytej kolumnie SwiftUI nie buduje jej widoku i arkusz nie ma się
+z czego pokazać. Stan pusty „Wybierz projekt" dostał z tego samego powodu
+akcję `Pokaż listę projektów`: odsyłanie do „środkowego panelu", którego
+nie widać, było ślepą uliczką.
+
+### Antracyt zamiast systemowej szarości — 46 miejsc
+
+Tożsamość wizualna mieszkała w `StolarniaTheme`, a **dwie trzecie ekranów
+roboczych malowało się kolorami systemowymi**. Aplikacja wymusza ciemny
+motyw (`StolarniaAppThemeRoot`), więc te tła i tak były ciemne — ale
+neutralnie szare, wpadające w błękit, obok limonki czytające się jak inna
+aplikacja.
+
+Role przepięte na paletę: podłoże ekranu → `canvas`, karta → `canvasRaised`,
+wgłębienie (chip, pole, komórka) → **`canvasInset`** (nowy token).
+
+Każda nowa barwa ma **wyższy** kontrast niż systemowa, którą zastąpiła:
+papier na wgłębieniu 14,3:1 wobec 12,4:1, limonka 7,4:1 wobec 6,4:1.
+
+**Nietknięte świadomie:** `KartaTechnicznaPDFBuilder` i
+`KartaProjektuPrezentacyjnegoView` (drukowane na papierze), tło sceny
+RealityKit, wypełnienia rysunków technicznych (`context.fill`). Tam biel
+jest treścią, nie tłem interfejsu — nie „ujednolicaj" ich przy okazji.
+
+### Cele dotyku: koniec z `controlSize(.small)`
+
+Dziesięć kontrolek stało przy 28 pt = **5,4 mm**, przy progu komfortu
+9,2 mm. Nie ozdoby: wybór narzędzia elewacji, typ komory, zakres frontu,
+operacje grupowe, przesunięcie mebla o milimetr.
+
+Każde miejsce obejrzane osobno, bo warunki układu są różne:
+
+- siatki adaptacyjne rosną w dół — wystarczyło zdjąć `.small`, podnieść
+  stopień pisma i przesunąć minimum kolumny 118 → 136 pt, żeby pełne
+  etykiety się nie ucinały;
+- **przyciski przesunięcia dostały twardą wysokość 44 pt i ustępliwą
+  szerokość 34 pt.** Cztery („← 10 / ← 1 / → 1 / → 10") muszą zmieścić się
+  w `.inspector` szerokości ok. 270 pt, więc rośnie wymiar decydujący
+  o trafianiu palcem, nie ten rozsadzający wiersz.
+
+Podniesiony też stopień pisma tekstu interfejsowego: **60 miejsc
+`.font(.caption2)` → `.footnote`** (11 → 13 pt) w ośmiu plikach
+inspektorów i formularzy. To są ostrzeżenia produkcyjne, powody podziału
+i wymiary skrzynki — rzeczy do przeczytania, nie adnotacje na rysunku.
+**Pliki rysujące pominięte** (`Plan2DCanvasView`, `ElewacjaScianyCanvasView`,
+`GarderobaLayoutPrzeglad`): tam mały stopień to konwencja kreślarska.
+
+### Biblioteka: kolejność wg dopasowania do wolnego miejsca
+
+Katalog szedł alfabetycznie, co w zbiorze 160 modułów nie niosło nic —
+prawie każda nazwa zaczyna się od „Szafka". Pytanie przy bibliotece brzmi
+„co zmieści się w tej luce", a odpowiedź aplikacja zna:
+`suggestedPlacement` liczy wolne miejsce przy ścianie.
+
+Kolejność: **najpierw mieszczące się, od najciaśniejszego dopasowania**
+(moduł zostawiający 20 mm domyka ścianę; zostawiający 900 mm zostawia
+decyzję). Niemieszczące się **nie znikają** — schodzą na koniec z podaną
+szerokością wolnego miejsca, bo tę samą lukę bywa się poszerza kilka minut
+później, a ukrycie modułu wyglądałoby na brak w katalogu.
+
+`suggestedPlacement` liczone jest teraz **raz**, w `buildFiltered` w tle;
+sekcja rekomendacji korzysta z tej samej wartości zamiast przeglądać meble
+na ścianie po raz drugi dla każdego szablonu.
+
+### Pomieszczenia w projekcie: akcje wyszły z menu kontekstowego
+
+`Pomiary` i `Projekt` istniały **wyłącznie pod przytrzymaniem palca**.
+Stuknięcie wiersza ustawiało pomieszczenie jako aktywne i na tym się
+kończyło — żeby cokolwiek w nim zrobić, trzeba było znać gest, którego nic
+nie zapowiada. Teraz oba są przyciskami w wierszu (44 pt), a wyróżniony
+jest **następny sensowny krok**: niezmierzone woła o pomiar, zmierzone
+o projekt. Menu kontekstowe zostaje jako droga na skróty.
+
+### Git: cała praca wreszcie na zdalnym
+
+Repozytorium miało na GitHubie tylko „Initial commit", a kilkadziesiąt
+plików istniało **wyłącznie lokalnie**. Gałąź `ui-kaflowy-2026-08-27`
+niesie to w czterech commitach (domena / pulpit i wygaszone menu / paleta /
+cele dotyku). Scalenie do `main` zostawione użytkownikowi.
+
+Sprawdzone: **218 testów DomainCore przechodzi**, build przechodzi,
+aplikacja zainstalowana i uruchomiona na iPadzie.
+
+**Czego nie zweryfikowano:** wyglądu na ekranie. Symulator w tym
+środowisku nie wstaje, a iPada nie da się sterować z tej sesji. Do
+obejrzenia ręcznie: czy podniesiony stopień pisma nie zawija wierszy
+w inspektorze elewacji i czy rząd czterech przycisków przesunięcia mieści
+się w inspektorze bez ściskania.
+
 ## Handoff 2026-08-27 21:00 CEST
 
 ### Praca równoległa z Codexem — jak to działa

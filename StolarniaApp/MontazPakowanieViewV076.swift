@@ -1230,7 +1230,7 @@ struct MontazIPakowanieProjektuViewV076:
                                                 .etap
                                                 .nazwa
                                         )
-                                        .font(.caption2)
+                                        .font(.footnote)
                                         .foregroundStyle(
                                             .secondary
                                         )
@@ -1378,7 +1378,7 @@ struct MontazIPakowanieProjektuViewV076:
                     stepPackage
                         .opisStatusu
                 )
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(
                     .secondary
                 )
@@ -2844,7 +2844,7 @@ struct MontazIPakowanieProjektuViewV076:
                     Text(
                         "+\(problemy.count - 4) kolejnych elementów do sprawdzenia"
                     )
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
             }

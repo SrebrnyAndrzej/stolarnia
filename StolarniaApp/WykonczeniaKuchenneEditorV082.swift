@@ -109,7 +109,7 @@ struct WykonczeniaKuchenneEditorV082: View {
                 Text("Blaty (\(repo.blaty.count))")
             } footer: {
                 Text("Blat jest wyceniany na podstawie mb × cena materiału (z wariantu wyceny).")
-                    .font(.caption2)
+                    .font(.footnote)
             }
         }
     }
@@ -131,7 +131,7 @@ struct WykonczeniaKuchenneEditorV082: View {
             .foregroundStyle(.secondary)
             if !blat.wycięcia.isEmpty {
                 Text("Wycięcia: " + blat.wycięcia.map(\.rawValue).joined(separator: ", "))
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.orange)
             }
         }
@@ -171,7 +171,7 @@ struct WykonczeniaKuchenneEditorV082: View {
                 Text("Fartuchy (\(repo.fartuchy.count))")
             } footer: {
                 Text("Fartuch to wykończenie ściany między blatem a szafkami. Standardowa wysokość 600 mm. Długość pobierana automatycznie z sumy ciągów dolnych projektu.")
-                    .font(.caption2)
+                    .font(.footnote)
             }
         }
     }
@@ -233,7 +233,7 @@ struct WykonczeniaKuchenneEditorV082: View {
             Text(
                 "Synchronizacja usuwa tylko poprzednie automatyczne pozycje. Ręcznie dodane blaty i fartuchy zostają bez zmian."
             )
-            .font(.caption2)
+            .font(.footnote)
         }
     }
 

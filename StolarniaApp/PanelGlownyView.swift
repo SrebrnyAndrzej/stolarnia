@@ -278,12 +278,27 @@ struct PanelGlownyView: View {
             )
             .id(project.id)
         } else {
+            // Lista projektów bywa schowana — wchodząc w projekt z pulpitu
+            // otwieramy od razu jego kartę, żeby nie oglądać listy, przez
+            // którą się nie przyszło. Gdy zaznaczenie znika (usunięty
+            // projekt, powrót), ten ekran musi mieć wyjście u siebie:
+            // odesłanie do „środkowego panelu", którego nie widać, byłoby
+            // ślepą uliczką.
             StolarniaEmptyState(
                 title: "Wybierz projekt",
                 description:
-                    "Najpierw wybierz klienta lub projekt w środkowym panelu.",
+                    "Otwórz listę projektów albo wróć na pulpit.",
                 systemImage:
-                    "doc.text.magnifyingglass"
+                    "doc.text.magnifyingglass",
+                actionTitle: "Pokaż listę projektów",
+                actionSystemImage: "sidebar.left",
+                action: {
+                    withAnimation(
+                        StolarniaMotion.panelBoczny
+                    ) {
+                        columnVisibility = .all
+                    }
+                }
             )
         }
     }

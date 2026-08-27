@@ -951,7 +951,7 @@ struct ModulEdytorElewacjiView: View {
                     .font(.caption.weight(.semibold))
                 Text("Dotknij komory albo frontu na rysunku — jego ustawienia "
                      + "pojawią się tutaj.")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -973,7 +973,7 @@ struct ModulEdytorElewacjiView: View {
             }
             if narzedzie == .podziel {
                 Text("Dotknij wnętrza modułu, aby przeciąć go poziomo.")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -1492,7 +1492,7 @@ struct ModulEdytorElewacjiView: View {
                     zakres: 0...3
                 )
                 Text("Światło kolumny: \(Int(modul.columnInnerWidth(columns: zone.columns).rawValue)) mm")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -1659,7 +1659,7 @@ struct ModulEdytorElewacjiView: View {
                 Text(
                     "Równy podział: front \(Int(layout.frontHeight.rawValue)) mm."
                 )
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             }
 
@@ -1756,7 +1756,7 @@ struct ModulEdytorElewacjiView: View {
                     "Producenci dobierają siłownik po iloczynie wysokości "
                     + "frontu i masy, nie po samej masie."
                 )
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1766,7 +1766,7 @@ struct ModulEdytorElewacjiView: View {
                     } icon: {
                         Image(systemName: "exclamationmark.triangle")
                     }
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1776,7 +1776,7 @@ struct ModulEdytorElewacjiView: View {
                         "Konkretny model potwierdź w tabeli producenta — "
                         + "zakresy różnią się między seriami."
                     )
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1830,7 +1830,7 @@ struct ModulEdytorElewacjiView: View {
                     + "\(Int(swiatlo.rawValue)) mm. Prowadnica potrzebuje "
                     + "NL + \(Int(DrawerProfile.requiredDepthMargin.rawValue)) mm."
                 )
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1839,7 +1839,7 @@ struct ModulEdytorElewacjiView: View {
                         "\(Int(strata.rawValue)) mm głębokości zostaje niewykorzystane",
                         systemImage: "arrow.left.and.right"
                     )
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.orange)
                 }
             }
@@ -1922,7 +1922,7 @@ struct ModulEdytorElewacjiView: View {
         }
 
         Text(zone.drawerLayoutMode.opis)
-            .font(.caption2)
+            .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
@@ -1971,7 +1971,7 @@ struct ModulEdytorElewacjiView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "arrow.turn.down.right")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text("Fronty po przeliczeniu: \(opis) mm")
                     .font(.caption.monospacedDigit())
@@ -2200,7 +2200,7 @@ struct ModulEdytorElewacjiView: View {
             Text(
                 "Wysokości są liczone od dołu do góry i trafiają do rysunku, formatek oraz zapisu modułu."
             )
-            .font(.caption2)
+            .font(.footnote)
             .foregroundStyle(.secondary)
         }
     }
@@ -2287,7 +2287,7 @@ struct ModulEdytorElewacjiView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(kolor.opacity(0.1)))
 
         Text("Skrzynka wewnętrzna ≈ \(Int(layout.boxWidth.rawValue)) mm")
-            .font(.caption2)
+            .font(.footnote)
             .foregroundStyle(.secondary)
     }
 
@@ -2341,10 +2341,10 @@ struct ModulEdytorElewacjiView: View {
                         uwaga.componentCode.map { "\($0): \(uwaga.message)" }
                             ?? uwaga.message
                     )
-                    .font(.caption2)
+                    .font(.footnote)
                     if !uwaga.hint.isEmpty {
                         Text(uwaga.hint)
-                            .font(.caption2)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -2352,7 +2352,7 @@ struct ModulEdytorElewacjiView: View {
 
             if zastrzezenia.count > 4 {
                 Text("…i jeszcze \(zastrzezenia.count - 4)")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -2365,7 +2365,7 @@ struct ModulEdytorElewacjiView: View {
                             .font(.caption.weight(.semibold))
                     }
                     Text(plan.reason)
-                        .font(.caption2)
+                        .font(.footnote)
                     Text(opisPodzialkiPlanu(plan))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -2515,7 +2515,7 @@ struct ModulEdytorElewacjiView: View {
                         )
                     } else {
                         Text("Bez zmiany w formatkach, frontach, okuciach ani estymacji okleiny.")
-                            .font(.caption2)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -2527,12 +2527,12 @@ struct ModulEdytorElewacjiView: View {
                 )
             } else {
                 Text("Zmień wymiar, typ komory, front albo podział, żeby zobaczyć wpływ na produkcję.")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Text("Kwoty są roboczą estymacją na stałych założeniach, dopóki projekt nie ma pełnych cenników.")
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
 
             Divider()
@@ -2592,7 +2592,7 @@ struct ModulEdytorElewacjiView: View {
     ) -> some View {
         HStack {
             Text(tytul)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(formatDelta(delta) + suffix)
@@ -2607,7 +2607,7 @@ struct ModulEdytorElewacjiView: View {
     ) -> some View {
         HStack {
             Text(tytul)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(formatDeltaM2(delta) + " m²")
@@ -2622,7 +2622,7 @@ struct ModulEdytorElewacjiView: View {
     ) -> some View {
         HStack {
             Text(tytul)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(formatDeltaM(delta) + " mb")
@@ -2637,7 +2637,7 @@ struct ModulEdytorElewacjiView: View {
     ) -> some View {
         HStack {
             Text(tytul)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(formatDeltaCurrency(delta))
@@ -2763,7 +2763,7 @@ struct ModulEdytorElewacjiView: View {
             Text("\(Int(modul.width.rawValue)) × \(Int(modul.height.rawValue)) × \(Int(modul.depth.rawValue)) mm")
                 .font(.caption.monospacedDigit())
             Text("płyta \(Int(modul.carcassThickness.rawValue)) mm · plecy HDF 3 mm")
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
             if modul.invalidDrawerZoneCount > 0 {
@@ -3455,7 +3455,7 @@ private struct PoleWymiaruMM: View {
                         .frame(minWidth: 30, minHeight: 30)
                 }
                     .buttonStyle(.bordered)
-                Text("mm").font(.caption2).foregroundStyle(.secondary)
+                Text("mm").font(.footnote).foregroundStyle(.secondary)
             }
         }
         .onAppear { tekst = etykieta(wartosc) }

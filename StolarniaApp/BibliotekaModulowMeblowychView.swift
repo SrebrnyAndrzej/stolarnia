@@ -800,7 +800,7 @@ struct BibliotekaModulowMeblowychView: View {
             "Wolne miejsce \(formatted(wolne))",
             systemImage: "arrow.left.and.right"
         )
-        .font(.caption2)
+        .font(.footnote)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
@@ -818,7 +818,7 @@ struct BibliotekaModulowMeblowychView: View {
         ScrollView(.horizontal) {
             HStack(spacing: 6) {
                 Text("mm")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.tertiary)
 
                 ForEach(item.szerokosciMM, id: \.self) { szerokosc in
@@ -1163,7 +1163,7 @@ struct BibliotekaModulowMeblowychView: View {
             if let reason =
                 placement.suggestionReason {
                 Text(reason)
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(

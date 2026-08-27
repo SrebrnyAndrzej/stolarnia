@@ -134,7 +134,7 @@ struct SciankaPodzialowaEditorView: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Skrzydło")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(.secondary)
                 if let auto = autoWybor {
                     Text("\(auto.liczbaDrzwi) × \(Int(auto.szerokoscSkrzydlaMM.rounded())) mm")
                         .font(.subheadline.bold())
@@ -148,7 +148,7 @@ struct SciankaPodzialowaEditorView: View {
             Divider().frame(height: 28)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Seria").font(.caption2).foregroundStyle(.secondary)
+                Text("Seria").font(.footnote).foregroundStyle(.secondary)
                 Text(autoWybor?.seria.nazwa ?? "—")
                     .font(.caption.weight(.medium))
             }
@@ -247,7 +247,7 @@ struct SciankaPodzialowaEditorView: View {
             Text("Auto-dobór drzwi")
         } footer: {
             Text("Strefa optymalna skrzydła Bonari: 700–950 mm. Trafienie w strefę optymalną jest oznaczone ★.")
-                .font(.caption2)
+                .font(.footnote)
         }
     }
 
@@ -293,7 +293,7 @@ struct SciankaPodzialowaEditorView: View {
                     konstrukcja: draft.systemPrzesuwny.konstrukjaDrzwi
                 )
                 Text(seria.nazwa)
-                    .font(.caption2)
+                    .font(.footnote)
                     .padding(5)
                     .background(.secondary.opacity(0.12), in: Capsule())
             }
@@ -391,7 +391,7 @@ struct SciankaPodzialowaEditorView: View {
                         Text("·")
                         Text("H max \(Int(profil.maxWysokoscSkrzydlaMM)) mm")
                     }
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -461,7 +461,7 @@ struct SciankaPodzialowaEditorView: View {
                                         "Max tafla \(Int(wypelnienie.maxSzerokoscMM)) mm — skrzydło może wymagać podziału",
                                         systemImage: "exclamationmark.triangle"
                                     )
-                                    .font(.caption2)
+                                    .font(.footnote)
                                     .foregroundStyle(.orange)
                                 }
                             }

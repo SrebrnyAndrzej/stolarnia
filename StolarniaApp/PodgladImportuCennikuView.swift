@@ -113,7 +113,7 @@ struct PodgladImportuCennikuView: View {
                     .font(.caption)
 
                 Image(systemName: "arrow.right")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
 
                 Text(formatCena(a.nowaCenaNetto))
@@ -125,7 +125,7 @@ struct PodgladImportuCennikuView: View {
             HStack {
                 Text("Dopasowano po \(a.zrodloMappingu) · \(a.material.producent)")
                     .foregroundStyle(.tertiary)
-                    .font(.caption2)
+                    .font(.footnote)
                 Spacer()
                 Text(a.material.kod)
                     .foregroundStyle(.tertiary)
@@ -142,7 +142,7 @@ struct PodgladImportuCennikuView: View {
             EmptyView()
         } else {
             Text(String(format: "%+.1f%%", procent))
-                .font(.caption2)
+                .font(.footnote)
                 .fontWeight(.bold)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 5)

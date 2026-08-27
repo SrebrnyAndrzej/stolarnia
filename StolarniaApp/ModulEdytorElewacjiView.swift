@@ -244,7 +244,7 @@ struct ModulEdytorElewacjiView: View {
             .contentShape(Rectangle())
             .gesture(gestPlotna(fit: fit))
         }
-        .background(Color(.systemGroupedBackground))
+        .background(StolarniaPalette.canvas)
         .frame(minWidth: 360, minHeight: 360)
     }
 
@@ -780,7 +780,7 @@ struct ModulEdytorElewacjiView: View {
                 .padding(14)
             }
         }
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(StolarniaPalette.canvasRaised)
     }
 
     // MARK: - Inspektor w panelach (V0107)
@@ -1589,7 +1589,7 @@ struct ModulEdytorElewacjiView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.tertiarySystemGroupedBackground))
+                .fill(StolarniaPalette.canvasInset)
         )
     }
 
@@ -2570,7 +2570,7 @@ struct ModulEdytorElewacjiView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.tertiarySystemGroupedBackground))
+                .fill(StolarniaPalette.canvasInset)
         )
     }
 

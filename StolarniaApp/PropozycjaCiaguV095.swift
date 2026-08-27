@@ -185,7 +185,7 @@ struct PropozycjaCiaguView: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(.secondarySystemGroupedBackground))
+                    .fill(StolarniaPalette.canvasRaised)
             )
         }
     }
@@ -314,7 +314,7 @@ struct PropozycjaCiaguView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.secondarySystemGroupedBackground))
+                .fill(StolarniaPalette.canvasRaised)
         )
     }
 

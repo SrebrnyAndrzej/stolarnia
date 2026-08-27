@@ -116,6 +116,24 @@ enum StolarniaPalette {
             }
         )
 
+    /// Wgłębienie w karcie — chip, pole, komórka listy.
+    ///
+    /// Trzeci szczebel po `canvas` (podłoże ekranu) i `canvasRaised` (karta).
+    /// Odpowiada roli `tertiarySystemGroupedBackground`, ale w antracycie:
+    /// systemowy szary w wymuszonym ciemnym motywie wpadał w błękit i obok
+    /// limonki czytał się jak inna aplikacja.
+    static let canvasInset =
+        Color(
+            uiColor: UIColor {
+                _ in UIColor(
+                    red: 0.112,
+                    green: 0.132,
+                    blue: 0.146,
+                    alpha: 1
+                )
+            }
+        )
+
     static let accent =
         lime
 

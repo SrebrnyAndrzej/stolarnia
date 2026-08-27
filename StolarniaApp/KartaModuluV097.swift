@@ -168,7 +168,7 @@ struct KartaModuluV097: View {
         .padding(.horizontal, 14)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.secondarySystemGroupedBackground))
+                .fill(StolarniaPalette.canvasRaised)
         )
     }
 

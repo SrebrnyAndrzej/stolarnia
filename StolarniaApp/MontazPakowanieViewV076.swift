@@ -605,10 +605,7 @@ struct MontazIPakowanieProjektuViewV076:
                     .padding(18)
                 }
                 .background(
-                    Color(
-                        uiColor:
-                            .systemGroupedBackground
-                    )
+                    StolarniaPalette.canvas
                 )
             }
         }
@@ -1488,10 +1485,7 @@ struct MontazIPakowanieProjektuViewV076:
                     .padding(18)
                 }
                 .background(
-                    Color(
-                        uiColor:
-                            .systemGroupedBackground
-                    )
+                    StolarniaPalette.canvas
                 )
             }
         }
@@ -2208,10 +2202,7 @@ struct MontazIPakowanieProjektuViewV076:
             )
         }
         .background(
-            Color(
-                uiColor:
-                    .systemGroupedBackground
-            )
+            StolarniaPalette.canvas
         )
     }
 
@@ -2319,10 +2310,7 @@ struct MontazIPakowanieProjektuViewV076:
             alignment: .leading
         )
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemGroupedBackground
-            ),
+            StolarniaPalette.canvasRaised,
             in:
                 RoundedRectangle(
                     cornerRadius: 15,

@@ -134,10 +134,7 @@ struct StolarniaFilterButtonStyle:
                                 ? 0.24
                                 : 0.16
                             )
-                        : Color(
-                            uiColor:
-                                .secondarySystemBackground
-                        )
+                        : StolarniaPalette.canvasRaised
                         .opacity(
                             configuration.isPressed
                             ? 0.72
@@ -253,10 +250,7 @@ struct StolarniaCatalogContextBar: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 46)
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemGroupedBackground
-            )
+            StolarniaPalette.canvasRaised
         )
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -271,10 +265,7 @@ struct StolarniaCatalogContextBar: View {
         .padding(.horizontal, StolarniaLayout.pagePadding)
         .padding(.vertical, 10)
         .background(
-            Color(
-                uiColor:
-                    .systemGroupedBackground
-            )
+            StolarniaPalette.canvas
         )
         .overlay(alignment: .bottom) {
             Divider()

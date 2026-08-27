@@ -60,7 +60,7 @@ struct PanelInspektoraV0107<Content: View>: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+                .fill(StolarniaPalette.canvasInset)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)

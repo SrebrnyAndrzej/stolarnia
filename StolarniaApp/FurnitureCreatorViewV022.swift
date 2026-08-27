@@ -1599,10 +1599,7 @@ struct FurnitureCreatorViewV022: View {
         }
         .padding()
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemBackground
-            )
+            StolarniaPalette.canvasRaised
         )
     }
 

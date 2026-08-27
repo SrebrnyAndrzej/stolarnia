@@ -145,7 +145,7 @@ struct ZamowienieDoHurtowniV0103: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .fill(StolarniaPalette.canvasRaised)
             )
         }
     }

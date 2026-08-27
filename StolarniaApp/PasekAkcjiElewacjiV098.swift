@@ -61,7 +61,7 @@ struct PasekAkcjiElewacjiV098<Trailing: View>: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(akcja.wiodaca
                       ? StolarniaPalette.accentStrong.opacity(0.22)
-                      : Color(.tertiarySystemGroupedBackground))
+                      : StolarniaPalette.canvasInset)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)

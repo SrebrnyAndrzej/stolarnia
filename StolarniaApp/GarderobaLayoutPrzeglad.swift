@@ -134,7 +134,7 @@ struct GarderobaLayoutPrzeglad: View {
         }
         .navigationTitle("Podgląd układu")
         .navigationBarTitleDisplayMode(.inline)
-        .background(Color(.systemGroupedBackground))
+        .background(StolarniaPalette.canvas)
     }
 
     // MARK: - Header
@@ -187,7 +187,7 @@ struct GarderobaLayoutPrzeglad: View {
             }
         }
         .frame(height: 300)
-        .background(Color(.secondarySystemBackground))
+        .background(StolarniaPalette.canvasRaised)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
@@ -415,7 +415,7 @@ struct GarderobaLayoutPrzeglad: View {
                 }
             }
         }
-        .background(Color(.secondarySystemBackground))
+        .background(StolarniaPalette.canvasRaised)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -470,7 +470,7 @@ struct GarderobaLayoutPrzeglad: View {
             .frame(maxWidth: .infinity)
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(StolarniaPalette.canvasRaised)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)

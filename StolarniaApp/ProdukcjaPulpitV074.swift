@@ -956,10 +956,7 @@ struct ProdukcjaPulpitV074:
             )
         }
         .background(
-            Color(
-                uiColor:
-                    .systemGroupedBackground
-            )
+            StolarniaPalette.canvas
         )
     }
 
@@ -1367,10 +1364,7 @@ struct ProdukcjaPulpitV074:
             alignment: .leading
         )
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemGroupedBackground
-            ),
+            StolarniaPalette.canvasRaised,
             in:
                 RoundedRectangle(
                     cornerRadius: 16,

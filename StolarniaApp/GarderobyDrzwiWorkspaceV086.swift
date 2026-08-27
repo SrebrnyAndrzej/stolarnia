@@ -563,10 +563,7 @@ struct GarderobyDrzwiWorkspaceV086:
             }
         }
         .background(
-            Color(
-                uiColor:
-                    .systemGroupedBackground
-            )
+            StolarniaPalette.canvas
                 .ignoresSafeArea()
         )
         .onAppear {

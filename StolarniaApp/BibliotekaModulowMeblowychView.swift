@@ -511,10 +511,7 @@ struct BibliotekaModulowMeblowychView: View {
                 }
             }
             .background(
-                Color(
-                    uiColor:
-                        .systemGroupedBackground
-                )
+                StolarniaPalette.canvas
             )
         }
     }
@@ -771,10 +768,7 @@ struct BibliotekaModulowMeblowychView: View {
             }
         }
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemGroupedBackground
-            )
+            StolarniaPalette.canvasRaised
         )
         .overlay {
             RoundedRectangle(
@@ -868,10 +862,7 @@ struct BibliotekaModulowMeblowychView: View {
                                     ? StolarniaPalette
                                         .accentStrong
                                         .opacity(0.16)
-                                    : Color(
-                                        uiColor:
-                                            .tertiarySystemGroupedBackground
-                                    )
+                                    : StolarniaPalette.canvasInset
                             )
                         )
                     }
@@ -924,10 +915,7 @@ struct BibliotekaModulowMeblowychView: View {
                 style: .continuous
             )
             .fill(
-                Color(
-                    uiColor:
-                        .tertiarySystemGroupedBackground
-                )
+                StolarniaPalette.canvasInset
             )
 
             RoundedRectangle(
@@ -1187,10 +1175,7 @@ struct BibliotekaModulowMeblowychView: View {
         .frame(width: 198, alignment: .leading)
         .padding(12)
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemGroupedBackground
-            )
+            StolarniaPalette.canvasRaised
         )
         .overlay {
             RoundedRectangle(cornerRadius: 8)

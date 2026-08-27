@@ -278,10 +278,7 @@ struct ObrobkiCNCProjektuViewV073:
                 alignment: .leading
             )
             .background(
-                Color(
-                    uiColor:
-                        .secondarySystemBackground
-                ),
+                StolarniaPalette.canvasRaised,
                 in:
                     RoundedRectangle(
                         cornerRadius: 12,
@@ -448,10 +445,7 @@ struct ObrobkiCNCProjektuViewV073:
                                 ? StolarniaPalette
                                     .accent
                                     .opacity(0.18)
-                                : Color(
-                                    uiColor:
-                                        .tertiarySystemBackground
-                                )
+                                : StolarniaPalette.canvasInset
                             )
                         }
                         .overlay {
@@ -479,10 +473,7 @@ struct ObrobkiCNCProjektuViewV073:
         }
         .padding(16)
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemBackground
-            ),
+            StolarniaPalette.canvasRaised,
             in:
                 RoundedRectangle(
                     cornerRadius: 12,
@@ -640,10 +631,7 @@ struct ObrobkiCNCProjektuViewV073:
                 alignment: .leading
             )
             .background(
-                Color(
-                    uiColor:
-                        .secondarySystemBackground
-                ),
+                StolarniaPalette.canvasRaised,
                 in:
                     RoundedRectangle(
                         cornerRadius: 12,
@@ -1200,7 +1188,7 @@ private struct OperacjaCNCRowV073: View {
         }
         .padding(12)
         .background(
-            Color(uiColor: .secondarySystemBackground),
+            StolarniaPalette.canvasRaised,
             in: RoundedRectangle(cornerRadius: 12)
         )
         .contentShape(Rectangle())
@@ -1238,7 +1226,7 @@ private struct ObrobkiCNCPreviewV073: View {
                 draw(context: &context, size: size)
             }
             .background(
-                Color(uiColor: .secondarySystemBackground),
+                StolarniaPalette.canvasRaised,
                 in: RoundedRectangle(cornerRadius: 12)
             )
             .overlay {

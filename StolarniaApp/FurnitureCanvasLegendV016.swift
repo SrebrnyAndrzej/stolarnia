@@ -194,7 +194,7 @@ struct FurnitureLegendV016: View {
             }
         }
         .padding(12)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(StolarniaPalette.canvasRaised)
     }
 
     private var header: some View {
@@ -275,7 +275,7 @@ struct FurnitureLegendV016: View {
                 .fill(
                     isSelected
                         ? Color.accentColor.opacity(0.11)
-                        : Color(uiColor: .tertiarySystemBackground)
+                        : StolarniaPalette.canvasInset
                 )
         )
         .overlay {

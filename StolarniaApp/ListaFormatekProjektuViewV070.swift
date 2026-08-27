@@ -619,10 +619,7 @@ private struct KartaFormatkiProjektuV078:
                 )
             }
             .background(
-                Color(
-                    uiColor:
-                        .systemGroupedBackground
-                )
+                StolarniaPalette.canvas
             )
             .navigationTitle(
                 "Karta formatki"

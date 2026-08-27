@@ -60,7 +60,7 @@ struct SzybkiEdytorModuluV083: View {
                 }
             }
             .frame(height: 56)
-            .background(Color(.secondarySystemBackground))
+            .background(StolarniaPalette.canvasRaised)
 
             if let error = lastError {
                 Text(error)

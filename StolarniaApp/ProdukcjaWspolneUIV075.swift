@@ -238,10 +238,7 @@ struct ProdukcjaListaKontrolkiV075:
             minHeight: 36
         )
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemBackground
-            ),
+            StolarniaPalette.canvasRaised,
             in:
                 RoundedRectangle(
                     cornerRadius: 9,

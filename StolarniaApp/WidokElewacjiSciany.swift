@@ -1465,10 +1465,7 @@ private struct SlidingWardrobeElevationSystemPanelV093:
             }
             .padding(10)
             .background(
-                Color(
-                    uiColor:
-                        .tertiarySystemGroupedBackground
-                ),
+                StolarniaPalette.canvasInset,
                 in:
                     RoundedRectangle(
                         cornerRadius:
@@ -1497,10 +1494,7 @@ private struct SlidingWardrobeElevationSystemPanelV093:
         }
         .padding(12)
         .background(
-            Color(
-                uiColor:
-                    .secondarySystemGroupedBackground
-            ),
+            StolarniaPalette.canvasRaised,
             in: RoundedRectangle(
                 cornerRadius:
                     8,

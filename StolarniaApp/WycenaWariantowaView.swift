@@ -773,10 +773,7 @@ struct WycenaWariantowaView:
                 cornerRadius: 16
             )
             .fill(
-                Color(
-                    uiColor:
-                        .secondarySystemBackground
-                )
+                StolarniaPalette.canvasRaised
             )
         )
     }
@@ -1087,10 +1084,7 @@ struct WycenaWariantowaView:
                 cornerRadius: 16
             )
             .fill(
-                Color(
-                    uiColor:
-                        .secondarySystemBackground
-                )
+                StolarniaPalette.canvasRaised
             )
         )
     }
@@ -1130,10 +1124,7 @@ struct WycenaWariantowaView:
                 cornerRadius: 14
             )
             .fill(
-                Color(
-                    uiColor:
-                        .secondarySystemBackground
-                )
+                StolarniaPalette.canvasRaised
             )
         )
     }

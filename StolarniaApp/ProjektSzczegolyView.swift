@@ -392,9 +392,7 @@ struct ProjektSzczegolyView: View {
 
                 Divider()
 
-                HStack(spacing: 10) {
-                    workflowButtons
-                }
+                workflowButtons
             }
             .stolarniaFrostedCard(
                 cornerRadius: 16,
@@ -407,94 +405,101 @@ struct ProjektSzczegolyView: View {
 
     @ViewBuilder
     private var workflowButtons: some View {
-        if let room =
-            preferredWorkflowRoom
-        {
-            Button {
-                selectedRoomForMeasurements = room
-            } label: {
-                workflowActionLabel(
-                    "Pomiar",
-                    systemImage: "ruler"
-                )
-            }
-            .buttonStyle(
-                StolarniaPrimaryButtonStyle(
-                    minHeight: 46,
-                    horizontalPadding: 12,
-                    cornerRadius: 18
-                )
+        VStack(alignment: .leading, spacing: 10) {
+            StolarniaNextStepStrip(
+                title: workflowPrimaryTitle,
+                description: workflowPrimaryDescription,
+                status: workflowPrimaryStatus,
+                actionTitle: workflowPrimaryActionTitle,
+                actionSystemImage:
+                    workflowPrimaryActionSystemImage,
+                action: performPrimaryWorkflowAction
             )
 
-            Button {
-                roomForProject = room
-            } label: {
-                workflowActionLabel(
-                    "Projekt",
-                    systemImage:
-                        "square.grid.2x2"
-                )
+            HStack(spacing: 10) {
+                workflowSecondaryActionsMenu
+
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.bordered)
+        }
+    }
+
+    private var workflowSecondaryActionsMenu: some View {
+        Menu {
+            if let room =
+                preferredWorkflowRoom
+            {
+                Button {
+                    openMeasurements(
+                        for: room
+                    )
+                } label: {
+                    Label(
+                        "Otwórz pomiary",
+                        systemImage: "ruler"
+                    )
+                }
+
+                Button {
+                    openProject(
+                        for: room
+                    )
+                } label: {
+                    Label(
+                        "Otwórz projekt zabudowy",
+                        systemImage:
+                            "square.grid.2x2"
+                    )
+                }
+
+                Divider()
+            }
 
             Button {
-                if projectQuote == nil {
-                    startPreparingQuote()
-                } else {
-                    activeSheet =
-                        .projectQuote
-                }
+                openQuoteOrPrepare()
             } label: {
-                workflowActionLabel(
-                    isLoadingProjectQuote
-                    ? "Liczenie..."
-                    : (
-                        projectQuote == nil
-                        ? "Wycena"
-                        : "Otwórz"
-                    ),
+                Label(
+                    projectQuote == nil
+                    ? "Przygotuj wycenę"
+                    : "Otwórz wycenę",
                     systemImage:
                         "chart.bar.doc.horizontal"
                 )
             }
-            .buttonStyle(.bordered)
             .disabled(
                 roomViewModel.rooms.isEmpty
                 || isLoadingProjectQuote
             )
-        } else {
+
+            Button {
+                activeSheet =
+                    .globalMaterialy
+            } label: {
+                Label(
+                    "Materiały projektu",
+                    systemImage: "swatchpalette"
+                )
+            }
+
+            Divider()
+
             Button {
                 activeSheet =
                     .newRoom
             } label: {
-                workflowActionLabel(
+                Label(
                     "Dodaj pomieszczenie",
                     systemImage: "plus"
                 )
             }
-            .buttonStyle(
-                StolarniaPrimaryButtonStyle(
-                    minHeight: 46,
-                    horizontalPadding: 12,
-                    cornerRadius: 18
-                )
+        } label: {
+            Label(
+                "Więcej",
+                systemImage: "ellipsis.circle"
             )
+            .font(.subheadline.weight(.semibold))
         }
-    }
-
-    private func workflowActionLabel(
-        _ title: String,
-        systemImage: String
-    ) -> some View {
-        Label(
-            title,
-            systemImage: systemImage
-        )
-        .font(.headline)
-        .lineLimit(1)
-        .minimumScaleFactor(0.82)
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 46)
+        .buttonStyle(.bordered)
     }
 
     private var preferredWorkflowRoom:
@@ -525,6 +530,108 @@ struct ProjektSzczegolyView: View {
             return "Projekt gotowy. Wygeneruj wycenę dla klienta."
         }
         return "Wybierz pomieszczenie i przejdź kolejno przez pomiar, projekt i wycenę."
+    }
+
+    private var workflowPrimaryTitle: String {
+        if isLoadingProjectQuote {
+            return "Liczymy wycenę"
+        }
+
+        guard let room =
+            preferredWorkflowRoom
+        else {
+            return "Dodaj pierwsze pomieszczenie"
+        }
+
+        if !roomIsMeasured(room) {
+            return "Zacznij od pomiaru"
+        }
+
+        if projectQuote == nil {
+            return "Projektuj zabudowę"
+        }
+
+        return "Oferta gotowa do sprawdzenia"
+    }
+
+    private var workflowPrimaryDescription: String {
+        if isLoadingProjectQuote {
+            return "Zbieramy moduły, materiały i elementy produkcyjne do jednej wyceny."
+        }
+
+        guard let room =
+            preferredWorkflowRoom
+        else {
+            return "Najpierw powstaje obrys pomieszczenia, potem układ mebli i wycena."
+        }
+
+        if !roomIsMeasured(room) {
+            return "\(room.name): zapisz ściany, wysokości i najważniejsze punkty montażowe."
+        }
+
+        if projectQuote == nil {
+            return "\(room.name): ustaw ciągi, moduły, fronty i elementy wspólne."
+        }
+
+        return "Sprawdź warianty, podsumowanie zakresu i dokument dla klienta."
+    }
+
+    private var workflowPrimaryStatus:
+        StolarniaReadinessStatus
+    {
+        if roomViewModel.rooms.isEmpty {
+            return .blocked
+        }
+
+        if let room = preferredWorkflowRoom,
+           !roomIsMeasured(room) {
+            return .warning
+        }
+
+        return .ready
+    }
+
+    private var workflowPrimaryActionTitle: String {
+        if isLoadingProjectQuote {
+            return "Liczenie..."
+        }
+
+        guard let room =
+            preferredWorkflowRoom
+        else {
+            return "Dodaj pomieszczenie"
+        }
+
+        if !roomIsMeasured(room) {
+            return "Otwórz pomiar"
+        }
+
+        if projectQuote == nil {
+            return "Projektuj"
+        }
+
+        return "Otwórz wycenę"
+    }
+
+    private var workflowPrimaryActionSystemImage: String {
+        if preferredWorkflowRoom == nil {
+            return "plus"
+        }
+
+        if isLoadingProjectQuote {
+            return "hourglass"
+        }
+
+        if let room = preferredWorkflowRoom,
+           !roomIsMeasured(room) {
+            return "ruler"
+        }
+
+        if projectQuote == nil {
+            return "square.grid.2x2"
+        }
+
+        return "chart.bar.doc.horizontal"
     }
 
     private var pomiarState: ProjektProcesKrokState {
@@ -558,31 +665,9 @@ struct ProjektSzczegolyView: View {
     private var activeRoomMenu: some View {
         Menu {
             ForEach(roomViewModel.rooms) { room in
-                Menu {
-                    Button {
-                        selectedRoomForMeasurements = room
-                    } label: {
-                        Label("Pomiary", systemImage: "ruler")
-                    }
-
-                    Button {
-                        roomForProject = room
-                    } label: {
-                        Label("Projekt", systemImage: "square.grid.2x2")
-                    }
-
-                    Divider()
-
-                    Button {
-                        activeWorkflowRoomID = room.id
-                    } label: {
-                        Label(
-                            "Ustaw jako aktywne",
-                            systemImage: isActiveWorkflowRoom(room)
-                                ? "checkmark.circle.fill"
-                                : "target"
-                        )
-                    }
+                Button {
+                    activeWorkflowRoomID =
+                        room.id
                 } label: {
                     Label(
                         room.name,
@@ -591,6 +676,18 @@ struct ProjektSzczegolyView: View {
                             : "circle"
                     )
                 }
+            }
+
+            Divider()
+
+            Button {
+                activeSheet =
+                    .newRoom
+            } label: {
+                Label(
+                    "Dodaj pomieszczenie",
+                    systemImage: "plus"
+                )
             }
         } label: {
             Label(
@@ -754,7 +851,8 @@ struct ProjektSzczegolyView: View {
     private var roomRows: some View {
         ForEach(roomViewModel.rooms) { room in
             Button {
-                selectedRoomForMeasurements = room
+                activeWorkflowRoomID =
+                    room.id
             } label: {
                 roomRowLabel(room)
             }
@@ -762,19 +860,8 @@ struct ProjektSzczegolyView: View {
             .padding(.vertical, 4)
             .contentShape(Rectangle())
             .accessibilityHint(
-                "Otwiera pomiary pomieszczenia."
+                "Ustawia pomieszczenie jako aktywne w procesie."
             )
-            .swipeActions(edge: .leading) {
-                Button {
-                    roomForProject = room
-                } label: {
-                    Label(
-                        "Projekt",
-                        systemImage: "square.grid.2x2"
-                    )
-                }
-                .tint(StolarniaPalette.graphite)
-            }
             .swipeActions(
                 edge: .trailing
             ) {
@@ -787,26 +874,6 @@ struct ProjektSzczegolyView: View {
             }
             .contextMenu {
                 Button {
-                    selectedRoomForMeasurements = room
-                } label: {
-                    Label(
-                        "Pomiary",
-                        systemImage: "ruler"
-                    )
-                }
-
-                Button {
-                    roomForProject = room
-                } label: {
-                    Label(
-                        "Projekt",
-                        systemImage: "square.grid.2x2"
-                    )
-                }
-
-                Divider()
-
-                Button {
                     activeWorkflowRoomID =
                         room.id
                 } label: {
@@ -815,6 +882,30 @@ struct ProjektSzczegolyView: View {
                         systemImage: "target"
                     )
                 }
+
+                Button {
+                    openMeasurements(
+                        for: room
+                    )
+                } label: {
+                    Label(
+                        "Pomiary",
+                        systemImage: "ruler"
+                    )
+                }
+
+                Button {
+                    openProject(
+                        for: room
+                    )
+                } label: {
+                    Label(
+                        "Projekt",
+                        systemImage: "square.grid.2x2"
+                    )
+                }
+
+                Divider()
 
                 Button(
                     "Usuń",
@@ -878,9 +969,17 @@ struct ProjektSzczegolyView: View {
 
             Spacer(minLength: 8)
 
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+            Image(
+                systemName: isActiveWorkflowRoom(room)
+                    ? "checkmark.circle.fill"
+                    : "circle"
+            )
+            .font(.body.weight(.semibold))
+            .foregroundStyle(
+                isActiveWorkflowRoom(room)
+                    ? StolarniaPalette.accentStrong
+                    : Color.secondary.opacity(0.45)
+            )
                 .accessibilityHidden(true)
         }
     }
@@ -896,6 +995,64 @@ struct ProjektSzczegolyView: View {
     ) -> Bool {
         preferredWorkflowRoom?.id
             == room.id
+    }
+
+    private func performPrimaryWorkflowAction() {
+        guard !isLoadingProjectQuote else {
+            return
+        }
+
+        guard let room =
+            preferredWorkflowRoom
+        else {
+            activeSheet =
+                .newRoom
+            return
+        }
+
+        if !roomIsMeasured(room) {
+            openMeasurements(
+                for: room
+            )
+            return
+        }
+
+        if projectQuote == nil {
+            openProject(
+                for: room
+            )
+            return
+        }
+
+        activeSheet =
+            .projectQuote
+    }
+
+    private func openMeasurements(
+        for room: RoomDefinition
+    ) {
+        activeWorkflowRoomID =
+            room.id
+        selectedRoomForMeasurements =
+            room
+    }
+
+    private func openProject(
+        for room: RoomDefinition
+    ) {
+        activeWorkflowRoomID =
+            room.id
+        roomForProject =
+            room
+    }
+
+    private func openQuoteOrPrepare() {
+        if projectQuote == nil {
+            startPreparingQuote()
+        } else {
+            activeSheet =
+                .projectQuote
+        }
     }
 
     private func measurementContext(
@@ -1248,29 +1405,6 @@ struct ProjektSzczegolyView: View {
         return result
     }
 
-    private func formattedMillimeters(
-        _ value: Millimeters
-    ) -> String {
-        let formatted =
-            value.rawValue.formatted(
-                .number.precision(
-                    .fractionLength(0...1)
-                )
-            )
-
-        return "\(formatted) mm"
-    }
-
-    private func formattedMeters(
-        _ value: Double
-    ) -> String {
-        value.formatted(
-            .number.precision(
-                .fractionLength(0...2)
-            )
-        )
-        + " mb"
-    }
 }
 
 private enum ProjektProcesKrokState: Equatable {
@@ -1283,7 +1417,7 @@ private enum ProjektProcesKrokState: Equatable {
         case .blocked:
             return "Czeka"
         case .ready:
-            return "Gotowe"
+            return "Dalej"
         case .complete:
             return "Zrobione"
         }

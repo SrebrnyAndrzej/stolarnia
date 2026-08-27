@@ -170,37 +170,21 @@ struct ArchiwumOfertView:
                     }
                 )
             }
-            .alert(
-                "Usunąć ofertę?",
-                isPresented:
-                    $showingDeleteAlert
-            ) {
-                Button(
-                    "Usuń",
-                    role: .destructive
-                ) {
-                    if let pendingDelete {
-                        repository.delete(
-                            id:
-                                pendingDelete.id
-                        )
-                    }
-
+            .confirmationDialog(
+                "Usunąć ofertę dla \(pendingDelete?.customerName ?? "")?",
+                isPresented: $showingDeleteAlert,
+                titleVisibility: .visible,
+                presenting: pendingDelete
+            ) { offer in
+                Button("Usuń ofertę", role: .destructive) {
+                    repository.delete(id: offer.id)
                     pendingDelete = nil
                 }
-
-                Button(
-                    "Anuluj",
-                    role: .cancel
-                ) {
+                Button("Anuluj", role: .cancel) {
                     pendingDelete = nil
                 }
-            } message: {
-                Text(
-                    pendingDelete?
-                        .customerName
-                    ?? ""
-                )
+            } message: { _ in
+                Text("Ta akcja jest nieodwracalna. Oferta zostanie trwale usunięta z archiwum.")
             }
             .onAppear {
                 repository.reload()

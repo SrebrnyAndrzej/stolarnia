@@ -61,6 +61,14 @@ enum KartaTechnicznaPDFBuilder {
                     )
                 }
 
+                // v0.90.0: rysunek przestrzenny — widok złożony i rozstrzelony.
+                // Arkusz A4 celowo go nie zawiera, a scena 3D nie trafia do PDF.
+                StronaRysunkuPrzestrzennegoV090.rysuj(
+                    context: context,
+                    bounds: pageBounds,
+                    card: card
+                )
+
                 for element in card.efektywneElementy {
                     drawElementPage(
                         context: context,
@@ -100,6 +108,9 @@ enum KartaTechnicznaPDFBuilder {
         )
         y += 34
 
+        let railLines =
+            KartaTechnicznaProwadniceSzufladV084
+                .linie(w: card)
         var rows = [
             ("Konstrukcja", card.rodzajKonstrukcji),
             ("Wymiary", "\(format(card.szerokoscMM)) × \(format(card.wysokoscMM)) × \(format(card.glebokoscMM)) mm"),
@@ -117,6 +128,42 @@ enum KartaTechnicznaPDFBuilder {
                 (
                     "Panele pod skosem",
                     "\(slopeReport.panele.count)"
+                )
+            )
+        }
+
+        if let corner =
+            card.narożnikTechnicznyV086 {
+            rows.append(
+                (
+                    "Narożnik",
+                    "\(corner.kind.title) • \(corner.accessTechnology.title) • \(corner.handedness.title)"
+                )
+            )
+        }
+
+        if !railLines.isEmpty {
+            let systems =
+                Set(
+                    railLines
+                        .map(\.systemSkrocony)
+                        .filter {
+                            !$0.isEmpty
+                                && $0 != "—"
+                        }
+                )
+                .sorted()
+                .joined(separator: " / ")
+
+            rows.append(
+                (
+                    "Linie prowadnic szuflad",
+                    "\(railLines.count) osi"
+                        + (
+                            systems.isEmpty
+                            ? ""
+                            : " • \(systems)"
+                        )
                 )
             )
         }
@@ -183,9 +230,48 @@ enum KartaTechnicznaPDFBuilder {
             x: margin,
             y: y,
             width: bounds.width - margin * 2,
-            height: 280
+            height:
+                card.narożnikTechnicznyV086 == nil
+                ? 280
+                : 220
         )
-        drawCabinetSchematic(rect: drawingRect, card: card)
+
+        if let corner =
+            card.narożnikTechnicznyV086 {
+            let gap: CGFloat = 12
+            let frontRect =
+                CGRect(
+                    x: drawingRect.minX,
+                    y: drawingRect.minY,
+                    width:
+                        drawingRect.width * 0.55,
+                    height:
+                        drawingRect.height
+                )
+            let cornerRect =
+                CGRect(
+                    x: frontRect.maxX + gap,
+                    y: drawingRect.minY,
+                    width:
+                        max(
+                            drawingRect.maxX
+                            - frontRect.maxX
+                            - gap,
+                            1
+                        ),
+                    height:
+                        drawingRect.height
+                )
+
+            drawCabinetSchematic(rect: frontRect, card: card)
+            drawCornerPlanV086(
+                rect: cornerRect,
+                corner: corner
+            )
+        } else {
+            drawCabinetSchematic(rect: drawingRect, card: card)
+        }
+
         y = drawingRect.maxY + 18
 
         drawText(
@@ -424,6 +510,22 @@ enum KartaTechnicznaPDFBuilder {
             values.append(
                 "H \(format(height)) mm"
             )
+        }
+
+        if let mass = accessory.masaFrontuKG {
+            values.append("masa frontu \(format(mass)) kg")
+        }
+
+        if let factor = accessory.wspolczynnikMocy {
+            values.append("współczynnik mocy \(format(factor))")
+        }
+
+        if let unused = accessory.niewykorzystanaGlebokoscMM {
+            values.append("niewykorzystana głębokość \(format(unused)) mm")
+        }
+
+        if accessory.wymagaPotwierdzeniaSKU == true {
+            values.append("SKU DO POTWIERDZENIA")
         }
 
         if let bottom =
@@ -925,33 +1027,22 @@ enum KartaTechnicznaPDFBuilder {
         drawElementSchematic(rect: drawingRect, element: element)
         y = drawingRect.maxY + 18
 
-        drawText(
-            "Punkty wiercenia",
-            rect: CGRect(x: margin, y: y, width: 180, height: 22),
-            font: .boldSystemFont(ofSize: 14)
-        )
-        y += 26
-
-        if element.punktyWiercenia.isEmpty {
+        if hasDimensionedMountingMarks(
+            element
+        ) {
             drawText(
-                "Brak przypisanych punktów wiercenia.",
-                rect: CGRect(x: margin, y: y, width: bounds.width - margin * 2, height: 22),
+                "Wymiary pierwszych otworów",
+                rect: CGRect(x: margin, y: y, width: 260, height: 22),
+                font: .boldSystemFont(ofSize: 14)
+            )
+            y += 26
+            drawText(
+                "Rysunek powyżej pokazuje punkt startowy: X od krawędzi bazowej oraz Y od dołu formatki. Dalsze otwory prowadnicy wykonać według szablonu wybranego systemu.",
+                rect: CGRect(x: margin, y: y, width: bounds.width - margin * 2, height: 42),
                 font: .systemFont(ofSize: 11),
                 color: .darkGray
             )
-        } else {
-            drawDrillingHeader(x: margin, y: y, width: bounds.width - margin * 2)
-            y += 22
-
-            for point in element.punktyWiercenia.prefix(8) {
-                drawDrillingRow(
-                    point: point,
-                    x: margin,
-                    y: y,
-                    width: bounds.width - margin * 2
-                )
-                y += 24
-            }
+            y += 48
         }
 
         if !element.uwagi.isEmpty {
@@ -971,6 +1062,365 @@ enum KartaTechnicznaPDFBuilder {
         }
 
         drawFooter(bounds: bounds, text: "\(card.numerSzafki) • \(element.etykieta)")
+    }
+
+    private static func drawCornerPlanV086(
+        rect: CGRect,
+        corner:
+            NarożnikTechnicznyKartyV086
+    ) {
+        UIColor.secondarySystemBackground.setFill()
+        UIBezierPath(roundedRect: rect, cornerRadius: 10).fill()
+
+        drawText(
+            "RZUT NAROŻNIKA",
+            rect:
+                CGRect(
+                    x: rect.minX + 10,
+                    y: rect.minY + 8,
+                    width: rect.width - 20,
+                    height: 14
+                ),
+            font:
+                .boldSystemFont(ofSize: 9),
+            color:
+                .darkGray,
+            alignment:
+                .center
+        )
+
+        let inset: CGFloat = 24
+        let available =
+            rect.insetBy(
+                dx: inset,
+                dy: inset + 8
+            )
+        let primaryW =
+            max(
+                corner.primaryWallSpanMM,
+                1
+            )
+        let secondaryH =
+            max(
+                corner.secondaryWallSpanMM,
+                1
+            )
+        let depth =
+            max(
+                corner.depthMM,
+                1
+            )
+        let totalW =
+            max(
+                primaryW,
+                depth
+            )
+        let totalH =
+            max(
+                depth + secondaryH,
+                depth * 2
+            )
+        let scale =
+            min(
+                available.width
+                / CGFloat(totalW),
+                available.height
+                / CGFloat(totalH)
+            )
+        let drawingW =
+            CGFloat(totalW) * scale
+        let drawingH =
+            CGFloat(totalH) * scale
+        let origin =
+            CGPoint(
+                x:
+                    available.midX
+                    - drawingW / 2,
+                y:
+                    available.midY
+                    - drawingH / 2
+            )
+        let primaryRect =
+            CGRect(
+                x: origin.x,
+                y: origin.y,
+                width:
+                    CGFloat(primaryW)
+                    * scale,
+                height:
+                    CGFloat(depth)
+                    * scale
+            )
+        let secondaryX =
+            corner.handedness == .left
+            ? origin.x
+            : origin.x
+                + CGFloat(primaryW - depth)
+                * scale
+        let secondaryRect =
+            CGRect(
+                x: secondaryX,
+                y:
+                    origin.y
+                    + CGFloat(depth)
+                    * scale,
+                width:
+                    CGFloat(depth)
+                    * scale,
+                height:
+                    CGFloat(secondaryH)
+                    * scale
+            )
+
+        UIColor.systemGray5.setFill()
+        UIColor.label.setStroke()
+        let bodyPath =
+            UIBezierPath()
+        bodyPath.append(
+            UIBezierPath(rect: primaryRect)
+        )
+        bodyPath.append(
+            UIBezierPath(rect: secondaryRect)
+        )
+        bodyPath.fill()
+        bodyPath.lineWidth = 1
+        bodyPath.stroke()
+
+        if corner.fillerKind != .none {
+            let fillerW =
+                max(
+                    CGFloat(corner.fillerWidthMM)
+                    * scale,
+                    3
+                )
+            let fillerX =
+                corner.handedness == .left
+                ? primaryRect.minX
+                : primaryRect.maxX - fillerW
+            let fillerRect =
+                CGRect(
+                    x: fillerX,
+                    y: primaryRect.minY,
+                    width: fillerW,
+                    height: primaryRect.height
+                )
+            UIColor.systemGray
+                .withAlphaComponent(0.28)
+                .setFill()
+            UIBezierPath(rect: fillerRect).fill()
+            drawText(
+                "BL \(format(corner.fillerWidthMM))",
+                rect:
+                    fillerRect.insetBy(
+                        dx: -18,
+                        dy: fillerRect.height * 0.40
+                    ),
+                font:
+                    .monospacedSystemFont(
+                        ofSize: 6,
+                        weight: .semibold
+                    ),
+                color:
+                    .darkGray,
+                alignment:
+                    .center
+            )
+        }
+
+        if corner.shouldShowDeadZone {
+            let deadW =
+                min(
+                    CGFloat(corner.deadZoneMM)
+                    * scale,
+                    primaryRect.width
+                )
+            let deadX =
+                corner.handedness == .left
+                ? primaryRect.maxX - deadW
+                : primaryRect.minX
+            let deadRect =
+                CGRect(
+                    x: deadX,
+                    y: primaryRect.minY,
+                    width: deadW,
+                    height: primaryRect.height
+                )
+            UIColor.systemGray
+                .withAlphaComponent(0.18)
+                .setFill()
+            UIBezierPath(rect: deadRect).fill()
+
+            UIColor.label.setStroke()
+            let deadPath =
+                UIBezierPath(rect: deadRect)
+            let dash: [CGFloat] = [4, 2]
+            dash.withUnsafeBufferPointer {
+                deadPath.setLineDash(
+                    $0.baseAddress,
+                    count: $0.count,
+                    phase: 0
+                )
+            }
+            deadPath.lineWidth = 0.8
+            deadPath.stroke()
+
+            drawText(
+                "MARTWA \(format(corner.deadZoneMM))",
+                rect:
+                    CGRect(
+                        x: deadRect.minX + 2,
+                        y: deadRect.midY - 6,
+                        width:
+                            max(deadRect.width - 4, 1),
+                        height: 12
+                    ),
+                font:
+                    .monospacedSystemFont(
+                        ofSize: 6,
+                        weight: .semibold
+                    ),
+                color:
+                    .darkGray,
+                alignment:
+                    .center
+            )
+        }
+
+        if corner.requiresMotionEnvelopeCheck {
+            UIColor.label.setStroke()
+            let envelope =
+                UIBezierPath(
+                    ovalIn:
+                        primaryRect.insetBy(
+                            dx:
+                                primaryRect.width
+                                * 0.18,
+                            dy:
+                                primaryRect.height
+                                * 0.18
+                        )
+            )
+            let dash: [CGFloat] = [3, 3]
+            dash.withUnsafeBufferPointer {
+                envelope.setLineDash(
+                    $0.baseAddress,
+                    count: $0.count,
+                    phase: 0
+                )
+            }
+            envelope.lineWidth = 0.8
+            envelope.stroke()
+            drawText(
+                "KOPERTA",
+                rect:
+                    CGRect(
+                        x: primaryRect.minX,
+                        y: primaryRect.midY - 6,
+                        width: primaryRect.width,
+                        height: 12
+                    ),
+                font:
+                    .monospacedSystemFont(
+                        ofSize: 6,
+                        weight: .semibold
+                    ),
+                color:
+                    .darkGray,
+                alignment:
+                    .center
+            )
+        }
+
+        let frontX =
+            corner.handedness == .left
+            ? primaryRect.minX
+            : primaryRect.maxX
+                - CGFloat(corner.frontOpeningMM)
+                * scale
+        let frontPath =
+            UIBezierPath()
+        frontPath.move(
+            to:
+                CGPoint(
+                    x: frontX,
+                    y: primaryRect.maxY
+                )
+        )
+        frontPath.addLine(
+            to:
+                CGPoint(
+                    x:
+                        frontX
+                        + CGFloat(corner.frontOpeningMM)
+                        * scale,
+                    y: primaryRect.maxY
+                )
+        )
+        frontPath.lineWidth = 2
+        frontPath.stroke()
+
+        drawText(
+            "FR \(format(corner.frontOpeningMM))",
+            rect:
+                CGRect(
+                    x:
+                        frontX,
+                    y:
+                        primaryRect.maxY + 4,
+                    width:
+                        CGFloat(corner.frontOpeningMM)
+                        * scale,
+                    height: 12
+                ),
+            font:
+                .monospacedSystemFont(
+                    ofSize: 6,
+                    weight: .semibold
+                ),
+            color:
+                .darkGray,
+            alignment:
+                .center
+        )
+
+        drawText(
+            "\(corner.accessTechnology.title) • \(corner.kind.title) • \(corner.handedness.title)",
+            rect:
+                CGRect(
+                    x: rect.minX + 8,
+                    y: rect.maxY - 28,
+                    width: rect.width - 16,
+                    height: 12
+                ),
+            font:
+                .monospacedSystemFont(
+                    ofSize: 7,
+                    weight: .semibold
+                ),
+            color:
+                .label,
+            alignment:
+                .center
+        )
+
+        if corner.requiresManufacturerTemplate {
+            drawText(
+                "Wiercenia wg szablonu producenta",
+                rect:
+                    CGRect(
+                        x: rect.minX + 8,
+                        y: rect.maxY - 16,
+                        width: rect.width - 16,
+                        height: 10
+                    ),
+                font:
+                    .italicSystemFont(ofSize: 7),
+                color:
+                    .darkGray,
+                alignment:
+                    .center
+            )
+        }
     }
 
     private static func drawCabinetSchematic(
@@ -1527,6 +1977,96 @@ enum KartaTechnicznaPDFBuilder {
         shapePath.lineWidth = 1.6
         shapePath.stroke()
 
+        // --- drilling / mounting lines ---
+        for line in element.efektywneLinieWiercenia {
+            let xStart = originX + CGFloat(
+                min(
+                    max(
+                        line.xStartMM,
+                        0
+                    ),
+                    element.szerokoscMM
+                )
+            ) * scale
+            let xEnd = originX + CGFloat(
+                min(
+                    max(
+                        line.xEndMM,
+                        0
+                    ),
+                    element.szerokoscMM
+                )
+            ) * scale
+            let y = originY + elementH - CGFloat(
+                min(
+                    max(
+                        line.yMM,
+                        0
+                    ),
+                    element.dlugoscMM
+                )
+            ) * scale
+
+            let linePath = UIBezierPath()
+            linePath.move(
+                to:
+                    CGPoint(
+                        x: xStart,
+                        y: y
+                    )
+            )
+            linePath.addLine(
+                to:
+                    CGPoint(
+                        x: xEnd,
+                        y: y
+                    )
+            )
+            UIColor.systemTeal.setStroke()
+            linePath.lineWidth = 1.0
+            linePath.setLineDash(
+                [5, 3],
+                count: 2,
+                phase: 0
+            )
+            linePath.stroke()
+
+            if !line.etykieta.isEmpty {
+                drawText(
+                    line.etykieta,
+                    rect: CGRect(
+                        x:
+                            min(
+                                xStart,
+                                xEnd
+                            ),
+                        y:
+                            y - 15,
+                        width:
+                            max(
+                                abs(
+                                    xEnd
+                                    - xStart
+                                ),
+                                54
+                            ),
+                        height:
+                            12
+                    ),
+                    font:
+                        .monospacedSystemFont(
+                            ofSize: 7,
+                            weight:
+                                .semibold
+                        ),
+                    color:
+                        .systemTeal,
+                    alignment:
+                        .center
+                )
+            }
+        }
+
         // --- drilling points ---
         for point in element.punktyWiercenia {
             let x = originX + CGFloat(
@@ -1540,6 +2080,15 @@ enum KartaTechnicznaPDFBuilder {
                 ovalIn: CGRect(x: x - 3, y: y - 3, width: 6, height: 6)
             ).fill()
         }
+
+        drawFirstHoleDimensions(
+            element:
+                element,
+            elementRect:
+                elementRect,
+            scale:
+                scale
+        )
 
         // --- cut angle annotation ---
         if let kat = element.katCieciaGornejKrawedziStopnieV0691,
@@ -1651,6 +2200,659 @@ enum KartaTechnicznaPDFBuilder {
         )
     }
 
+    private struct PDFMountingPoint {
+        let label: String
+        let xMM: Double
+        let yMM: Double
+        let diameterMM: Double
+        let depthMM: Double
+    }
+
+    private static func hasDimensionedMountingMarks(
+        _ element:
+            ElementTechnicznySzafki
+    ) -> Bool {
+        !firstRunnerHoleDetails(
+            for:
+                element
+        ).isEmpty
+        || !hingeCupDetails(
+            for:
+                element
+        ).isEmpty
+    }
+
+    private static func drawFirstHoleDimensions(
+        element:
+            ElementTechnicznySzafki,
+        elementRect:
+            CGRect,
+        scale:
+            CGFloat
+    ) {
+        let runnerDetails =
+            firstRunnerHoleDetails(
+                for:
+                    element
+            )
+        let hingeDetails =
+            hingeCupDetails(
+                for:
+                    element
+            )
+
+        for (
+            index,
+            detail
+        ) in runnerDetails
+            .prefix(5)
+            .enumerated() {
+            let x =
+                elementRect.minX
+                + CGFloat(
+                    clamped(
+                        detail.xMM,
+                        lower:
+                            0,
+                        upper:
+                            element.szerokoscMM
+                    )
+                )
+                * scale
+            let y =
+                elementRect.maxY
+                - CGFloat(
+                    clamped(
+                        detail.yMM,
+                        lower:
+                            0,
+                        upper:
+                            element.dlugoscMM
+                    )
+                )
+                * scale
+            let dimY =
+                clampedCGFloat(
+                    y
+                    + (
+                        index.isMultiple(of: 2)
+                        ? -14
+                        : 14
+                    ),
+                    lower:
+                        elementRect.minY + 12,
+                    upper:
+                        elementRect.maxY - 12
+                )
+
+            drawPDFDashedLine(
+                from:
+                    CGPoint(
+                        x: elementRect.minX,
+                        y: y
+                    ),
+                to:
+                    CGPoint(
+                        x: elementRect.maxX,
+                        y: y
+                    ),
+                color:
+                    .systemTeal
+            )
+            drawPDFDimensionHorizontal(
+                y:
+                    dimY,
+                xStart:
+                    elementRect.minX,
+                xEnd:
+                    x,
+                text:
+                    "X \(format(detail.xMM))"
+            )
+            drawPDFDimensionVertical(
+                x:
+                    elementRect.minX
+                    - 18
+                    - CGFloat(index % 2) * 12,
+                yStart:
+                    y,
+                yEnd:
+                    elementRect.maxY,
+                text:
+                    "Y \(format(detail.yMM))"
+            )
+            drawText(
+                detail.label,
+                rect:
+                    CGRect(
+                        x:
+                            elementRect.maxX + 8,
+                        y:
+                            y - 8,
+                        width:
+                            88,
+                        height:
+                            16
+                    ),
+                font:
+                    .monospacedSystemFont(
+                        ofSize: 7,
+                        weight:
+                            .semibold
+                    ),
+                color:
+                    .systemTeal
+            )
+        }
+
+        guard !hingeDetails.isEmpty else {
+            return
+        }
+
+        let averageX =
+            hingeDetails
+                .map(\.xMM)
+                .reduce(0, +)
+            / Double(
+                max(
+                    hingeDetails.count,
+                    1
+                )
+            )
+        let hingeOnLeft =
+            averageX
+            <= element.szerokoscMM / 2
+        let edgeX =
+            hingeOnLeft
+            ? elementRect.minX
+            : elementRect.maxX
+
+        for (
+            index,
+            detail
+        ) in hingeDetails
+            .prefix(5)
+            .enumerated() {
+            let x =
+                elementRect.minX
+                + CGFloat(
+                    clamped(
+                        detail.xMM,
+                        lower:
+                            0,
+                        upper:
+                            element.szerokoscMM
+                    )
+                )
+                * scale
+            let y =
+                elementRect.maxY
+                - CGFloat(
+                    clamped(
+                        detail.yMM,
+                        lower:
+                            0,
+                        upper:
+                            element.dlugoscMM
+                    )
+                )
+                * scale
+            let xOffset =
+                hingeOnLeft
+                ? detail.xMM
+                : max(
+                    element.szerokoscMM
+                    - detail.xMM,
+                    0
+                )
+            let dimY =
+                clampedCGFloat(
+                    y
+                    + (
+                        index.isMultiple(of: 2)
+                        ? -14
+                        : 14
+                    ),
+                    lower:
+                        elementRect.minY + 12,
+                    upper:
+                        elementRect.maxY - 12
+                )
+
+            drawPDFDimensionHorizontal(
+                y:
+                    dimY,
+                xStart:
+                    edgeX,
+                xEnd:
+                    x,
+                text:
+                    "X \(format(xOffset))"
+            )
+            drawPDFDimensionVertical(
+                x:
+                    elementRect.minX
+                    - 18
+                    - CGFloat(index % 2) * 12,
+                yStart:
+                    y,
+                yEnd:
+                    elementRect.maxY,
+                text:
+                    "Y \(format(detail.yMM))"
+            )
+            drawText(
+                "Ø\(format(detail.diameterMM)) / gł. \(format(detail.depthMM))",
+                rect:
+                    CGRect(
+                        x:
+                            elementRect.maxX + 8,
+                        y:
+                            y - 8,
+                        width:
+                            96,
+                        height:
+                            16
+                    ),
+                font:
+                    .monospacedSystemFont(
+                        ofSize: 7,
+                        weight:
+                            .semibold
+                    ),
+                color:
+                    .systemOrange
+            )
+        }
+    }
+
+    private static func firstRunnerHoleDetails(
+        for element:
+            ElementTechnicznySzafki
+    ) -> [PDFMountingPoint] {
+        let points =
+            element
+                .punktyWiercenia
+                .filter {
+                    $0.typ == .prowadnica
+                }
+        let lines =
+            element
+                .efektywneLinieWiercenia
+                .filter {
+                    $0.typ == .osProwadnicySzuflady
+                }
+                .sorted {
+                    if abs($0.yMM - $1.yMM) > 1 {
+                        return $0.yMM < $1.yMM
+                    }
+
+                    return $0.xStartMM < $1.xStartMM
+                }
+
+        var result:
+            [PDFMountingPoint] = []
+
+        for (
+            index,
+            line
+        ) in lines.enumerated() {
+            let point =
+                points
+                    .filter {
+                        abs(
+                            $0.yMM
+                            - line.yMM
+                        ) < 2
+                    }
+                    .sorted {
+                        $0.xMM < $1.xMM
+                    }
+                    .first
+            let label =
+                line.etykieta
+                    .trimmingCharacters(
+                        in:
+                            .whitespacesAndNewlines
+                    )
+
+            result.append(
+                PDFMountingPoint(
+                    label:
+                        label.isEmpty
+                        ? "Prow. \(index + 1)"
+                        : label,
+                    xMM:
+                        point?.xMM
+                        ?? min(
+                            line.xStartMM,
+                            line.xEndMM
+                        ),
+                    yMM:
+                        line.yMM,
+                    diameterMM:
+                        point?.srednicaMM
+                        ?? 5,
+                    depthMM:
+                        point?.glebokoscMM
+                        ?? 12
+                )
+            )
+        }
+
+        if result.isEmpty {
+            for point in points.sorted(
+                by: {
+                    if abs($0.yMM - $1.yMM) > 1 {
+                        return $0.yMM < $1.yMM
+                    }
+
+                    return $0.xMM < $1.xMM
+                }
+            ) {
+                if result.contains(
+                    where: {
+                        abs(
+                            $0.yMM
+                            - point.yMM
+                        ) < 2
+                    }
+                ) {
+                    continue
+                }
+
+                result.append(
+                    PDFMountingPoint(
+                        label:
+                            "Prow. \(result.count + 1)",
+                        xMM:
+                            point.xMM,
+                        yMM:
+                            point.yMM,
+                        diameterMM:
+                            point.srednicaMM,
+                        depthMM:
+                            point.glebokoscMM
+                    )
+                )
+            }
+        }
+
+        return result
+    }
+
+    private static func hingeCupDetails(
+        for element:
+            ElementTechnicznySzafki
+    ) -> [PDFMountingPoint] {
+        element
+            .punktyWiercenia
+            .filter {
+                $0.typ == .zawias
+            }
+            .sorted {
+                if abs($0.yMM - $1.yMM) > 1 {
+                    return $0.yMM < $1.yMM
+                }
+
+                return $0.xMM < $1.xMM
+            }
+            .map {
+                PDFMountingPoint(
+                    label:
+                        "Zawias",
+                    xMM:
+                        $0.xMM,
+                    yMM:
+                        $0.yMM,
+                    diameterMM:
+                        $0.srednicaMM,
+                    depthMM:
+                        $0.glebokoscMM
+                )
+            }
+    }
+
+    private static func drawPDFDimensionHorizontal(
+        y: CGFloat,
+        xStart: CGFloat,
+        xEnd: CGFloat,
+        text: String
+    ) {
+        let left =
+            min(
+                xStart,
+                xEnd
+            )
+        let right =
+            max(
+                xStart,
+                xEnd
+            )
+
+        guard right - left > 2 else {
+            return
+        }
+
+        UIColor.label.setStroke()
+        let path =
+            UIBezierPath()
+        path.move(
+            to:
+                CGPoint(
+                    x: left,
+                    y: y - 3
+                )
+        )
+        path.addLine(
+            to:
+                CGPoint(
+                    x: left,
+                    y: y + 3
+                )
+        )
+        path.move(
+            to:
+                CGPoint(
+                    x: right,
+                    y: y - 3
+                )
+        )
+        path.addLine(
+            to:
+                CGPoint(
+                    x: right,
+                    y: y + 3
+                )
+        )
+        path.move(
+            to:
+                CGPoint(
+                    x: left,
+                    y: y
+                )
+        )
+        path.addLine(
+            to:
+                CGPoint(
+                    x: right,
+                    y: y
+                )
+        )
+        path.lineWidth = 0.6
+        path.stroke()
+
+        drawText(
+            text,
+            rect:
+                CGRect(
+                    x:
+                        (left + right) / 2 - 30,
+                    y:
+                        y - 13,
+                    width:
+                        60,
+                    height:
+                        12
+                ),
+            font:
+                .monospacedSystemFont(
+                    ofSize: 7,
+                    weight:
+                        .semibold
+                ),
+            color:
+                .label,
+            alignment:
+                .center
+        )
+    }
+
+    private static func drawPDFDimensionVertical(
+        x: CGFloat,
+        yStart: CGFloat,
+        yEnd: CGFloat,
+        text: String
+    ) {
+        let top =
+            min(
+                yStart,
+                yEnd
+            )
+        let bottom =
+            max(
+                yStart,
+                yEnd
+            )
+
+        guard bottom - top > 2 else {
+            return
+        }
+
+        UIColor.label.setStroke()
+        let path =
+            UIBezierPath()
+        path.move(
+            to:
+                CGPoint(
+                    x: x - 3,
+                    y: top
+                )
+        )
+        path.addLine(
+            to:
+                CGPoint(
+                    x: x + 3,
+                    y: top
+                )
+        )
+        path.move(
+            to:
+                CGPoint(
+                    x: x - 3,
+                    y: bottom
+                )
+        )
+        path.addLine(
+            to:
+                CGPoint(
+                    x: x + 3,
+                    y: bottom
+                )
+        )
+        path.move(
+            to:
+                CGPoint(
+                    x: x,
+                    y: top
+                )
+        )
+        path.addLine(
+            to:
+                CGPoint(
+                    x: x,
+                    y: bottom
+                )
+        )
+        path.lineWidth = 0.6
+        path.stroke()
+
+        drawText(
+            text,
+            rect:
+                CGRect(
+                    x:
+                        x - 48,
+                    y:
+                        (top + bottom) / 2 - 6,
+                    width:
+                        44,
+                    height:
+                        12
+                ),
+            font:
+                .monospacedSystemFont(
+                    ofSize: 7,
+                    weight:
+                        .semibold
+                ),
+            color:
+                .label,
+            alignment:
+                .right
+        )
+    }
+
+    private static func drawPDFDashedLine(
+        from start:
+            CGPoint,
+        to end:
+            CGPoint,
+        color:
+            UIColor
+    ) {
+        color.setStroke()
+        let path =
+            UIBezierPath()
+        path.move(to: start)
+        path.addLine(to: end)
+        path.lineWidth = 0.5
+        path.setLineDash(
+            [4, 3],
+            count: 2,
+            phase: 0
+        )
+        path.stroke()
+    }
+
+    private static func clamped(
+        _ value: Double,
+        lower: Double,
+        upper: Double
+    ) -> Double {
+        min(
+            max(
+                value,
+                lower
+            ),
+            upper
+        )
+    }
+
+    private static func clampedCGFloat(
+        _ value: CGFloat,
+        lower: CGFloat,
+        upper: CGFloat
+    ) -> CGFloat {
+        min(
+            max(
+                value,
+                lower
+            ),
+            upper
+        )
+    }
+
     private static func drawElementHeader(x: CGFloat, y: CGFloat, width: CGFloat) {
         UIColor.tertiarySystemFill.setFill()
         UIBezierPath(rect: CGRect(x: x, y: y, width: width, height: 20)).fill()
@@ -1683,56 +2885,6 @@ enum KartaTechnicznaPDFBuilder {
             width: 34,
             alignment: .center
         )
-    }
-
-    private static func drawDrillingHeader(x: CGFloat, y: CGFloat, width: CGFloat) {
-        UIColor.tertiarySystemFill.setFill()
-        UIBezierPath(rect: CGRect(x: x, y: y, width: width, height: 20)).fill()
-
-        let columns: [(String, CGFloat)] = [
-            ("Typ", 90), ("X", 55), ("Y", 55), ("Ø", 55), ("Gł.", 55), ("Opis", 190)
-        ]
-        var currentX = x + 4
-
-        for column in columns {
-            drawTableText(
-                column.0,
-                x: currentX,
-                y: y + 3,
-                width: column.1,
-                bold: true
-            )
-            currentX += column.1
-        }
-    }
-
-    private static func drawDrillingRow(
-        point: PunktWierceniaSzafki,
-        x: CGFloat,
-        y: CGFloat,
-        width: CGFloat
-    ) {
-        drawSeparator(x: x, y: y + 23, width: width)
-
-        let values: [(String, CGFloat)] = [
-            (point.typ.nazwa, 90),
-            (format(point.xMM), 55),
-            (format(point.yMM), 55),
-            (format(point.srednicaMM), 55),
-            (format(point.glebokoscMM), 55),
-            (point.opis, 190)
-        ]
-
-        var currentX = x + 4
-        for value in values {
-            drawTableText(
-                value.0,
-                x: currentX,
-                y: y + 3,
-                width: value.1
-            )
-            currentX += value.1
-        }
     }
 
     private static func drawLabelValue(

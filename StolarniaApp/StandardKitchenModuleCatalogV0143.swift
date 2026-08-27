@@ -5,6 +5,7 @@ enum KitchenModuleCategoryV0143: String, Codable, CaseIterable, Hashable {
     case wall
     case tall
     case corner
+    case island
     case appliance
     case open
 }
@@ -15,6 +16,7 @@ enum KitchenModuleConstructionV0143: String, Codable, CaseIterable, Hashable {
     case cargo
     case sink
     case oven
+    case cooktop
     case dishwasherFront
     case hood
     case refrigerator
@@ -24,6 +26,7 @@ enum KitchenModuleConstructionV0143: String, Codable, CaseIterable, Hashable {
     case blindCorner
     case lCorner
     case wallCorner
+    case island
     case liftUp
     case openShelf
     case topBox
@@ -32,6 +35,7 @@ enum KitchenModuleConstructionV0143: String, Codable, CaseIterable, Hashable {
 enum KitchenModuleAnchoringV0143: String, Codable, CaseIterable, Hashable {
     case floorStanding
     case wallMounted
+    case freestanding
     case builtIn
 }
 
@@ -64,6 +68,16 @@ enum StandardKitchenModuleCatalogV0143 {
     /// dolna krawędź wiszącego 1400 mm.
     static let all: [KitchenModulePresetV0143] = {
         var result: [KitchenModulePresetV0143] = []
+
+        let standardBaseWidths = [200, 300, 400, 450, 500, 600, 800, 900, 1000, 1200]
+        let standardWallWidths = [200, 300, 400, 450, 500, 600, 800, 900, 1000, 1200]
+        let standardTallWidths = [300, 400, 450, 500, 600, 800]
+        let baseHeights = [720, 800]
+        let baseDepths = [560, 600, 650]
+        let wallHeights = [400, 600, 720, 800, 900, 1000]
+        let wallDepths = [320, 350, 370, 400]
+        let tallHeights = [2000, 2070, 2200, 2400]
+        let tallDepths = [560, 600, 650]
 
         func add(
             id: String,
@@ -99,7 +113,7 @@ enum StandardKitchenModuleCatalogV0143 {
 
         // MARK: - Dolne: drzwi i półki
 
-        for width in [300, 400, 450, 500, 600, 800, 900] {
+        for width in standardBaseWidths {
             add(
                 id: "base-shelves-\(width)",
                 name: "Szafka dolna z półkami \(width)",
@@ -110,15 +124,15 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 720,
                 depth: 560,
                 bottom: 0,
-                heights: [720, 800],
-                depths: [560, 600],
+                heights: baseHeights,
+                depths: baseDepths,
                 tags: ["dolna", "drzwi", "półki"]
             )
         }
 
         // MARK: - Dolne: szuflady
 
-        for width in [300, 400, 450, 500, 600, 800, 900] {
+        for width in standardBaseWidths {
             add(
                 id: "base-drawers-\(width)",
                 name: "Szafka dolna z szufladami \(width)",
@@ -129,15 +143,15 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 720,
                 depth: 560,
                 bottom: 0,
-                heights: [720, 800],
-                depths: [560, 600],
+                heights: baseHeights,
+                depths: baseDepths,
                 tags: ["dolna", "szuflady"]
             )
         }
 
         // MARK: - Cargo
 
-        for width in [150, 200, 300] {
+        for width in [150, 200, 300, 400] {
             add(
                 id: "base-cargo-\(width)",
                 name: "Cargo dolne \(width)",
@@ -148,15 +162,15 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 720,
                 depth: 560,
                 bottom: 0,
-                heights: [720, 800],
-                depths: [560, 600],
+                heights: baseHeights,
+                depths: baseDepths,
                 tags: ["dolna", "cargo", "wysuw"]
             )
         }
 
         // MARK: - Zlew
 
-        for width in [450, 500, 600, 800, 900] {
+        for width in [450, 500, 600, 800, 900, 1000, 1200] {
             add(
                 id: "base-sink-\(width)",
                 name: "Szafka pod zlew \(width)",
@@ -167,8 +181,8 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 720,
                 depth: 560,
                 bottom: 0,
-                heights: [720, 800],
-                depths: [560, 600],
+                heights: baseHeights,
+                depths: baseDepths,
                 tags: ["dolna", "zlew", "sortowanie"]
             )
         }
@@ -183,10 +197,27 @@ enum StandardKitchenModuleCatalogV0143 {
             height: 720,
             depth: 560,
             bottom: 0,
-            heights: [720, 800],
-            depths: [560, 600],
+            heights: baseHeights,
+            depths: baseDepths,
             tags: ["dolna", "AGD", "piekarnik"]
         )
+
+        for width in [600, 800, 900] {
+            add(
+                id: "base-cooktop-\(width)",
+                name: "Szafka dolna pod płytę \(width)",
+                category: .appliance,
+                construction: .cooktop,
+                anchoring: .floorStanding,
+                width: width,
+                height: 720,
+                depth: 560,
+                bottom: 0,
+                heights: baseHeights,
+                depths: baseDepths,
+                tags: ["dolna", "AGD", "płyta", "płyta grzewcza", "indukcja"]
+            )
+        }
 
         for width in [450, 600] {
             add(
@@ -207,7 +238,7 @@ enum StandardKitchenModuleCatalogV0143 {
 
         // MARK: - Dolne narożne
 
-        for width in [900, 1000, 1100] {
+        for width in [900, 1000, 1100, 1200] {
             add(
                 id: "base-blind-corner-\(width)",
                 name: "Szafka narożna ślepa \(width)",
@@ -218,30 +249,32 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 720,
                 depth: 560,
                 bottom: 0,
-                heights: [720, 800],
-                depths: [560, 600],
+                heights: baseHeights,
+                depths: baseDepths,
                 tags: ["dolna", "narożna", "ślepa"]
             )
         }
 
-        add(
-            id: "base-l-corner-900",
-            name: "Szafka narożna L 900 × 900",
-            category: .corner,
-            construction: .lCorner,
-            anchoring: .floorStanding,
-            width: 900,
-            height: 720,
-            depth: 900,
-            bottom: 0,
-            heights: [720, 800],
-            depths: [900],
-            tags: ["dolna", "narożna", "L"]
-        )
+        for width in [900, 1000] {
+            add(
+                id: "base-l-corner-\(width)",
+                name: "Szafka narożna L \(width) × \(width)",
+                category: .corner,
+                construction: .lCorner,
+                anchoring: .floorStanding,
+                width: width,
+                height: 720,
+                depth: width,
+                bottom: 0,
+                heights: baseHeights,
+                depths: [width],
+                tags: ["dolna", "narożna", "L"]
+            )
+        }
 
         // MARK: - Wiszące: drzwi i półki
 
-        for width in [300, 400, 450, 500, 600, 800, 900] {
+        for width in standardWallWidths {
             add(
                 id: "wall-shelves-\(width)",
                 name: "Szafka wisząca z półkami \(width)",
@@ -252,15 +285,15 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 720,
                 depth: 320,
                 bottom: 1400,
-                heights: [400, 600, 720, 800, 900, 1000],
-                depths: [320, 350, 370],
+                heights: wallHeights,
+                depths: wallDepths,
                 tags: ["wisząca", "drzwi", "półki"]
             )
         }
 
         // MARK: - Wiszące uchylne
 
-        for width in [600, 800, 900] {
+        for width in [400, 600, 800, 900, 1000, 1200] {
             add(
                 id: "wall-lift-up-\(width)",
                 name: "Szafka wisząca uchylna \(width)",
@@ -272,7 +305,7 @@ enum StandardKitchenModuleCatalogV0143 {
                 depth: 320,
                 bottom: 1600,
                 heights: [360, 400, 500, 600],
-                depths: [320, 350, 370],
+                depths: wallDepths,
                 tags: ["wisząca", "uchylna"]
             )
         }
@@ -291,29 +324,31 @@ enum StandardKitchenModuleCatalogV0143 {
                 depth: 320,
                 bottom: 1400,
                 heights: [600, 720, 800],
-                depths: [320, 350, 370],
+                depths: wallDepths,
                 tags: ["wisząca", "AGD", "okap"]
             )
         }
 
-        add(
-            id: "wall-corner-600",
-            name: "Szafka wisząca narożna 600 × 600",
-            category: .corner,
-            construction: .wallCorner,
-            anchoring: .wallMounted,
-            width: 600,
-            height: 720,
-            depth: 600,
-            bottom: 1400,
-            heights: [600, 720, 800, 900],
-            depths: [600],
-            tags: ["wisząca", "narożna"]
-        )
+        for width in [600, 800] {
+            add(
+                id: "wall-corner-\(width)",
+                name: "Szafka wisząca narożna \(width) × \(width)",
+                category: .corner,
+                construction: .wallCorner,
+                anchoring: .wallMounted,
+                width: width,
+                height: 720,
+                depth: width,
+                bottom: 1400,
+                heights: [600, 720, 800, 900],
+                depths: [width],
+                tags: ["wisząca", "narożna"]
+            )
+        }
 
         // MARK: - Wysokie
 
-        for width in [400, 500, 600] {
+        for width in standardTallWidths {
             add(
                 id: "tall-pantry-\(width)",
                 name: "Słupek spiżarniany \(width)",
@@ -324,26 +359,28 @@ enum StandardKitchenModuleCatalogV0143 {
                 height: 2070,
                 depth: 560,
                 bottom: 0,
-                heights: [2000, 2070, 2200],
-                depths: [560, 600],
+                heights: tallHeights,
+                depths: tallDepths,
                 tags: ["wysoka", "spiżarnia", "półki"]
             )
         }
 
-        add(
-            id: "tall-refrigerator-600",
-            name: "Słupek pod lodówkę 600",
-            category: .appliance,
-            construction: .refrigerator,
-            anchoring: .builtIn,
-            width: 600,
-            height: 2070,
-            depth: 600,
-            bottom: 0,
-            heights: [2000, 2070, 2200],
-            depths: [560, 600, 650],
-            tags: ["wysoka", "AGD", "lodówka"]
-        )
+        for width in [600, 700] {
+            add(
+                id: "tall-refrigerator-\(width)",
+                name: "Słupek pod lodówkę \(width)",
+                category: .appliance,
+                construction: .refrigerator,
+                anchoring: .builtIn,
+                width: width,
+                height: 2070,
+                depth: 600,
+                bottom: 0,
+                heights: tallHeights,
+                depths: tallDepths,
+                tags: ["wysoka", "AGD", "lodówka"]
+            )
+        }
 
         add(
             id: "tall-oven-600",
@@ -355,8 +392,8 @@ enum StandardKitchenModuleCatalogV0143 {
             height: 2070,
             depth: 560,
             bottom: 0,
-            heights: [2000, 2070, 2200],
-            depths: [560, 600],
+            heights: tallHeights,
+            depths: tallDepths,
             tags: ["wysoka", "AGD", "piekarnik"]
         )
 
@@ -370,29 +407,90 @@ enum StandardKitchenModuleCatalogV0143 {
             height: 2070,
             depth: 560,
             bottom: 0,
-            heights: [2000, 2070, 2200],
-            depths: [560, 600],
+            heights: tallHeights,
+            depths: tallDepths,
             tags: ["wysoka", "AGD", "piekarnik", "mikrofalówka"]
         )
 
-        add(
-            id: "tall-utility-600",
-            name: "Słupek gospodarczy 600",
-            category: .tall,
-            construction: .utility,
-            anchoring: .builtIn,
-            width: 600,
-            height: 2070,
-            depth: 560,
-            bottom: 0,
-            heights: [2000, 2070, 2200],
-            depths: [560, 600],
-            tags: ["wysoka", "gospodarcza"]
-        )
+        for width in [450, 600, 800] {
+            add(
+                id: "tall-utility-\(width)",
+                name: "Słupek gospodarczy \(width)",
+                category: .tall,
+                construction: .utility,
+                anchoring: .builtIn,
+                width: width,
+                height: 2070,
+                depth: 560,
+                bottom: 0,
+                heights: tallHeights,
+                depths: tallDepths,
+                tags: ["wysoka", "gospodarcza"]
+            )
+        }
+
+        // MARK: - Wyspy
+
+        let islandPresets: [
+            (id: String, name: String, width: Int, depth: Int, tags: [String])
+        ] = [
+            (
+                id: "1200-work",
+                name: "Wyspa robocza 1200 × 900",
+                width: 1200,
+                depth: 900,
+                tags: ["wyspa", "robocza", "kompaktowa"]
+            ),
+            (
+                id: "1600-work",
+                name: "Wyspa robocza 1600 × 1000",
+                width: 1600,
+                depth: 1000,
+                tags: ["wyspa", "robocza", "szuflady"]
+            ),
+            (
+                id: "1800-seating",
+                name: "Wyspa z miejscem do siedzenia 1800 × 1000",
+                width: 1800,
+                depth: 1000,
+                tags: ["wyspa", "hoker", "siedzenie"]
+            ),
+            (
+                id: "2000-work",
+                name: "Wyspa robocza 2000 × 1400",
+                width: 2000,
+                depth: 1400,
+                tags: ["wyspa", "robocza", "DWG", "Kamień"]
+            ),
+            (
+                id: "2400-family",
+                name: "Wyspa rodzinna 2400 × 1200",
+                width: 2400,
+                depth: 1200,
+                tags: ["wyspa", "rodzinna", "hoker", "szuflady"]
+            )
+        ]
+
+        for island in islandPresets {
+            add(
+                id: "island-\(island.id)",
+                name: island.name,
+                category: .island,
+                construction: .island,
+                anchoring: .freestanding,
+                width: island.width,
+                height: 900,
+                depth: island.depth,
+                bottom: 0,
+                heights: [860, 900, 920],
+                depths: [900, 1000, 1200, 1400],
+                tags: island.tags
+            )
+        }
 
         // MARK: - Nadstawki i otwarte
 
-        for width in [600, 800, 900] {
+        for width in [400, 600, 800, 900, 1000, 1200] {
             add(
                 id: "top-box-\(width)",
                 name: "Nadstawka górna \(width)",
@@ -404,12 +502,12 @@ enum StandardKitchenModuleCatalogV0143 {
                 depth: 320,
                 bottom: 2200,
                 heights: [360, 400, 500],
-                depths: [320, 350, 370],
+                depths: wallDepths,
                 tags: ["wisząca", "nadstawka"]
             )
         }
 
-        for width in [300, 600, 900] {
+        for width in [200, 300, 400, 600, 800, 900, 1200] {
             add(
                 id: "open-shelf-\(width)",
                 name: "Regał otwarty \(width)",

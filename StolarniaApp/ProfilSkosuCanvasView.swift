@@ -285,7 +285,7 @@ struct ProfilSkosuCanvasView:
                     .vertical,
                     3
                 )
-                .background(
+                .stolarniaMaterial(
                     .thinMaterial,
                     in:
                         Capsule()

@@ -100,18 +100,31 @@ enum SilnikWycenyWariantowej {
                     .map {
                         hardware in
 
+                        // **Wymiar wchodzi do nazwy pozycji.**
+                        //
+                        // „GTV • AXIS PRO • H120" mówi, jaki to system, ale
+                        // nie mówi, jaką sztukę zamówić — prowadnica 450
+                        // i 500 to dwa różne indeksy w hurtowni. Wymiar był
+                        // w karcie technicznej i gubił się po drodze.
                         let name =
-                            [
-                                hardware
-                                    .producent,
-                                hardware
-                                    .rodzina,
-                                hardware
-                                    .model
-                            ]
-                            .filter {
-                                !$0.isEmpty
-                            }
+                            (
+                                [
+                                    hardware
+                                        .producent,
+                                    hardware
+                                        .rodzina,
+                                    hardware
+                                        .model
+                                ]
+                                .filter {
+                                    !$0.isEmpty
+                                }
+                                + [
+                                    hardware
+                                        .opisWymiaruV0103
+                                ]
+                                .compactMap { $0 }
+                            )
                             .joined(
                                 separator: " • "
                             )
@@ -216,9 +229,18 @@ enum SilnikWycenyWariantowej {
             )
         ]
 
+        let pozycjeDodatkow = pozycjeDodatkowProjektu(
+            wariant: wariant,
+            projekt: projekt,
+            materialy: aktywne,
+            wybranaPlyta: wybranaPlyta,
+            wybranyFront: wybranyFront
+        )
+
         let pozycje =
             pozycjeBazowe
             + pozycjeOkuc
+            + pozycjeDodatkow
 
         let kosztBazowy =
             pozycje.reduce(0) {
@@ -284,6 +306,78 @@ enum SilnikWycenyWariantowej {
             cenaBrutto:
                 cenaNetto + vat
         )
+    }
+
+    // MARK: - v0.28.0 Dodatki projektu (LED / blendy / oblożenie ścian)
+
+    /// Generuje pozycje kosztowe dla trzech dodatków projektu wg wartości
+    /// wpisanych w `ProjektWyceny`. Zerowe pola są pomijane, żeby nie zaśmiecać wyceny.
+    private static func pozycjeDodatkowProjektu(
+        wariant: WariantWyceny,
+        projekt: ProjektWyceny,
+        wybranaPlyta: WybranyMaterialWyceny,
+        wybranyFront: WybranyMaterialWyceny
+    ) -> [PozycjaKosztowaWyceny] {
+        var pozycje: [PozycjaKosztowaWyceny] = []
+
+        // 1) Listwy LED — stawka rynkowa taśma+profil aluminiowy+zasilacz per mb.
+        // Wariant premium/vip: +20% za profile o wyższej jakości i CRI 90+.
+        if projekt.metryBiezaceListewLED > 0 {
+            let bazaLED: Double = 65 // zł/mb netto (taśma LED 24V + profil AL + kołnierz zasilania)
+            let mnoznik: Double = wariant == .premium || wariant == .vip ? 1.2 : 1.0
+            pozycje.append(
+                PozycjaKosztowaWyceny(
+                    nazwa: "Listwa LED pod szafki wiszące",
+                    kategoria: .oswietlenie,
+                    ilosc: projekt.metryBiezaceListewLED,
+                    jednostka: "mb",
+                    cenaJednostkowaNetto: bazaLED * mnoznik,
+                    uwagi: "Taśma 24V + profil aluminiowy + zasilacz. Wariant \(wariant.nazwa)."
+                )
+            )
+        }
+
+        // 2) Blendy domykające ciąg — cena z materiału frontu × pole blendy.
+        // Wysokość zabudowy 720 mm (dolne) do szacowania powierzchni; wysoka
+        // zabudowa też wpada w tę grupę — dokładność wystarczająca do wyceny.
+        if projekt.liczbaBlendDomykajacych > 0 {
+            let wysokoscBlendyMM: Double = 720
+            let powierzchniaBlendyM2 =
+                (projekt.szerokoscBlendyMM / 1000)
+                * (wysokoscBlendyMM / 1000)
+            let iloscM2 =
+                Double(projekt.liczbaBlendDomykajacych)
+                * powierzchniaBlendyM2
+
+            pozycje.append(
+                PozycjaKosztowaWyceny(
+                    nazwa: "Blendy domykające ciąg",
+                    kategoria: .plyty,
+                    ilosc: iloscM2,
+                    jednostka: "m²",
+                    cenaJednostkowaNetto: wybranyFront.cenaJednostkowaNetto,
+                    uwagi: "\(projekt.liczbaBlendDomykajacych) × blenda \(Int(projekt.szerokoscBlendyMM)) mm × 720 mm w cenie frontu wariantu \(wariant.nazwa)."
+                )
+            )
+        }
+
+        // 3) Oblożenie ścian płytą meblową (fartuch / panele) — cena z płyty korpusu.
+        // W wariancie VIP dodatkowy narzut 30% (materiał lakierowany / laminat premium).
+        if projekt.powierzchniaOblozeniaScianM2 > 0 {
+            let mnoznik: Double = wariant == .vip ? 1.3 : 1.0
+            pozycje.append(
+                PozycjaKosztowaWyceny(
+                    nazwa: "Oblożenie ścian płytą meblową",
+                    kategoria: .plyty,
+                    ilosc: projekt.powierzchniaOblozeniaScianM2,
+                    jednostka: "m²",
+                    cenaJednostkowaNetto: wybranaPlyta.cenaJednostkowaNetto * mnoznik,
+                    uwagi: "Panele ścienne (fartuch) w wariancie \(wariant.nazwa). Materiał: \(wybranaPlyta.opis)."
+                )
+            )
+        }
+
+        return pozycje
     }
 
     private static func pozycjeMaterialoweV068(
@@ -450,44 +544,129 @@ enum SilnikWycenyWariantowej {
         return result
     }
 
-    private static func materialCenaM2(
-        typy:
-            [TypMaterialuStolarskiego],
+    private static func pozycjeDodatkowProjektu(
+        wariant:
+            WariantWyceny,
+        projekt:
+            ProjektWyceny,
         materialy:
             [MaterialStolarski],
-        fallback: Double
-    ) -> Double {
-        let values =
-            materialy
-                .filter {
-                    typy.contains($0.typ)
-                }
-                .compactMap(
-                    \.cenaZaM2Netto
-                )
-                .filter {
-                    $0 > 0
-                }
+        wybranaPlyta:
+            WybranyMaterialWyceny,
+        wybranyFront:
+            WybranyMaterialWyceny
+    ) -> [PozycjaKosztowaWyceny] {
+        var result:
+            [PozycjaKosztowaWyceny] = []
 
-        guard !values.isEmpty else {
-            return fallback
+        if projekt.metryBiezaceListewLED > 0 {
+            result.append(
+                PozycjaKosztowaWyceny(
+                    nazwa:
+                        "Listwa LED z projektu",
+                    kategoria:
+                        .oswietlenie,
+                    ilosc:
+                        projekt.metryBiezaceListewLED,
+                    jednostka:
+                        "mb",
+                    cenaJednostkowaNetto:
+                        cenaListewLEDNetto(
+                            materialy:
+                                materialy
+                        ),
+                    uwagi:
+                        "Dokładna długość z projektu. Zasilacze i osprzęt mogą być doliczone przez automatyczny dobór okuć."
+                )
+            )
         }
 
-        return values.reduce(0, +)
-            / Double(values.count)
+        if projekt.liczbaBlendDomykajacych > 0,
+           projekt.szerokoscBlendyMM > 0 {
+            let powierzchniaBlendM2 =
+                Double(
+                    projekt.liczbaBlendDomykajacych
+                )
+                * projekt.szerokoscBlendyMM
+                / 1_000
+                * 0.72
+
+            result.append(
+                PozycjaKosztowaWyceny(
+                    nazwa:
+                        "Blendy domykające",
+                    kategoria:
+                        .fronty,
+                    ilosc:
+                        powierzchniaBlendM2,
+                    jednostka:
+                        "m²",
+                    cenaJednostkowaNetto:
+                        wybranyFront
+                            .cenaJednostkowaNetto,
+                    uwagi:
+                        [
+                            "\(projekt.liczbaBlendDomykajacych) szt. × \(Int(projekt.szerokoscBlendyMM.rounded())) mm.",
+                            "Szacunek wysokości: 720 mm.",
+                            wybranyFront.opis
+                        ]
+                        .filter {
+                            !$0.isEmpty
+                        }
+                        .joined(
+                            separator: " "
+                        )
+                )
+            )
+        }
+
+        if projekt.powierzchniaOblozeniaScianM2 > 0 {
+            result.append(
+                PozycjaKosztowaWyceny(
+                    nazwa:
+                        "Obłożenie ścian płytą",
+                    kategoria:
+                        .plyty,
+                    ilosc:
+                        projekt
+                            .powierzchniaOblozeniaScianM2,
+                    jednostka:
+                        "m²",
+                    cenaJednostkowaNetto:
+                        wybranaPlyta
+                            .cenaJednostkowaNetto
+                        * mnoznikOblozeniaScian(
+                            wariant
+                        ),
+                    uwagi:
+                        [
+                            "Fartuch/panele ścienne z projektu.",
+                            wybranaPlyta.opis
+                        ]
+                        .filter {
+                            !$0.isEmpty
+                        }
+                        .joined(
+                            separator: " "
+                        )
+                )
+            )
+        }
+
+        return result
     }
 
-    private static func materialCenaJednostkowa(
-        typy:
-            [TypMaterialuStolarskiego],
+    private static func cenaListewLEDNetto(
         materialy:
-            [MaterialStolarski],
-        fallback: Double
+            [MaterialStolarski]
     ) -> Double {
-        let values =
+        let wartosci =
             materialy
                 .filter {
-                    typy.contains($0.typ)
+                    $0.aktywny
+                    && $0.typ == .akcesoriumMeblowe
+                    && $0.jednostka == .metrBiezacy
+                    && tekstWskazujeLED($0.nazwa + " " + $0.notatki)
                 }
                 .map(
                     \.cenaPoRabacieNetto
@@ -496,50 +675,41 @@ enum SilnikWycenyWariantowej {
                     $0 > 0
                 }
 
-        guard !values.isEmpty else {
-            return fallback
+        guard !wartosci.isEmpty else {
+            return 8.94
         }
 
-        return values.reduce(0, +)
-            / Double(values.count)
+        return wartosci.reduce(0, +)
+            / Double(wartosci.count)
     }
 
-    private static func blatTypes(
-        for wariant:
+    private static func tekstWskazujeLED(
+        _ value:
+            String
+    ) -> Bool {
+        let normalized =
+            value.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: Locale(identifier: "pl_PL")
+            )
+
+        return normalized.contains("led")
+            || normalized.contains("tasma")
+            || normalized.contains("oswietlenie")
+    }
+
+    private static func mnoznikOblozeniaScian(
+        _ wariant:
             WariantWyceny
-    ) -> [TypMaterialuStolarskiego] {
+    ) -> Double {
         switch wariant {
         case .eco,
              .standard:
-            return [
-                .blatLaminowany
-            ]
+            return 1
         case .premium:
-            return [
-                .blatKompaktowy,
-                .blatLaminowany
-            ]
+            return 1.12
         case .vip:
-            return [
-                .blatKamienny,
-                .blatKompaktowy
-            ]
-        }
-    }
-
-    private static func opisOkuc(
-        _ wariant:
-            WariantWyceny
-    ) -> String {
-        switch wariant {
-        case .eco:
-            return "Podstawowe systemy GTV lub równoważne."
-        case .standard:
-            return "GTV premium / Blum podstawowy."
-        case .premium:
-            return "Blum Merivobox, Tandembox lub równoważne."
-        case .vip:
-            return "Blum Legrabox i systemy najwyższej klasy."
+            return 1.25
         }
     }
 

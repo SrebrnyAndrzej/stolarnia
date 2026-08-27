@@ -56,13 +56,15 @@ struct NowyProjektView: View {
                         }
                     }
                     .disabled(!isFormValid || isSaving)
+                    .keyboardShortcut(.return, modifiers: [.command])
+                    .help("Utwórz projekt (⌘Return)")
                 }
             }
             .overlay {
                 if isSaving {
                     ProgressView("Zapisywanie…")
                         .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .stolarniaMaterial(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
             }
         }

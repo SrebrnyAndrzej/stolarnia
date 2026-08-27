@@ -10,7 +10,7 @@ struct BOMProjektuViewV062: View {
 
     private let categoryOrder: [KategoriaKosztuWyceny] = [
         .plyty, .fronty, .blaty, .okucia, .akcesoria,
-        .robocizna, .montaz, .transport, .pozostale
+        .oswietlenie, .robocizna, .montaz, .transport, .pozostale
     ]
 
     var body: some View {
@@ -25,6 +25,18 @@ struct BOMProjektuViewV062: View {
                     )
                 } header: {
                     Text("Podsumowanie")
+                }
+
+                if bom.grupy.values.allSatisfy(\.isEmpty) {
+                    Section {
+                        StolarniaEmptyState(
+                            title: "Pusty BOM",
+                            description: "Bill of Materials generowany jest z modułów i wybranego wariantu wyceny. Dodaj moduły w Planie 2D i uzupełnij wycenę, żeby zobaczyć szczegółowe zestawienie płyt, frontów, okuć i akcesoriów.",
+                            systemImage: "list.bullet.clipboard"
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
                 }
 
                 ForEach(categoryOrder, id: \.self) { category in

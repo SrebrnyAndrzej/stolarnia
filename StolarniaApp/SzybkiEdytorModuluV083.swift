@@ -5,18 +5,16 @@ import SwiftUI
 // MARK: - Quick-edit strip wyświetlany w inspektorze elewacji
 
 /// Poziomy pasek przycisków ±1 dla najczęstszych zmian przy kliencie:
-/// szuflady, półki. Zapis przebiega przez istniejący pipeline updateModule.
+/// szuflady, półki i fronty. Zapis przebiega przez istniejący pipeline
+/// updateModule.
 struct SzybkiEdytorModuluV083: View {
     let storedAssembly: StoredFurnitureAssembly
     @ObservedObject var mebleViewModel: MeblePomieszczeniaViewModel
     let wall: WallSegment
     let room: RoomDefinition
-    let onFullEdit: () -> Void
 
     @State private var isSaving = false
     @State private var lastError: String?
-    @State private var showCornerEditor = false
-    @State private var cornerDefinitions: [CornerCabinetDefinitionV025] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,10 +44,10 @@ struct SzybkiEdytorModuluV083: View {
                     await applyDelta(shelfDelta: delta)
                 }
 
-                colorSeparator
-
                 // Fronty — tylko gdy brak szuflad (szuflady mają własne fronty)
                 if currentDrawerCount == 0 {
+                    colorSeparator
+
                     quickSection(
                         icon: "rectangle.portrait",
                         label: "Fronty",
@@ -59,45 +57,6 @@ struct SzybkiEdytorModuluV083: View {
                     ) { delta in
                         applyFrontDelta(delta)
                     }
-
-                    colorSeparator
-                }
-
-                if isCornerModule {
-                    // Narożnik — zamiast zwykłego Edytuj
-                    Button {
-                        cornerDefinitions = CornerCabinetRepositoryV025.loadAll()
-                        showCornerEditor = true
-                    } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: "arrow.turn.down.right")
-                                .font(.system(size: 16, weight: .medium))
-                            Text("Narożnik")
-                                .font(.caption2.weight(.medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isSaving)
-                } else {
-                    // Pełna edycja
-                    Button {
-                        onFullEdit()
-                    } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 16, weight: .medium))
-                            Text("Edytuj")
-                                .font(.caption2.weight(.medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isSaving)
                 }
             }
             .frame(height: 56)
@@ -113,28 +72,9 @@ struct SzybkiEdytorModuluV083: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: lastError)
-        .sheet(isPresented: $showCornerEditor, onDismiss: saveCornerAfterEdit) {
-            CornerCabinetEditorV025(
-                assemblies: [storedAssembly.assembly],
-                definitions: $cornerDefinitions
-            )
-        }
-    }
-
-    // MARK: - Corner detection
-
-    private var isCornerModule: Bool {
-        let name = storedAssembly.assembly.name.lowercased()
-        let templateName = mebleViewModel.template(for: storedAssembly)?.name.lowercased() ?? ""
-        let combined = name + " " + templateName
-        return combined.contains("narożn")
-            || combined.contains("narozn")
-            || combined.contains("corner")
-            || combined.contains("ślep")
-            || combined.contains("slep")
-            || combined.contains("skośn")
-            || combined.contains("skoson")
+        // Komunikat błędu pojawia się rzadko i ma zwrócić uwagę — to jest
+        // ten przypadek, w którym ruch niesie znaczenie, a nie tylko zdobi.
+        .animation(StolarniaMotion.pojawienie, value: lastError)
     }
 
     // MARK: - Computed current values
@@ -225,16 +165,6 @@ struct SzybkiEdytorModuluV083: View {
         card.konfiguracjaFunkcjonalnaV068 = config
 
         KartaTechnicznaSzafkiStore.save(card)
-        mebleViewModel.forceRenderRefresh()
-    }
-
-    /// Wywołana po zamknięciu CornerCabinetEditorV025 — zapisuje pierwszą definicję
-    /// pasującą do bieżącego modułu i odświeża canvas.
-    private func saveCornerAfterEdit() {
-        guard let definition = cornerDefinitions.first(
-            where: { $0.assemblyID == storedAssembly.id }
-        ) ?? cornerDefinitions.first else { return }
-        CornerCabinetRepositoryV025.save(definition)
         mebleViewModel.forceRenderRefresh()
     }
 

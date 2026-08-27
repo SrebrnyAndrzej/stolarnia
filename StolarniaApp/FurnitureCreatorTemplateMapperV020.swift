@@ -169,7 +169,9 @@ enum FurnitureCreatorTemplateMapperV020 {
                             kind: zoneKind($0.kind),
                             heightMM: $0.heightMM,
                             drawerCount: $0.drawerCount,
-                            shelfCount: $0.shelfCount
+                            shelfCount: $0.shelfCount,
+                            drawerFrontHeightsMM:
+                                $0.drawerFrontHeightsMM
                         )
                     }
             )
@@ -251,7 +253,10 @@ enum FurnitureCreatorTemplateMapperV020 {
             ),
             try .init(
                 key: .frontGap,
-                displayName: "Szczelina frontu",
+                // NIE „Szczelina frontu”. Ten parametr to luz na jedno lico,
+                // a nie fuga między frontami — fuga to dwa takie luzy.
+                // Pod starą nazwą użytkownik wpisywał 4 i dostawał 8 mm w fudze.
+                displayName: "Luz frontu na lico",
                 valueKind: .millimeters
             ),
             try .init(
@@ -310,6 +315,8 @@ enum FurnitureCreatorTemplateMapperV020 {
             return .lowerDrawers
         case .middleDrawers:
             return .middleDrawers
+        case .upperDrawers:
+            return .upperDrawers
         case .upperOpen:
             return .upperOpen
         case .upperShelves:

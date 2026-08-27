@@ -35,6 +35,25 @@ struct SzablonyWiercenOkucView:
                     )
                 }
 
+                if repository.templates.isEmpty {
+                    Section {
+                        StolarniaEmptyState(
+                            title: "Brak szablonów wierceń",
+                            description: "Szablony przyśpieszają wprowadzanie powtarzalnych wierceń — puszki zawiasów, prowadnice szuflad, uchwyty. Utwórz pierwszy szablon dla konkretnego okucia i zastosuj go w karcie technicznej modułu.",
+                            systemImage: "scope",
+                            actionTitle: "Dodaj szablon",
+                            action: {
+                                editedTemplate =
+                                    SzablonWierceniaOkucia(
+                                        nazwa: "Nowy szablon"
+                                    )
+                            }
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 ForEach(
                     repository.templates
                 ) { template in
@@ -112,6 +131,8 @@ struct SzablonyWiercenOkucView:
                     .buttonStyle(
                         .borderedProminent
                     )
+                    .keyboardShortcut("n", modifiers: [.command])
+                    .help("Dodaj nowy szablon wierceń (⌘N)")
                 }
             }
             .sheet(
@@ -125,31 +146,21 @@ struct SzablonyWiercenOkucView:
                     repository.upsert($0)
                 }
             }
-            .alert(
-                "Usunąć szablon?",
-                isPresented:
-                    $showingDeleteAlert
-            ) {
-                Button(
-                    "Usuń",
-                    role: .destructive
-                ) {
-                    if let pendingDelete {
-                        repository.delete(
-                            id:
-                                pendingDelete.id
-                        )
-                    }
-
+            .confirmationDialog(
+                "Usunąć szablon \"\(pendingDelete?.nazwa ?? "")\"?",
+                isPresented: $showingDeleteAlert,
+                titleVisibility: .visible,
+                presenting: pendingDelete
+            ) { template in
+                Button("Usuń szablon", role: .destructive) {
+                    repository.delete(id: template.id)
                     pendingDelete = nil
                 }
-
-                Button(
-                    "Anuluj",
-                    role: .cancel
-                ) {
+                Button("Anuluj", role: .cancel) {
                     pendingDelete = nil
                 }
+            } message: { template in
+                Text("\(template.punkty.count) punktów wiercenia. Ta akcja jest nieodwracalna.")
             }
         }
     }

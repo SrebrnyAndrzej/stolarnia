@@ -300,7 +300,7 @@ private struct KartaProjektuElewacjaV061: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 3)
-                                .background(.regularMaterial, in: Capsule())
+                                .stolarniaMaterial(.regularMaterial, in: Capsule())
                                 .position(x: rect.midX, y: rect.maxY + 13)
                         }
                     }

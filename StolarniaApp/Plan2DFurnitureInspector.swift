@@ -95,7 +95,7 @@ struct Plan2DFurnitureInspector: View {
             }
         }
         .padding()
-        .background(.regularMaterial)
+        .stolarniaMaterial(.regularMaterial)
     }
 
     private var titleBlock: some View {

@@ -121,7 +121,7 @@ nonisolated enum FurnitureLibraryCategoryV016: String, CaseIterable, Identifiabl
         case .applianceHousing: return "AGD"
         case .pantryStorage: return "Spiżarnia"
         case .kitchenFinishing: return "Blendy"
-        case .slidingWardrobe: return "Przesuwne"
+        case .slidingWardrobe: return "Moduły pod przesuwne"
         case .hingedWardrobe: return "Uchylne"
         case .builtInWardrobe: return "Wnękowe"
         case .dressingCarcass: return "Korpusy"
@@ -159,7 +159,7 @@ nonisolated enum FurnitureLibraryCategoryV016: String, CaseIterable, Identifiabl
         case .applianceHousing: return "oven"
         case .pantryStorage: return "cabinet"
         case .kitchenFinishing: return "rectangle.split.3x1"
-        case .slidingWardrobe: return "door.sliding.left.hand.closed"
+        case .slidingWardrobe: return "rectangle.split.3x1"
         case .hingedWardrobe: return "door.left.hand.closed"
         case .builtInWardrobe: return "rectangle.inset.filled"
         case .dressingCarcass: return "square.grid.2x2"
@@ -294,9 +294,11 @@ nonisolated enum FurnitureLibraryClassificationV016 {
     ) -> Bool {
         switch template.builderType {
         case .baseCabinet, .wallCabinet, .wardrobe,
-             .slidingWardrobe, .desk, .shelving,
+             .desk, .shelving,
              .table, .recessBuiltIn:
             return true
+        case .slidingWardrobe:
+            return false
         case .custom:
             return StandardKitchenFinishingTemplatesV015
                 .isFinishingTemplate(template)

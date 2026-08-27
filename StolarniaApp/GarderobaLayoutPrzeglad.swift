@@ -239,7 +239,9 @@ struct GarderobaLayoutPrzeglad: View {
         // 2. Footprinty mebli — kolorowane per ściana
         let fpByWall = Dictionary(grouping: footprints, by: \.wallID)
         for (wallID, wfps) in fpByWall {
-            let col = wallColor(for: wallID)
+            let col = wallID.map {
+                wallColor(for: $0)
+            } ?? Color.accentColor
             for fp in wfps {
                 var path = Path()
                 let pts = fp.points.map(projection.screenPoint)

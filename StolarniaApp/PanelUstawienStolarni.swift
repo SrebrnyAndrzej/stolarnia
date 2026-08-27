@@ -1047,8 +1047,7 @@ struct PanelUstawienStolarni:
     >(
         title: String,
         systemImage: String,
-        @ViewBuilder content:
-            () -> Content
+            @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(
             alignment: .leading,

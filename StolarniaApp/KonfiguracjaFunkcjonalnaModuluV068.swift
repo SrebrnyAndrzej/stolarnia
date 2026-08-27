@@ -662,7 +662,7 @@ enum GeometriaSzuflad3DV068 {
                 component(
                     code:
                         "\(movingPrefix)BOTTOM-\(number)",
-                    role: .custom,
+                    role: .drawerBox,
                     width:
                         boxWidth,
                     height: 16,
@@ -681,7 +681,7 @@ enum GeometriaSzuflad3DV068 {
                 component(
                     code:
                         "\(movingPrefix)LEFT-\(number)",
-                    role: .custom,
+                    role: .drawerBox,
                     width: 16,
                     height:
                         boxHeight,
@@ -700,7 +700,7 @@ enum GeometriaSzuflad3DV068 {
                 component(
                     code:
                         "\(movingPrefix)RIGHT-\(number)",
-                    role: .custom,
+                    role: .drawerBox,
                     width: 16,
                     height:
                         boxHeight,
@@ -724,7 +724,7 @@ enum GeometriaSzuflad3DV068 {
                 component(
                     code:
                         "\(movingPrefix)BACK-\(number)",
-                    role: .custom,
+                    role: .drawerBox,
                     width:
                         boxWidth,
                     height:

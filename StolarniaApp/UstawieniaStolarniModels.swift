@@ -34,10 +34,15 @@ struct UstawieniaKonstrukcyjneStolarni:
     Hashable
 {
     var gruboscPlytyKorpusuMM = 18.0
-    var gruboscPlytySzufladMM = 16.0
+    /// Amix SB idzie na 18 mm — katalog podaje 16, ale to nie ta seria.
+    var gruboscPlytySzufladMM = 18.0
     var gruboscPlecHDFMM = 3.0
     var luzMontazowyMM = 3.0
-    var szczelinaFrontowMM = 2.0
+    /// Źródło prawdy dla fugi między frontami. Po 2 mm na lico, więc
+    /// między sąsiednimi frontami wypada 4 mm.
+    /// UWAGA: dziś ta wartość jest tylko wyświetlana w panelu ustawień —
+    /// generatory mają własne, zaszyte kopie. Patrz komentarz niżej.
+    var szczelinaFrontowMM = 4.0
     var odsunieciePlecMM = 10.0
     var glebokoscRowkaPlecMM = 8.0
     var wysokoscCokoluMM = 100.0
@@ -71,7 +76,7 @@ struct UstawieniaTechnologiczneStolarni:
     var rozstawOtworowMM = 32.0
     var srednicaPuszkiZawiasuMM = 35.0
     var odsunieciePuszkiOdKrawedziMM = 22.5
-    var domyslneObrzezeMM = 1.0
+    var domyslneObrzezeMM = 0.8
     var obrzezeFrontoweMM = 2.0
     var klejPURDlaLazienek = true
     var automatycznePlecyHDF = true

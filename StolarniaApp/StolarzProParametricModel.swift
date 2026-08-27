@@ -16,8 +16,6 @@ struct StolarzProParametricModel: Codable, Hashable {
 // MARK: - Wczytywanie
 
 extension StolarzProParametricModel {
-    static let resourceName = "stolarzpro_parametric_model"
-
     enum LoadError: LocalizedError {
         case brakZasobu
         case bladDekodowania(Error)
@@ -25,7 +23,7 @@ extension StolarzProParametricModel {
         var errorDescription: String? {
             switch self {
             case .brakZasobu:
-                return "Nie znaleziono zasobu \(resourceName).json w bundle."
+                return "Nie znaleziono zasobu stolarzpro_parametric_model.json w bundle."
             case .bladDekodowania(let error):
                 return "Nie udało się zdekodować modelu parametrycznego: \(error.localizedDescription)"
             }
@@ -40,7 +38,7 @@ extension StolarzProParametricModel {
 
     static func wczytaj(bundle: Bundle = .main) throws -> StolarzProParametricModel {
         guard let url = bundle.url(
-            forResource: resourceName,
+            forResource: "stolarzpro_parametric_model",
             withExtension: "json"
         ) else {
             throw LoadError.brakZasobu
@@ -470,7 +468,7 @@ struct TechnicalSection: Codable, Hashable {
 // MARK: - Financials
 
 struct FinancialsAndPricing: Codable, Hashable {
-    let tiers: PricingTiers
+    let tiers: StolarzProPricingTiers
     let calculationParameters: CalculationParameters
     let logisticsAndServices: LogisticsAndServices
 
@@ -481,14 +479,16 @@ struct FinancialsAndPricing: Codable, Hashable {
     }
 }
 
-struct PricingTiers: Codable, Hashable {
-    let eco: PricingTier
-    let standard: PricingTier
-    let premium: PricingTier
-    let vip: PricingTier
+/// Osobny namespace dla poziomów cenowych StolarzPro — istniejący `PricingTier`
+/// (enum) prezentowany w `DomainPresentationExtensions` służy do innego celu.
+struct StolarzProPricingTiers: Codable, Hashable {
+    let eco: StolarzProPricingTier
+    let standard: StolarzProPricingTier
+    let premium: StolarzProPricingTier
+    let vip: StolarzProPricingTier
 
     /// Wygodna kolejność do prezentacji w UI (od najtańszej do najdroższej).
-    var uporzadkowane: [(nazwa: String, tier: PricingTier)] {
+    var uporzadkowane: [(nazwa: String, tier: StolarzProPricingTier)] {
         [
             ("Eco", eco),
             ("Standard", standard),
@@ -498,7 +498,7 @@ struct PricingTiers: Codable, Hashable {
     }
 }
 
-struct PricingTier: Codable, Hashable {
+struct StolarzProPricingTier: Codable, Hashable {
     let description: String
 }
 

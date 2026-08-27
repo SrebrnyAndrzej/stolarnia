@@ -27,6 +27,34 @@ struct OfertaKlientaView:
     @StateObject private var archiveRepository =
         ArchiwumOfertRepository()
 
+    private var offerSummary:
+        PodsumowanieWariantuWyceny?
+    {
+        wyceny
+            .first {
+                $0.wariant
+                    == wybranyWariant
+            }
+            .map {
+                warunki.podsumowanieHandlowe(
+                    dla: $0,
+                    ustawienia:
+                        ustawienia
+                )
+            }
+    }
+
+    private var canGenerateOffer: Bool {
+        warunki
+            .jestPoprawnyPodzialPlatnosci
+        && (
+            !warunki
+                .uzyjCenyRecznej
+            || warunki
+                .cenaRecznaNetto > 0
+        )
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -168,6 +196,116 @@ struct OfertaKlientaView:
                     }
                 }
 
+                Section("Cena i VAT") {
+                    Picker(
+                        "Tryb dokumentu",
+                        selection:
+                            $warunki
+                                .trybDokumentu
+                    ) {
+                        ForEach(
+                            TrybDokumentuOfertyKlienta
+                                .allCases
+                        ) { mode in
+                            Text(mode.nazwa)
+                                .tag(mode)
+                        }
+                    }
+
+                    Text(
+                        warunki
+                            .trybDokumentu
+                            .opis
+                    )
+                    .font(.caption)
+                    .foregroundStyle(
+                        .secondary
+                    )
+
+                    Toggle(
+                        "Cena ręczna dla klienta",
+                        isOn:
+                            $warunki
+                                .uzyjCenyRecznej
+                    )
+
+                    if warunki
+                        .uzyjCenyRecznej {
+                        currencyField(
+                            "Cena ręczna bez VAT",
+                            value:
+                                $warunki
+                                    .cenaRecznaNetto
+                        )
+                    }
+
+                    Toggle(
+                        "Przelicz marżę tylko dla tej oferty",
+                        isOn:
+                            $warunki
+                                .uzyjMarzyOferty
+                    )
+                    .disabled(
+                        warunki
+                            .uzyjCenyRecznej
+                    )
+
+                    if warunki
+                        .uzyjMarzyOferty
+                        && !warunki
+                            .uzyjCenyRecznej {
+                        percentField(
+                            "Marża oferty",
+                            value:
+                                $warunki
+                                    .marzaOfertyProcent
+                        )
+                    }
+
+                    Toggle(
+                        "Dolicz VAT",
+                        isOn:
+                            $warunki
+                                .doliczVAT
+                    )
+
+                    if warunki
+                        .doliczVAT {
+                        percentField(
+                            "Stawka VAT",
+                            value:
+                                $warunki
+                                    .vatProcent
+                        )
+                    }
+
+                    if let offerSummary {
+                        LabeledContent(
+                            "Cena w PDF",
+                            value:
+                                money(
+                                    offerSummary
+                                        .cenaBrutto
+                                )
+                        )
+                        .font(
+                            .headline
+                                .monospacedDigit()
+                        )
+
+                        if !warunki
+                            .doliczVAT {
+                            Text(
+                                "Dokument zostanie oznaczony jako oferta bez VAT."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(
+                                .secondary
+                            )
+                        }
+                    }
+                }
+
                 Section("Zakres dokumentu") {
                     Toggle(
                         "Pokaż wszystkie warianty",
@@ -231,6 +369,17 @@ struct OfertaKlientaView:
                         WarunkiOfertyKlienta
                             .generujNumer()
                 }
+
+                if abs(
+                    warunki.vatProcent
+                    - WarunkiOfertyKlienta()
+                        .vatProcent
+                ) < 0.01 {
+                    warunki.vatProcent =
+                        ustawienia
+                            .finanse
+                            .vatProcent
+                }
             }
             .stolarniaScreenSurface(
                 .detail
@@ -263,8 +412,7 @@ struct OfertaKlientaView:
                         .borderedProminent
                     )
                     .disabled(
-                        !warunki
-                            .jestPoprawnyPodzialPlatnosci
+                        !canGenerateOffer
                     )
                 }
             }
@@ -337,6 +485,50 @@ struct OfertaKlientaView:
         }
     }
 
+    private func currencyField(
+        _ title: String,
+        value:
+            Binding<Double>
+    ) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+
+            TextField(
+                title,
+                value: value,
+                format:
+                    .number.precision(
+                        .fractionLength(
+                            0...2
+                        )
+                    )
+            )
+            .keyboardType(
+                .decimalPad
+            )
+            .multilineTextAlignment(
+                .trailing
+            )
+            .frame(width: 120)
+
+            Text("zł")
+                .foregroundStyle(
+                    .secondary
+                )
+        }
+    }
+
+    private func money(
+        _ value: Double
+    ) -> String {
+        value.formatted(
+            .currency(
+                code: "PLN"
+            )
+        )
+    }
+
     private func generate() {
         do {
             let url =
@@ -363,6 +555,14 @@ struct OfertaKlientaView:
                     .missingVariant
             }
 
+            let archivedSummary =
+                warunki
+                    .podsumowanieHandlowe(
+                        dla: summary,
+                        ustawienia:
+                            ustawienia
+                    )
+
             let archived =
                 try archiveRepository
                     .archive(
@@ -372,7 +572,8 @@ struct OfertaKlientaView:
                                 .nazwaProjektu,
                         customerName:
                             warunki.klient,
-                        summary: summary,
+                        summary:
+                            archivedSummary,
                         validityDays:
                             warunki
                                 .waznoscOfertyDni

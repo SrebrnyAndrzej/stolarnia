@@ -59,6 +59,18 @@ struct ListaZakupowaView:
                     )
                 }
 
+                if list.pozycje.isEmpty {
+                    Section {
+                        StolarniaEmptyState(
+                            title: "Brak pozycji do zakupu",
+                            description: "Lista zakupowa generowana jest z materiałów, okuć i akcesoriów użytych w projekcie. Dodaj moduły w Planie 2D i wybierz wariant wyceny, żeby zobaczyć tutaj skonsolidowaną listę do zakupu.",
+                            systemImage: "cart.badge.plus"
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 ForEach(
                     categories
                 ) { category in
@@ -390,6 +402,8 @@ struct ListaZakupowaView:
             return "shippingbox"
         case .akcesoria:
             return "wrench.and.screwdriver"
+        case .oswietlenie:
+            return "lightbulb"
         case .pozostale:
             return "ellipsis.circle"
         case .robocizna:

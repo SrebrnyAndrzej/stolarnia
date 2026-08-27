@@ -3,132 +3,13 @@ import Foundation
 import SwiftUI
 import UIKit
 
-struct ListaFormatekProjektuViewV070:
-    View
-{
-    @Environment(\.dismiss)
-    private var dismiss
-
-    let list: ListaFormatekProjektuV070
-
-    @State private var exportURL: URL?
-    @State private var exportError: String?
-
-    var body: some View {
-        NavigationStack {
-            ListaFormatekProjektuContentV070(
-                list: list
-            )
-            .navigationTitle(
-                "Formatki"
-            )
-            .toolbar {
-                ToolbarItem(
-                    placement:
-                        .cancellationAction
-                ) {
-                    Button(
-                        "Zamknij"
-                    ) {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(
-                    placement:
-                        .primaryAction
-                ) {
-                    if let exportURL {
-                        ShareLink(
-                            item:
-                                exportURL
-                        ) {
-                            Label(
-                                "Eksport CSV",
-                                systemImage:
-                                    "square.and.arrow.up"
-                            )
-                        }
-                    } else {
-                        Button {
-                            prepareExport()
-                        } label: {
-                            Label(
-                                "Przygotuj CSV",
-                                systemImage:
-                                    "tablecells"
-                            )
-                        }
-                        .disabled(
-                            list.formatki
-                                .isEmpty
-                        )
-                    }
-                }
-            }
-            .alert(
-                "Nie udało się przygotować CSV",
-                isPresented:
-                    Binding(
-                        get: {
-                            exportError
-                                != nil
-                        },
-                        set: {
-                            visible in
-
-                            if !visible {
-                                exportError =
-                                    nil
-                            }
-                        }
-                    )
-            ) {
-                Button(
-                    "OK",
-                    role: .cancel
-                ) {}
-            } message: {
-                Text(
-                    exportError ?? ""
-                )
-            }
-            .task {
-                guard !list
-                    .formatki
-                    .isEmpty
-                else {
-                    return
-                }
-
-                prepareExport()
-            }
-        }
-    }
-
-    private func prepareExport() {
-        do {
-            let travellerRepository =
-                FormatkaTravellerRepositoryV078()
-
-            exportURL =
-                try ListaFormatekCSVV070
-                    .makeFile(
-                        for: list,
-                        travellerProvider: {
-                            travellerRepository
-                                .podglad(dla: $0)
-                        }
-                    )
-            exportError = nil
-        } catch {
-            exportURL = nil
-            exportError =
-                error.localizedDescription
-        }
-    }
-}
-
+/// Lista formatek projektu.
+///
+/// Obudowa `ListaFormatekProjektuViewV070` (własny `NavigationStack`, toolbar
+/// i eksport CSV) została usunięta 2026-08-27: nic jej już nie otwierało.
+/// Treść pokazuje zakładka `Formatki` w `RozkrojPlytViewV071`, a eksport CSV
+/// — jedyna funkcja, którą tamta obudowa niosła wyłącznie u siebie — jest
+/// teraz paskiem nad tą zakładką.
 struct ListaFormatekProjektuContentV070:
     View
 {
@@ -147,19 +28,6 @@ struct ListaFormatekProjektuContentV070:
         FormatkaProjektuV070?
     @StateObject private var travellerRepositoryV078 =
         FormatkaTravellerRepositoryV078()
-
-    private var filtryAktywne:
-        Bool
-    {
-        filtrKategorii != nil
-            || filtrStatusuV078 != nil
-            || !wyszukiwanie
-                .trimmingCharacters(
-                    in:
-                        .whitespacesAndNewlines
-                )
-                .isEmpty
-    }
 
     private var widoczneFormatki:
         [FormatkaProjektuV070]
@@ -453,11 +321,7 @@ struct ListaFormatekProjektuContentV070:
             ?? Color.secondary
 
         return Button {
-            withAnimation(
-                .easeInOut(
-                    duration: 0.16
-                )
-            ) {
+            withAnimation(StolarniaMotion.dotykPuszczenie) {
                 filtrStatusuV078 =
                     status
             }

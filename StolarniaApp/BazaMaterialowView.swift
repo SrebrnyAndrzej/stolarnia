@@ -1,3 +1,4 @@
+import DomainCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -65,6 +66,7 @@ struct BazaMaterialowView: View {
             }
 
             filtry
+            catalogContext
             listaMaterialow
         }
         .navigationTitle(
@@ -107,31 +109,21 @@ struct BazaMaterialowView: View {
 
             activeSheetView(sheet)
         }
-        .alert(
-            "Usunąć materiał?",
-            isPresented:
-                bindingUsuniecia,
-            presenting:
-                potwierdzUsuniecie
+        .confirmationDialog(
+            "Usunąć materiał \"\(potwierdzUsuniecie?.nazwa ?? "")\"?",
+            isPresented: bindingUsuniecia,
+            titleVisibility: .visible,
+            presenting: potwierdzUsuniecie
         ) { material in
-            Button(
-                "Anuluj",
-                role: .cancel
-            ) {
+            Button("Usuń materiał", role: .destructive) {
+                repository.usun(id: material.id)
                 potwierdzUsuniecie = nil
             }
-
-            Button(
-                "Usuń",
-                role: .destructive
-            ) {
-                repository.usun(
-                    id: material.id
-                )
+            Button("Anuluj", role: .cancel) {
                 potwierdzUsuniecie = nil
             }
-        } message: { material in
-            Text(material.nazwa)
+        } message: { _ in
+            Text("Materiał zostanie trwale usunięty z bazy. Projekty które go używały zachowają zapisane dane, ale nie znajdą już tego materiału na liście.")
         }
         .alert(
             "Synchronizacja zakończona",
@@ -340,8 +332,7 @@ struct BazaMaterialowView: View {
                             || !wyszukiwanie
                                 .isEmpty
                         {
-                            wyczyscFiltry()
-                            wyszukiwanie = ""
+                            wyczyscZawezenie()
                         } else {
                             activeSheet =
                                 .newMaterial
@@ -613,12 +604,81 @@ struct BazaMaterialowView: View {
                 .stolarniaFilterControl()
             }
 
-            StolarniaResultCount(
-                count:
-                    filtrowaneMaterialy
-                        .count
-            )
         }
+    }
+
+    private var catalogContext:
+        some View
+    {
+        StolarniaCatalogContextBar(
+            title:
+                filtrTypu?.nazwa
+                ?? "Materiały",
+            subtitle:
+                opisAktywnegoWidoku,
+            systemImage:
+                filtrTypu == nil
+                ? "square.grid.2x2"
+                : "line.3.horizontal.decrease.circle",
+            count:
+                filtrowaneMaterialy.count,
+            noun:
+                "materiałów",
+            showsClearAction:
+                maAktywneZawezenie,
+            clearAction: {
+                wyczyscZawezenie()
+            }
+        )
+    }
+
+    private var maAktywneZawezenie:
+        Bool
+    {
+        maAktywneFiltry
+        || !wyszukiwanie
+            .trimmingCharacters(
+                in:
+                    .whitespacesAndNewlines
+            )
+            .isEmpty
+    }
+
+    private var opisAktywnegoWidoku:
+        String
+    {
+        var parts: [String] = []
+
+        if let filtrProducenta {
+            parts.append(filtrProducenta)
+        }
+
+        if let filtrKolekcji {
+            parts.append(filtrKolekcji)
+        }
+
+        if tylkoPlytyZCennika {
+            parts.append("z cennikiem")
+        }
+
+        if tylkoAktywne {
+            parts.append("tylko aktywne")
+        }
+
+        let query =
+            wyszukiwanie
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+
+        if !query.isEmpty {
+            parts.append("„\(query)”")
+        }
+
+        return parts.isEmpty
+            ? "Wszystkie pozycje katalogu"
+            : parts.joined(separator: " / ")
     }
 
     private var producenci:
@@ -830,15 +890,29 @@ struct BazaMaterialowView: View {
                         .opacity(0.11)
                 )
 
-                RoundedRectangle(
-                    cornerRadius: 7,
-                    style: .continuous
+                ProbkaDekoruV0100(
+                    kolor:
+                        Color(
+                            stolarniaHEX:
+                                material
+                                    .kolorHEX
+                        ),
+                    powierzchnia:
+                        DecorSurfaceCatalog.resolve(
+                            structureCode:
+                                material.struktura,
+                            group:
+                                material.grupaDekoru
+                        ),
+                    pionowoUslojenie:
+                        material.kierunekDekoru,
+                    ziarno:
+                        material.kod
                 )
-                .fill(
-                    Color(
-                        stolarniaHEX:
-                            material
-                                .kolorHEX
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: 7,
+                        style: .continuous
                     )
                 )
                 .padding(8)
@@ -963,6 +1037,11 @@ struct BazaMaterialowView: View {
         filtrKolekcji = nil
         tylkoAktywne = false
         tylkoPlytyZCennika = false
+    }
+
+    private func wyczyscZawezenie() {
+        wyczyscFiltry()
+        wyszukiwanie = ""
     }
 
     private func importuj(

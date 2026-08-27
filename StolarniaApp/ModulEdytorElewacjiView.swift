@@ -1,4 +1,16 @@
 import DomainCore
+
+/// Panele inspektora kreatora rysunkowego.
+///
+/// Pięć pozycji — poniżej progu siedmiu elementów, powyżej którego sekcja
+/// wymaga podgrupowania, a nie mniejszej czcionki.
+enum PanelIdV0107: String, Hashable {
+    case zaznaczenie
+    case gabaryt
+    case akcje
+    case konsekwencje
+    case podsumowanie
+}
 import SwiftUI
 
 /// Kreator rysunkowy modułu (beta): jedna powierzchnia do tworzenia i edycji.
@@ -10,11 +22,20 @@ struct ModulEdytorElewacjiView: View {
 
     @State private var modul: ElevationModule
     @State private var zaznaczonaStrefa: Int?
+    @State private var zaznaczonaKomoraID: String?
+    /// Który panel inspektora jest rozwinięty — najwyżej jeden naraz.
+    ///
+    /// Startujemy na zaznaczeniu, bo to jest odpowiedź na ostatni gest
+    /// projektanta; gabaryt i akcje ustawia się raz na moduł.
+    @State private var otwartyPanelV0107: PanelIdV0107? = .zaznaczenie
+    @State private var zaznaczonyFrontID: UUID?
     @State private var narzedzie: NarzedzieElewacji = .wybierz
     @State private var kartaRozwinieta = false
     @State private var celGestu: CelGestuElewacji?
     @State private var fitStartuGestu: FitElewacji?
     @State private var zapisywanie = false
+    @State private var ostatniaZmianaProdukcji:
+        OstatniaZmianaProdukcji?
 
     /// Tryb edycji istniejącego modułu: zapis wraca do wołającego.
     /// `nil` = tryb kreatora (presety, bez przycisku Zapisz).
@@ -35,6 +56,19 @@ struct ModulEdytorElewacjiView: View {
     struct PresetElewacji {
         let nazwa: String
         let modul: ElevationModule
+    }
+
+    private struct OstatniaZmianaProdukcji: Identifiable {
+        let id = UUID()
+        let opis: String
+        let snapshot:
+            ElevationProductionSnapshot
+        let delta:
+            ElevationProductionDelta
+        /// Wynik `AssemblyInspector` po zmianie. Celowo NIE blokuje edycji:
+        /// projekty w toku mają formatki zamówione i kreator nie może odmówić
+        /// ich otwarcia. Ma pokazać problem w chwili rysowania, a nie przy pile.
+        let zastrzezenia: [ProductionIssue]
     }
 
     static let presety: [PresetElewacji] = [
@@ -85,7 +119,7 @@ struct ModulEdytorElewacjiView: View {
                         kind: .drawers,
                         drawerCount: 3,
                         drawerSystem: .gtvAxisPro,
-                        drawerProfileName: "H116"
+                        drawerProfileName: "H120"
                     ),
                     ElevationZone(kind: .appliance),
                     ElevationZone(kind: .shelves, shelfCount: 3)
@@ -104,15 +138,16 @@ struct ModulEdytorElewacjiView: View {
                     Divider()
                 }
                 HStack(spacing: 0) {
-                    plotno
+                    obszarRoboczy
                     Divider()
                     inspektor
                         .frame(width: 312)
                 }
-                Divider()
-                kartaTechniczna
-                Divider()
-                pasekStatusu
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .layoutPriority(1)
             }
             .navigationTitle(trybEdycji ? modul.name : "Kreator rysunkowy")
             .navigationBarTitleDisplayMode(.inline)
@@ -144,6 +179,24 @@ struct ModulEdytorElewacjiView: View {
         }
     }
 
+    private var obszarRoboczy: some View {
+        ZStack(alignment: .bottom) {
+            plotno
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .layoutPriority(1)
+
+            VStack(spacing: 8) {
+                kartaTechniczna
+                pasekStatusu
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+        }
+    }
+
     // MARK: - Pasek presetów
 
     private var pasekPresetow: some View {
@@ -161,6 +214,9 @@ struct ModulEdytorElewacjiView: View {
                         ) {
                             modul = preset.modul
                             zaznaczonaStrefa = nil
+                            zaznaczonaKomoraID = nil
+                            zaznaczonyFrontID = nil
+                            ostatniaZmianaProdukcji = nil
                             narzedzie = .wybierz
                         }
                     }
@@ -253,6 +309,7 @@ struct ModulEdytorElewacjiView: View {
         for segment in modul.segments {
             rysujStrefe(&context, segment: segment, fit: fit)
         }
+        rysujFrontyWarstwowe(&context, fit: fit)
 
         // Zaznaczenie strefy
         if let index = zaznaczonaStrefa, modul.zones.indices.contains(index) {
@@ -265,6 +322,31 @@ struct ModulEdytorElewacjiView: View {
                 Path(roundedRect: ramka.insetBy(dx: 2, dy: 2), cornerRadius: 3),
                 with: .color(.accentColor),
                 lineWidth: 2.5
+            )
+        }
+
+        // Zaznaczenie komory
+        if let cell = zaznaczonaKomora {
+            let ramka = fit.rect(
+                x0: cell.left.rawValue,
+                y0: cell.lower.rawValue,
+                x1: cell.right.rawValue,
+                y1: cell.upper.rawValue
+            )
+            context.stroke(
+                Path(roundedRect: ramka.insetBy(dx: 3, dy: 3), cornerRadius: 4),
+                with: .color(.orange),
+                lineWidth: 3
+            )
+            context.fill(
+                Path(roundedRect: ramka.insetBy(dx: 4, dy: 4), cornerRadius: 4),
+                with: .color(.orange.opacity(0.08))
+            )
+            context.draw(
+                Text(cell.displayName)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.orange),
+                at: CGPoint(x: ramka.midX, y: ramka.minY + 14)
             )
         }
 
@@ -324,6 +406,37 @@ struct ModulEdytorElewacjiView: View {
         }
     }
 
+    private func rysujFrontyWarstwowe(
+        _ context: inout GraphicsContext,
+        fit: FitElewacji
+    ) {
+        for span in modul.frontSpans {
+            guard let bounds = modul.frontSpanBounds(span) else { continue }
+            let selected = span.id == zaznaczonyFrontID
+            let front = fit.rect(
+                x0: bounds.left.rawValue + span.sideGap.rawValue / 2,
+                y0: bounds.lower.rawValue + span.verticalGap.rawValue / 2,
+                x1: bounds.right.rawValue - span.sideGap.rawValue / 2,
+                y1: bounds.upper.rawValue - span.verticalGap.rawValue / 2
+            )
+            context.fill(
+                Path(roundedRect: front, cornerRadius: 3),
+                with: .color((selected ? Color.accentColor : .green).opacity(0.12))
+            )
+            context.stroke(
+                Path(roundedRect: front, cornerRadius: 3),
+                with: .color((selected ? Color.accentColor : .green).opacity(0.9)),
+                style: StrokeStyle(lineWidth: selected ? 3 : 2, dash: [7, 4])
+            )
+            context.draw(
+                Text(span.displayName)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(selected ? Color.accentColor : .green),
+                at: CGPoint(x: front.midX, y: front.minY + 13)
+            )
+        }
+    }
+
     private func rysujStrefe(
         _ context: inout GraphicsContext,
         segment: ElevationModule.ZoneSegment,
@@ -369,7 +482,7 @@ struct ModulEdytorElewacjiView: View {
             switch zone.kind {
             case .drawers:
                 rysujSzuflady(
-                    &context, zone: zone, fit: fit,
+                    &context, zone: zone, zoneIndex: segment.index, fit: fit,
                     x0: x0, x1: x1, y0: y0, y1: y1,
                     zoneHeight: segment.zoneHeight
                 )
@@ -413,6 +526,43 @@ struct ModulEdytorElewacjiView: View {
                     context.fill(Path(polka), with: .color(.accentColor.opacity(0.75)))
                 }
 
+            case .hanging:
+                let pole = fit.rect(x0: x0, y0: y0, x1: x1, y1: y1)
+                context.fill(Path(pole), with: .color(.teal.opacity(0.09)))
+                let railHeight =
+                    modul.effectiveRailHeight(
+                        forZoneAt:
+                            segment.index
+                    )?
+                    .rawValue
+                    ?? (y1 - y0) * 0.72
+                let y =
+                    y0 + railHeight
+                let rail = fit.rect(
+                    x0:
+                        x0 + 10,
+                    y0:
+                        y - 5,
+                    x1:
+                        x1 - 10,
+                    y1:
+                        y + 5
+                )
+                context.fill(
+                    Path(roundedRect: rail, cornerRadius: 5),
+                    with: .color(.teal.opacity(0.82))
+                )
+                for x in [rail.minX + 8, rail.maxX - 8] {
+                    var support = Path()
+                    support.move(to: CGPoint(x: x, y: rail.midY))
+                    support.addLine(to: CGPoint(x: x, y: rail.midY + 18))
+                    context.stroke(
+                        support,
+                        with: .color(.teal.opacity(0.75)),
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                    )
+                }
+
             case .appliance:
                 break
             }
@@ -422,6 +572,7 @@ struct ModulEdytorElewacjiView: View {
     private func rysujSzuflady(
         _ context: inout GraphicsContext,
         zone: ElevationZone,
+        zoneIndex: Int,
         fit: FitElewacji,
         x0: Double, x1: Double, y0: Double, y1: Double,
         zoneHeight: Millimeters
@@ -437,11 +588,15 @@ struct ModulEdytorElewacjiView: View {
         let kolor: Color = layout.isValid ? .brown : .red
         let mb = DrawerLayoutCalculator.bottomMargin.rawValue
         let gap = DrawerLayoutCalculator.frontGap.rawValue
-        let fh = layout.frontHeight.rawValue
+        let frontHeights =
+            modul.drawerFrontHeights(
+                forZoneAt: zoneIndex
+            )
+            .map(\.rawValue)
 
-        for i in 0..<zone.drawerCount {
-            let fy0 = y0 + mb + (fh + gap) * Double(i)
-            let front = fit.rect(x0: x0 + 2, y0: fy0, x1: x1 - 2, y1: fy0 + fh)
+        var cursorY = y0 + mb
+        for frontHeight in frontHeights {
+            let front = fit.rect(x0: x0 + 2, y0: cursorY, x1: x1 - 2, y1: cursorY + frontHeight)
             context.fill(
                 Path(roundedRect: front, cornerRadius: 2),
                 with: .color(kolor.opacity(layout.isValid ? 0.22 : 0.16))
@@ -461,6 +616,7 @@ struct ModulEdytorElewacjiView: View {
                     style: StrokeStyle(lineWidth: 2.4, lineCap: .round)
                 )
             }
+            cursorY += frontHeight + gap
         }
     }
 
@@ -477,13 +633,25 @@ struct ModulEdytorElewacjiView: View {
                 switch celGestu {
                 case .szerokosc:
                     let mm = przytnij(zaokraglij10(f.mmX(gest.location.x)), 200...1500)
-                    modul.width = Millimeters(mm)
+                    wykonajZmianeProdukcji(
+                        "Zmieniono szerokość"
+                    ) {
+                        modul.width = Millimeters(mm)
+                    }
                 case .wysokosc:
                     let mm = przytnij(zaokraglij10(f.mmY(gest.location.y)), 300...2600)
-                    modul.setHeightClamped(Millimeters(mm))
+                    wykonajZmianeProdukcji(
+                        "Zmieniono wysokość"
+                    ) {
+                        modul.setHeightClamped(Millimeters(mm))
+                    }
                 case .podzial(let index):
                     let mm = zaokraglij10(f.mmY(gest.location.y))
-                    modul.moveSplit(at: index, to: Millimeters(mm))
+                    wykonajZmianeProdukcji(
+                        "Przesunięto podział strefy"
+                    ) {
+                        modul.moveSplit(at: index, to: Millimeters(mm))
+                    }
                 case .tlo, nil:
                     break
                 }
@@ -525,8 +693,19 @@ struct ModulEdytorElewacjiView: View {
         let mmY = fit.mmY(punkt.y)
 
         if narzedzie == .podziel {
-            if let nowyIndeks = modul.splitZone(at: Millimeters(zaokraglij10(mmY))) {
+            var nowyIndeks: Int?
+            wykonajZmianeProdukcji(
+                "Podzielono moduł"
+            ) {
+                nowyIndeks =
+                    modul.splitZone(
+                        at: Millimeters(zaokraglij10(mmY))
+                    )
+            }
+            if let nowyIndeks {
                 zaznaczonaStrefa = nowyIndeks
+                zaznaczonaKomoraID = nil
+                zaznaczonyFrontID = nil
                 narzedzie = .wybierz
             }
             return
@@ -534,36 +713,255 @@ struct ModulEdytorElewacjiView: View {
 
         guard mmX >= -20, mmX <= modul.width.rawValue + 20 else {
             zaznaczonaStrefa = nil
+            zaznaczonaKomoraID = nil
+            zaznaczonyFrontID = nil
             return
         }
-        if let segment = modul.segments.first(where: {
-            mmY >= $0.lower.rawValue && mmY <= $0.upper.rawValue
-        }) {
-            zaznaczonaStrefa = zaznaczonaStrefa == segment.index ? nil : segment.index
+
+        if let span = front(wPunkcieMMX: mmX, mmY: mmY) {
+            if zaznaczonyFrontID == span.id {
+                zaznaczonyFrontID = nil
+            } else {
+                zaznaczonyFrontID = span.id
+                zaznaczonaKomoraID = nil
+                zaznaczonaStrefa = span.lowerZoneIndex
+            }
+        } else if let cell = komora(wPunkcieMMX: mmX, mmY: mmY) {
+            if zaznaczonaKomoraID == cell.id {
+                zaznaczonaKomoraID = nil
+                zaznaczonaStrefa = nil
+            } else {
+                zaznaczonyFrontID = nil
+                zaznaczonaKomoraID = cell.id
+                zaznaczonaStrefa = cell.zoneIndex
+            }
         } else {
             zaznaczonaStrefa = nil
+            zaznaczonaKomoraID = nil
+            zaznaczonyFrontID = nil
         }
     }
 
     // MARK: - Inspektor
 
+    /// Kolejność sekcji jest celowa: **to, co zaznaczone, jest tuż pod paskiem
+    /// narzędzi**, a nie pod gabarytem i szybkimi akcjami.
+    ///
+    /// Wcześniej sekcja zaznaczonego elementu była trzecia od góry, pod
+    /// `sekcjaGabarytu` i `sekcjaSzybkichAkcjiSzafy` — razem ok. 140 linii
+    /// układu. Na iPadzie znaczyło to, że projektant dotykał komory na rysunku,
+    /// a jej ustawienia lądowały pod zgięciem i trzeba było scrollować do
+    /// rzeczy, którą się właśnie wskazało. `sekcjaNarzedzia` została na górze,
+    /// bo to dwa przyciski i stała kotwica trybu pracy.
     private var inspektor: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+        VStack(spacing: 0) {
+            // Kontekst i narzędzie **nad przewijaniem** — to są rzeczy,
+            // które muszą być widoczne niezależnie od tego, gdzie się jest
+            // w panelach. Wcześniej pasek narzędzia był pierwszą pozycją
+            // listy i znikał po przewinięciu do prowadnic.
+            VStack(alignment: .leading, spacing: 10) {
+                pasekKontekstuV0107
                 sekcjaNarzedzia
-                sekcjaGabarytu
-                if let index = zaznaczonaStrefa, modul.zones.indices.contains(index) {
-                    sekcjaStrefy(index)
-                } else {
-                    Text("Dotknij strefy na rysunku, aby ją skonfigurować.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                sekcjaPodsumowania
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    panelZaznaczeniaV0107
+                    panelGabarytuV0107
+                    panelAkcjiV0107
+                    panelKonsekwencjiV0107
+                    panelPodsumowaniaV0107
+                }
+                .padding(14)
+            }
         }
         .background(Color(.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Inspektor w panelach (V0107)
+
+    /// Który panel jest otwarty. **Najwyżej jeden.**
+    ///
+    /// Zwijane sekcje, które można otworzyć wszystkie, po tygodniu są otwarte
+    /// wszystkie — i wracamy do przewijania, tylko z dodatkowymi kliknięciami.
+    /// Przy jednym otwartym wysokość inspektora jest z grubsza stała.
+    private func wiazaniePaneluV0107(
+        _ panel: PanelIdV0107
+    ) -> Binding<Bool> {
+        Binding(
+            get: { otwartyPanelV0107 == panel },
+            set: { otwiera in
+                otwartyPanelV0107 = otwiera ? panel : nil
+            }
+        )
+    }
+
+    private var pasekKontekstuV0107: some View {
+        let kontekst = kontekstZaznaczeniaV0107
+        return PasekKontekstuInspektoraV0107(
+            tytul: kontekst.tytul,
+            opis: kontekst.opis,
+            wyroznienie: kontekst.wyroznienie
+        )
+    }
+
+    /// Co jest zaznaczone, opisane tak, żeby dało się to sprawdzić bez
+    /// patrzenia na rysunek.
+    private var kontekstZaznaczeniaV0107:
+        (tytul: String, opis: String, wyroznienie: String?)
+    {
+        if let span = zaznaczonyFront {
+            let wymiar = modul.frontSpanFaceV0104(span).map {
+                "\(Int($0.width.rawValue)) × \(Int($0.height.rawValue)) mm"
+            }
+            return (
+                span.displayName,
+                "Front · \(nazwaOtwarcia(span.opening))",
+                wymiar
+            )
+        }
+
+        if let cell = zaznaczonaKomora {
+            let strefa = modul.zones.indices.contains(cell.zoneIndex)
+                ? modul.zones[cell.zoneIndex] : nil
+            return (
+                cell.displayName,
+                strefa.map { "Strefa \(cell.zoneIndex + 1) · \($0.kind.displayName)" }
+                    ?? "Komora",
+                "\(Int(cell.width.rawValue)) × \(Int(cell.height.rawValue)) mm"
+            )
+        }
+
+        if let index = zaznaczonaStrefa, modul.zones.indices.contains(index) {
+            let strefa = modul.zones[index]
+            return (
+                "Strefa \(index + 1)",
+                strefa.kind.displayName,
+                "\(strefa.columns) kol."
+            )
+        }
+
+        return (
+            "Nic nie jest zaznaczone",
+            "Dotknij komory albo frontu na rysunku — jego ustawienia pojawią się poniżej.",
+            nil
+        )
+    }
+
+    /// Panel zaznaczenia jest **otwarty domyślnie**, bo dotyczy tego, co
+    /// projektant właśnie wskazał palcem.
+    @ViewBuilder
+    private var panelZaznaczeniaV0107: some View {
+        let maZaznaczenie =
+            zaznaczonyFront != nil
+            || zaznaczonaKomora != nil
+            || zaznaczonaStrefa != nil
+
+        PanelInspektoraV0107(
+            tytul: zaznaczonyFront != nil ? "Front" : "Komora i strefa",
+            ikona: zaznaczonyFront != nil ? "rectangle.portrait" : "square.split.1x2",
+            wartosc: nil,
+            wyrozniony: maZaznaczenie,
+            otwarty: wiazaniePaneluV0107(.zaznaczenie)
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                if let span = zaznaczonyFront {
+                    sekcjaFrontu(span)
+                } else if let cell = zaznaczonaKomora {
+                    sekcjaKomory(cell)
+                    sekcjaStrefy(cell.zoneIndex)
+                } else if let index = zaznaczonaStrefa,
+                          modul.zones.indices.contains(index) {
+                    sekcjaStrefy(index)
+                } else {
+                    podpowiedzBrakuZaznaczenia
+                }
+            }
+        }
+    }
+
+    private var panelGabarytuV0107: some View {
+        PanelInspektoraV0107(
+            tytul: "Gabaryt",
+            ikona: "ruler",
+            wartosc: "\(Int(modul.width.rawValue)) × \(Int(modul.height.rawValue)) × \(Int(modul.depth.rawValue))",
+            otwarty: wiazaniePaneluV0107(.gabaryt)
+        ) {
+            sekcjaGabarytu
+        }
+    }
+
+    private var panelAkcjiV0107: some View {
+        PanelInspektoraV0107(
+            tytul: "Szybkie akcje",
+            ikona: "bolt",
+            otwarty: wiazaniePaneluV0107(.akcje)
+        ) {
+            sekcjaSzybkichAkcjiSzafy
+        }
+    }
+
+    /// Panel konsekwencji **wyróżnia się, gdy kontrola coś zgłasza**.
+    ///
+    /// To jedyne miejsce, gdzie wyróżnienie jest przyznawane automatycznie:
+    /// problem produkcyjny ma być widoczny przy zwiniętym panelu, bo inaczej
+    /// projektant dowie się o nim dopiero przy pile.
+    private var panelKonsekwencjiV0107: some View {
+        let zastrzezenia = ostatniaZmianaProdukcji?.zastrzezenia ?? []
+        let bledy = zastrzezenia.filter { $0.severity == .error }
+
+        return PanelInspektoraV0107(
+            tytul: "Konsekwencje zmiany",
+            ikona: bledy.isEmpty ? "arrow.triangle.branch" : "exclamationmark.triangle.fill",
+            wartosc: zastrzezenia.isEmpty
+                ? nil
+                : "\(zastrzezenia.count) uwag",
+            wyrozniony: !zastrzezenia.isEmpty,
+            otwarty: wiazaniePaneluV0107(.konsekwencje)
+        ) {
+            sekcjaKonsekwencjiZmiany
+        }
+    }
+
+    private var panelPodsumowaniaV0107: some View {
+        PanelInspektoraV0107(
+            tytul: "Podsumowanie",
+            ikona: "list.bullet.rectangle",
+            wartosc: "\(modul.totalCutPieces) formatek",
+            otwarty: wiazaniePaneluV0107(.podsumowanie)
+        ) {
+            sekcjaPodsumowania
+        }
+    }
+
+    /// Pusty stan mówi, co zrobić dalej — reguła UX projektu. Ikona plus tekst,
+    /// bo sam szary napis w długiej liście sekcji ginie.
+    private var podpowiedzBrakuZaznaczenia: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "hand.tap")
+                .font(.title3)
+                .foregroundStyle(StolarniaPalette.accentStrong)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nic nie jest zaznaczone")
+                    .font(.caption.weight(.semibold))
+                Text("Dotknij komory albo frontu na rysunku — jego ustawienia "
+                     + "pojawią się tutaj.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(StolarniaPalette.accentStrong.opacity(0.08))
+        )
     }
 
     private var sekcjaNarzedzia: some View {
@@ -598,12 +996,15 @@ struct ModulEdytorElewacjiView: View {
         } else {
             Button {
                 narzedzie = wartosc
-                if wartosc == .podziel { zaznaczonaStrefa = nil }
+                if wartosc == .podziel {
+                    zaznaczonaStrefa = nil
+                    zaznaczonaKomoraID = nil
+                    zaznaczonyFrontID = nil
+                }
             } label: {
                 Label(tytul, systemImage: ikona).frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
         }
     }
 
@@ -614,7 +1015,19 @@ struct ModulEdytorElewacjiView: View {
                 tytul: "Szerokość",
                 wartosc: Binding(
                     get: { modul.width.rawValue },
-                    set: { modul.width = Millimeters(przytnij(zaokraglij10($0), 200...1500)) }
+                    set: { value in
+                        wykonajZmianeProdukcji(
+                            "Zmieniono szerokość"
+                        ) {
+                            modul.width =
+                                Millimeters(
+                                    przytnij(
+                                        zaokraglij10(value),
+                                        200...1500
+                                    )
+                                )
+                        }
+                    }
                 ),
                 zakres: 200...1500
             )
@@ -622,7 +1035,20 @@ struct ModulEdytorElewacjiView: View {
                 tytul: "Wysokość",
                 wartosc: Binding(
                     get: { modul.height.rawValue },
-                    set: { modul.setHeightClamped(Millimeters(przytnij(zaokraglij10($0), 300...2600))) }
+                    set: { value in
+                        wykonajZmianeProdukcji(
+                            "Zmieniono wysokość"
+                        ) {
+                            modul.setHeightClamped(
+                                Millimeters(
+                                    przytnij(
+                                        zaokraglij10(value),
+                                        300...2600
+                                    )
+                                )
+                            )
+                        }
+                    }
                 ),
                 zakres: 300...2600
             )
@@ -630,11 +1056,373 @@ struct ModulEdytorElewacjiView: View {
                 tytul: "Głębokość",
                 wartosc: Binding(
                     get: { modul.depth.rawValue },
-                    set: { modul.depth = Millimeters(przytnij(zaokraglij10($0), 200...900)) }
+                    set: { value in
+                        wykonajZmianeProdukcji(
+                            "Zmieniono głębokość"
+                        ) {
+                            modul.depth =
+                                Millimeters(
+                                    przytnij(
+                                        zaokraglij10(value),
+                                        200...900
+                                    )
+                                )
+                        }
+                    }
                 ),
                 zakres: 200...900
             )
         }
+    }
+
+    private var sekcjaSzybkichAkcjiSzafy: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            naglowek("Szybkie układy szafy")
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 126), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                Button {
+                    ustawWybranaLubNajwiekszaStrefe(
+                        jako:
+                            .hanging
+                    )
+                } label: {
+                    Label("Drążek", systemImage: "figure.stand")
+                }
+
+                Button {
+                    ustawWybranaLubNajwiekszaStrefe(
+                        jako:
+                            .shelves
+                    )
+                    if let index =
+                        zaznaczonaStrefa {
+                        ustawPolkiCo300MM(
+                            wStrefie:
+                                index
+                        )
+                    }
+                } label: {
+                    Label("Półki 300", systemImage: "books.vertical")
+                }
+
+                Button {
+                    ustawKolumnyWStrefie(2)
+                } label: {
+                    Label("2 kolumny", systemImage: "rectangle.split.2x1")
+                }
+
+                Button {
+                    ustawKolumnyWStrefie(3)
+                } label: {
+                    Label("3 kolumny", systemImage: "rectangle.split.3x1")
+                }
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+
+            StolarniaWrapLayout() {
+                Button {
+                    dodajNadstawke(300)
+                } label: {
+                    Label("Nadstawka 300", systemImage: "square.split.1x2")
+                }
+
+                Button {
+                    dodajNadstawke(400)
+                } label: {
+                    Label("400", systemImage: "square.split.1x2")
+                }
+
+                Button {
+                    dodajNadstawke(600)
+                } label: {
+                    Label("600", systemImage: "square.split.1x2")
+                }
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.teal.opacity(0.08))
+        )
+    }
+
+    @ViewBuilder
+    private func sekcjaKomory(_ cell: ElevationModule.Cell) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                naglowek(cell.displayName)
+                Spacer()
+                Text(cell.id)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 6) {
+                wierszPodsumowania(
+                    "Światło",
+                    "\(Int(cell.width.rawValue)) × \(Int(cell.height.rawValue)) mm"
+                )
+                wierszPodsumowania(
+                    "Typ",
+                    cell.kind.displayName
+                )
+                if cell.shelfCount > 0 {
+                    wierszPodsumowania(
+                        "Półki",
+                        "\(cell.shelfCount)"
+                    )
+                }
+                if cell.drawerCount > 0 {
+                    wierszPodsumowania(
+                        "Szuflady",
+                        "\(cell.drawerCount)"
+                    )
+                }
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 118), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                Button {
+                    podzielKomorePionowo(cell)
+                } label: {
+                    Label("Podziel pionowo", systemImage: "rectangle.split.2x1")
+                }
+                .disabled(!moznaPodzielicPionowo(cell))
+
+                Button {
+                    podzielKomorePoziomo(cell)
+                } label: {
+                    Label("Podziel poziomo", systemImage: "rectangle.split.1x2")
+                }
+                .disabled(!moznaPodzielicPoziomo(cell))
+
+                Button {
+                    ustawTypKomory(.doors, dla: cell)
+                } label: {
+                    Label("Drzwi", systemImage: "door.left.hand.open")
+                }
+
+                Button {
+                    ustawTypKomory(.shelves, dla: cell)
+                } label: {
+                    Label("Półki", systemImage: "books.vertical")
+                }
+
+                Button {
+                    ustawTypKomory(.hanging, dla: cell)
+                } label: {
+                    Label("Drążek", systemImage: "figure.stand")
+                }
+
+                Button {
+                    ustawTypKomory(.drawers, dla: cell)
+                } label: {
+                    Label("Szuflady", systemImage: "shippingbox")
+                }
+
+                Button {
+                    ustawTypKomory(.appliance, dla: cell)
+                } label: {
+                    Label("AGD", systemImage: "oven")
+                }
+
+                Button {
+                    ustawFrontNaKomore(cell)
+                } label: {
+                    Label("Front komory", systemImage: "rectangle.front.leadinghalf.filled")
+                }
+
+                Button {
+                    ustawFrontNaCalyModul(cell)
+                } label: {
+                    Label("Front modułu", systemImage: "rectangle.inset.filled")
+                }
+
+                Button(role: .destructive) {
+                    wykonajZmianeProdukcji(
+                        "Usunięto fronty"
+                    ) {
+                        modul.clearFrontSpans()
+                    }
+                    zaznaczonyFrontID = nil
+                } label: {
+                    Label("Usuń fronty", systemImage: "xmark.rectangle")
+                }
+                .disabled(modul.frontSpans.isEmpty)
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.orange.opacity(0.11))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func sekcjaFrontu(_ span: ElevationFrontSpan) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                naglowek(span.displayName)
+                Spacer()
+                Text(String(span.id.uuidString.prefix(8)))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            if let bounds = modul.frontSpanBounds(span) {
+                VStack(spacing: 6) {
+                    wierszPodsumowania(
+                        "Wymiar frontu",
+                        "\(Int(max(bounds.height - span.verticalGap, .zero).rawValue)) × \(Int(max(bounds.width - span.sideGap, .zero).rawValue)) mm"
+                    )
+                    wierszPodsumowania(
+                        "Zakres",
+                        "S\(span.lowerZoneIndex + 1)-\(span.upperZoneIndex + 1), K\(span.leadingColumnIndex + 1)-\(span.trailingColumnIndex + 1)"
+                    )
+                }
+            }
+
+            naglowek("Otwieranie")
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 116), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(FurnitureFrontOpeningV020.allCases, id: \.self) { opening in
+                    chip(
+                        nazwaOtwarcia(opening),
+                        aktywny: span.opening == opening
+                    ) {
+                        aktualizujFront(span.id) {
+                            $0.opening = opening
+                        }
+                    }
+                }
+            }
+
+            sekcjaOkuciaFrontuV0103(span)
+
+            Toggle(
+                "Kryje szuflady wewnętrzne",
+                isOn: Binding(
+                    get: { span.coversInternalDrawers },
+                    set: { value in
+                        aktualizujFront(span.id) {
+                            $0.coversInternalDrawers = value
+                        }
+                    }
+                )
+            )
+            .font(.caption)
+
+            naglowek("Zakres frontu")
+            LicznikView(
+                tytul: "Strefa od",
+                wartosc: Binding(
+                    get: { span.lowerZoneIndex + 1 },
+                    set: { value in
+                        aktualizujFront(span.id) {
+                            $0.lowerZoneIndex = value - 1
+                        }
+                    }
+                ),
+                zakres: 1...max(modul.zones.count, 1)
+            )
+            LicznikView(
+                tytul: "Strefa do",
+                wartosc: Binding(
+                    get: { span.upperZoneIndex + 1 },
+                    set: { value in
+                        aktualizujFront(span.id) {
+                            $0.upperZoneIndex = value - 1
+                        }
+                    }
+                ),
+                zakres: 1...max(modul.zones.count, 1)
+            )
+            LicznikView(
+                tytul: "Kolumna od",
+                wartosc: Binding(
+                    get: { span.leadingColumnIndex + 1 },
+                    set: { value in
+                        aktualizujFront(span.id) {
+                            $0.leadingColumnIndex = value - 1
+                        }
+                    }
+                ),
+                zakres: 1...4
+            )
+            LicznikView(
+                tytul: "Kolumna do",
+                wartosc: Binding(
+                    get: { span.trailingColumnIndex + 1 },
+                    set: { value in
+                        aktualizujFront(span.id) {
+                            $0.trailingColumnIndex = value - 1
+                        }
+                    }
+                ),
+                zakres: 1...4
+            )
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 118), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                Button {
+                    ustawFrontNaZakresStrefy(span)
+                } label: {
+                    Label("Cała strefa", systemImage: "rectangle.split.1x2")
+                }
+
+                Button {
+                    ustawFrontNaZakresModulu(span)
+                } label: {
+                    Label("Cały moduł", systemImage: "rectangle.inset.filled")
+                }
+
+                Button(role: .destructive) {
+                    wykonajZmianeProdukcji(
+                        "Usunięto front"
+                    ) {
+                        modul.removeFrontSpan(id: span.id)
+                    }
+                    zaznaczonyFrontID = nil
+                } label: {
+                    Label("Usuń front", systemImage: "trash")
+                }
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.green.opacity(0.11))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.green.opacity(0.35), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -652,16 +1440,31 @@ struct ModulEdytorElewacjiView: View {
             ) {
                 ForEach(ElevationZoneKind.allCases) { kind in
                     chip(kind.displayName, aktywny: zone.kind == kind) {
-                        modul.updateZone(at: index) { $0.kind = kind }
+                        wykonajZmianeProdukcji(
+                            "Zmieniono typ strefy na \(kind.displayName)"
+                        ) {
+                            modul.updateZone(at: index) {
+                                $0.kind = kind
+                            }
+                        }
                     }
                 }
             }
 
             PoleWymiaruMM(
                 tytul: "Wysokość strefy",
-                wartosc: Binding(
+                wartosc: Binding<Double>(
                     get: { segment.zoneHeight.rawValue },
-                    set: { modul.setZoneHeight(Millimeters(zaokraglij10($0)), forZoneAt: index) }
+                    set: { (value: Double) in
+                        wykonajZmianeProdukcji(
+                            "Zmieniono wysokość strefy"
+                        ) {
+                            modul.setZoneHeight(
+                                Millimeters(zaokraglij10(value)),
+                                forZoneAt: index
+                            )
+                        }
+                    }
                 ),
                 zakres: 100...2600
             )
@@ -671,7 +1474,15 @@ struct ModulEdytorElewacjiView: View {
                     tytul: "Przegrody pionowe",
                     wartosc: Binding(
                         get: { modul.zones[index].columns - 1 },
-                        set: { nowe in modul.updateZone(at: index) { $0.columns = nowe + 1 } }
+                        set: { nowe in
+                            wykonajZmianeProdukcji(
+                                "Zmieniono liczbę przegród"
+                            ) {
+                                modul.updateZone(at: index) {
+                                    $0.columns = nowe + 1
+                                }
+                            }
+                        }
                     ),
                     zakres: 0...3
                 )
@@ -685,9 +1496,67 @@ struct ModulEdytorElewacjiView: View {
                     tytul: "Liczba półek",
                     wartosc: Binding(
                         get: { modul.zones[index].shelfCount },
-                        set: { nowe in modul.updateZone(at: index) { $0.shelfCount = nowe } }
+                        set: { nowe in
+                            wykonajZmianeProdukcji(
+                                "Zmieniono liczbę półek"
+                            ) {
+                                modul.updateZone(at: index) {
+                                    $0.shelfCount = nowe
+                                }
+                            }
+                        }
                     ),
                     zakres: 0...8
+                )
+
+                Button {
+                    ustawPolkiCo300MM(
+                        wStrefie:
+                            index
+                    )
+                } label: {
+                    Label(
+                        "Półki co ok. 300 mm światła",
+                        systemImage:
+                            "ruler"
+                    )
+                    .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if zone.kind == .hanging {
+                PoleWymiaruMM(
+                    tytul: "Wysokość osi drążka od dna strefy",
+                    wartosc: Binding(
+                        get: {
+                            (
+                                modul.effectiveRailHeight(
+                                    forZoneAt:
+                                        index
+                                )
+                                ?? .zero
+                            )
+                            .rawValue
+                        },
+                        set: { value in
+                            wykonajZmianeProdukcji(
+                                "Zmieniono wysokość drążka"
+                            ) {
+                                modul.updateZone(at: index) {
+                                    $0.railHeight =
+                                        Millimeters(
+                                            przytnij(
+                                                zaokraglij10(value),
+                                                60...2600
+                                            )
+                                        )
+                                }
+                            }
+                        }
+                    ),
+                    zakres: 60...2600
                 )
             }
 
@@ -697,7 +1566,16 @@ struct ModulEdytorElewacjiView: View {
 
             if index > 0 {
                 Button(role: .destructive) {
-                    if modul.removeSplitBelow(zoneIndex: index) {
+                    var removed = false
+                    wykonajZmianeProdukcji(
+                        "Usunięto podział strefy"
+                    ) {
+                        removed =
+                            modul.removeSplitBelow(
+                                zoneIndex: index
+                            )
+                    }
+                    if removed {
                         zaznaczonaStrefa = index - 1
                     }
                 } label: {
@@ -724,10 +1602,63 @@ struct ModulEdytorElewacjiView: View {
                 tytul: "Szuflady (w kolumnie)",
                 wartosc: Binding(
                     get: { modul.zones[index].drawerCount },
-                    set: { nowe in modul.updateZone(at: index) { $0.drawerCount = nowe } }
+                    set: { nowe in
+                        wykonajZmianeProdukcji(
+                            "Zmieniono liczbę szuflad"
+                        ) {
+                            modul.updateZone(at: index) {
+                                $0.drawerCount = nowe
+                                if !$0.drawerFrontHeights.isEmpty {
+                                    $0.drawerFrontHeights =
+                                        dopasujWysokosciSzuflad(
+                                            $0.drawerFrontHeights,
+                                            doLiczby: nowe
+                                        )
+                                }
+                            }
+                        }
+                    }
                 ),
-                zakres: 1...6
+                // Zakres z domeny, nie wpisany liczbą — ta sama granica
+                // obowiązuje `ElevationZone` przy dekodowaniu zapisanych
+                // modułów, więc kontrolka nie może pozwolić na więcej,
+                // niż model i tak przytnie.
+                zakres: DrawerFrontStack.drawersPerZone
             )
+
+            naglowek("Układ wysokości")
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 130), spacing: 6)],
+                alignment: .leading,
+                spacing: 6
+            ) {
+                ForEach(ukladySzufladWKreatorze) { preset in
+                    chip(
+                        preset.etykieta,
+                        aktywny:
+                            aktywnyPresetSzuflad(
+                                dla: zone
+                            ) == preset
+                    ) {
+                        ustawPresetSzuflad(
+                            preset,
+                            wStrefie: index
+                        )
+                    }
+                }
+            }
+
+            if !modul.zones[index].drawerFrontHeights.isEmpty {
+                sekcjaTrybuUkladuV0103(index)
+                edytorWysokosciSzufladWKreatorze(index)
+                podgladWysokosciPoPrzeliczeniuV0103(index)
+            } else if let layout = modul.drawerLayout(forZoneAt: index) {
+                Text(
+                    "Równy podział: front \(Int(layout.frontHeight.rawValue)) mm."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
 
             naglowek("System szuflad")
             LazyVGrid(
@@ -737,9 +1668,13 @@ struct ModulEdytorElewacjiView: View {
             ) {
                 ForEach(DrawerSystem.allCases) { system in
                     chip(system.displayName, aktywny: zone.drawerSystem == system) {
-                        modul.updateZone(at: index) {
-                            $0.drawerSystem = system
-                            $0.drawerProfileName = system.defaultProfileName
+                        wykonajZmianeProdukcji(
+                            "Zmieniono system szuflad na \(system.displayName)"
+                        ) {
+                            modul.updateZone(at: index) {
+                                $0.drawerSystem = system
+                                $0.drawerProfileName = system.defaultProfileName
+                            }
                         }
                     }
                 }
@@ -756,15 +1691,579 @@ struct ModulEdytorElewacjiView: View {
                         "\(profil.name) · \(Int(profil.profileHeight.rawValue))",
                         aktywny: zone.drawerProfileName == profil.name
                     ) {
-                        modul.updateZone(at: index) { $0.drawerProfileName = profil.name }
+                        wykonajZmianeProdukcji(
+                            "Zmieniono profil szuflad na \(profil.name)"
+                        ) {
+                            modul.updateZone(at: index) {
+                                $0.drawerProfileName = profil.name
+                            }
+                        }
                     }
                 }
             }
+
+            sekcjaProwadnicyV0103(zone)
 
             if let layout = modul.drawerLayout(forZoneAt: index) {
                 widokWalidacji(layout, zone: zone)
             }
         }
+    }
+
+    /// Masa frontu i dobór podnośnika — dla frontów uchylnych i klapowych.
+    ///
+    /// `FrontHardwareCalculator` był napisany i otestowany, ale **żaden plik
+    /// aplikacji go nie wołał**: liczby o masie i sile siłownika istniały
+    /// wyłącznie w domenie.
+    ///
+    /// Pokazujemy je tam, gdzie zapada decyzja — przy wyborze sposobu
+    /// otwierania. Front uchylny 900 × 400 waży inaczej z płyty wiórowej niż
+    /// z MDF-u, a to realnie zmienia dobór mechanizmu.
+    ///
+    /// **Sam współczynnik nie wskazuje SKU.** Zakresy różnią się między
+    /// producentami i seriami, więc kalkulator zwraca
+    /// `requiresSKUConfirmation` i mówimy o tym wprost, zamiast podawać model,
+    /// którego nie potwierdziliśmy w tabeli producenta.
+    @ViewBuilder
+    private func sekcjaOkuciaFrontuV0103(_ span: ElevationFrontSpan) -> some View {
+        if span.opening == .liftUp || span.opening == .flapDown,
+           let bounds = modul.frontSpanBounds(span) {
+
+            let szerokosc = max(bounds.width - span.sideGap, .zero)
+            let wysokosc = max(bounds.height - span.verticalGap, .zero)
+            let dobor = FrontHardwareCalculator.selectLift(
+                frontWidth: szerokosc,
+                frontHeight: wysokosc
+            )
+
+            naglowek("Podnośnik")
+
+            VStack(alignment: .leading, spacing: 3) {
+                Label(
+                    String(
+                        format: "Masa frontu ≈ %.1f kg · współczynnik %.0f",
+                        dobor.frontMass,
+                        dobor.powerFactor
+                    ),
+                    systemImage: "scalemass"
+                )
+                .font(.callout.weight(.semibold))
+
+                Text(
+                    "Producenci dobierają siłownik po iloczynie wysokości "
+                    + "frontu i masy, nie po samej masie."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(Array(dobor.issues.enumerated()), id: \.offset) { _, uwaga in
+                    Label {
+                        Text(uwaga.message)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if dobor.requiresSKUConfirmation {
+                    Text(
+                        "Konkretny model potwierdź w tabeli producenta — "
+                        + "zakresy różnią się między seriami."
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.accentColor.opacity(0.10))
+            )
+        }
+    }
+
+    /// Długość prowadnicy **związana z głębokością korpusu**.
+    ///
+    /// To jest ta pewność przy zamawianiu, o którą chodziło: projektant
+    /// ustawia głębokość mebla i od razu widzi, jaką prowadnicę zamówić.
+    /// Dotąd domena umiała to policzyć, ale liczba nie pokazywała się nigdzie —
+    /// więc przy zamówieniu albo liczyło się od nowa, albo zgadywało.
+    ///
+    /// Reguła: prowadnica NL wymaga **głębokości wewnętrznej ≥ NL + 22 mm**
+    /// (`DrawerProfile.requiredDepthMargin`). Korpus 560 mieści więc 500,
+    /// nie 550. Każdy system ma własną drabinkę długości i dobieranie
+    /// „najbliższej okrągłej" kończy się zamówieniem prowadnicy, której
+    /// producent nie robi.
+    @ViewBuilder
+    private func sekcjaProwadnicyV0103(_ zone: ElevationZone) -> some View {
+        let swiatlo = modul.depth - carcassThicknessV0103
+        let dobrana = DrawerProfile.nominalLength(
+            for: zone.drawerSystem,
+            cabinetInnerDepth: swiatlo
+        )
+
+        naglowek("Prowadnica dla tej głębokości")
+
+        if let dobrana {
+            // Zmarnowana głębokość bywa całą warstwą przechowywania —
+            // przy dużej wartości opłaca się zmienić głębokość korpusu
+            // albo system, zanim płyta pojedzie na piłę.
+            let strata = swiatlo - DrawerProfile.requiredDepthMargin - dobrana
+
+            VStack(alignment: .leading, spacing: 3) {
+                Label(
+                    "\(zone.drawerSystem.displayName) NL \(Int(dobrana.rawValue)) mm",
+                    systemImage: "ruler"
+                )
+                .font(.callout.weight(.semibold))
+
+                Text(
+                    "Korpus \(Int(modul.depth.rawValue)) mm → światło "
+                    + "\(Int(swiatlo.rawValue)) mm. Prowadnica potrzebuje "
+                    + "NL + \(Int(DrawerProfile.requiredDepthMargin.rawValue)) mm."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                if strata >= Millimeters(50) {
+                    Label(
+                        "\(Int(strata.rawValue)) mm głębokości zostaje niewykorzystane",
+                        systemImage: "arrow.left.and.right"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                }
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.green.opacity(0.10))
+            )
+        } else {
+            let najkrotsza = DrawerProfile
+                .nominalLengths(for: zone.drawerSystem)
+                .min()
+
+            Label {
+                Text(
+                    "Korpus \(Int(modul.depth.rawValue)) mm jest za płytki dla systemu "
+                    + "\(zone.drawerSystem.displayName)"
+                    + (
+                        najkrotsza.map {
+                            " — najkrótsza prowadnica ma NL \(Int($0.rawValue)) mm, "
+                            + "czyli wymaga \(Int($0.rawValue + DrawerProfile.requiredDepthMargin.rawValue)) mm światła."
+                        } ?? "."
+                    )
+                )
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+            }
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.orange.opacity(0.12))
+            )
+        }
+    }
+
+    /// Grubość pleców odejmowana od głębokości korpusu przy doborze prowadnicy.
+    ///
+    /// Prowadnica nie sięga pleców — światło jest o nie krótsze.
+    private var carcassThicknessV0103: Millimeters {
+        ProductionRules.backPanelThickness
+    }
+
+    /// Co ma się stać z układem szuflad, gdy zmieni się wysokość mebla.
+    ///
+    /// To jest decyzja warsztatowa, nie techniczny szczegół. Szuflada na
+    /// sztućce ma 140 mm i **ma zostać 140** po podwyższeniu korpusu — rośnie
+    /// wtedy tylko ta głęboka na dole. Inaczej wygląda to przy trzech
+    /// równych szufladach, gdzie chodzi o zachowanie proporcji.
+    ///
+    /// `DrawerLayoutMode` był w modelu i w zapisie od 2026-08-26, ale nie miał
+    /// ekranu — silnik umiał trzymać wymiary, a projektant nie miał jak o to
+    /// poprosić.
+    @ViewBuilder
+    private func sekcjaTrybuUkladuV0103(_ index: Int) -> some View {
+        let zone = modul.zones[index]
+
+        naglowek("Przy zmianie wysokości mebla")
+
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 150), spacing: 6)],
+            alignment: .leading,
+            spacing: 6
+        ) {
+            ForEach(DrawerLayoutMode.allCases) { tryb in
+                chip(tryb.displayName, aktywny: zone.drawerLayoutMode == tryb) {
+                    wykonajZmianeProdukcji(
+                        "Zmieniono zachowanie układu na „\(tryb.displayName)”"
+                    ) {
+                        modul.updateZone(at: index) {
+                            $0.drawerLayoutMode = tryb
+                        }
+                    }
+                }
+            }
+        }
+
+        Text(zone.drawerLayoutMode.opis)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        // Wybór szuflady wchłaniającej różnicę ma sens tylko wtedy, gdy
+        // pozostałe mają trzymać wymiar — i tylko wtedy, gdy jest ich więcej
+        // niż jedna. Przy jednej „elastyczna" nie znaczy nic.
+        if zone.drawerLayoutMode == .keepSizes, zone.drawerCount > 1 {
+            naglowek("Różnicę wchłania")
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 96), spacing: 6)],
+                alignment: .leading,
+                spacing: 6
+            ) {
+                ForEach(0..<zone.drawerCount, id: \.self) { i in
+                    chip(
+                        "Szuflada \(i + 1)",
+                        aktywny: zone.flexibleDrawerIndex == i
+                    ) {
+                        wykonajZmianeProdukcji(
+                            "Różnicę wchłania szuflada \(i + 1)"
+                        ) {
+                            modul.updateZone(at: index) {
+                                $0.flexibleDrawerIndex = i
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Wysokości, które **naprawdę wyjdą** po przeliczeniu.
+    ///
+    /// Pola wyżej są wejściem — w trybie proporcjonalnym są stosunkami, a nie
+    /// milimetrami. Bez tego wiersza projektant wpisuje 140/140/280 i nie wie,
+    /// że dostanie 176/176/354. Suma jest dopisana, bo to ona jest regułą:
+    /// fronty muszą domknąć strefę co do milimetra.
+    @ViewBuilder
+    private func podgladWysokosciPoPrzeliczeniuV0103(_ index: Int) -> some View {
+        let wysokosci = modul.drawerFrontHeights(forZoneAt: index)
+
+        if !wysokosci.isEmpty {
+            let opis = wysokosci
+                .map { "\(Int($0.rawValue.rounded()))" }
+                .joined(separator: " · ")
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("Fronty po przeliczeniu: \(opis) mm")
+                    .font(.caption.monospacedDigit())
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private var ukladySzufladWKreatorze:
+        [RodzajPresetuUkladuSzuflad]
+    {
+        [
+            .rowne,
+            .jednaWysokaDwieNiskie,
+            .wysokaNaDoleDwieNiskie,
+            .dwieWysokie,
+            .wysokosciNiestandardowe
+        ]
+    }
+
+    private func aktywnyPresetSzuflad(
+        dla zone: ElevationZone
+    ) -> RodzajPresetuUkladuSzuflad {
+        let heights = zone.drawerFrontHeights.map {
+            Int($0.rawValue.rounded())
+        }
+
+        guard !heights.isEmpty else {
+            return .rowne
+        }
+
+        switch heights {
+        case [140, 140, 280]:
+            return .jednaWysokaDwieNiskie
+        case [280, 140, 140]:
+            return .wysokaNaDoleDwieNiskie
+        case [280, 280]:
+            return .dwieWysokie
+        default:
+            return .wysokosciNiestandardowe
+        }
+    }
+
+    private func ustawPresetSzuflad(
+        _ preset: RodzajPresetuUkladuSzuflad,
+        wStrefie index: Int
+    ) {
+        guard modul.zones.indices.contains(index) else {
+            return
+        }
+
+        let niska = Millimeters(
+            StandardWysokoscSzuflady
+                .niska
+                .wysokoscFrontuMM
+        )
+        let wysoka = Millimeters(
+            StandardWysokoscSzuflady
+                .wysoka
+                .wysokoscFrontuMM
+        )
+        let aktualneWysokosci =
+            modul.drawerFrontHeights(
+                forZoneAt: index
+            )
+
+        wykonajZmianeProdukcji(
+            "Zmieniono układ szuflad"
+        ) {
+            modul.updateZone(at: index) { zone in
+                switch preset {
+                case .rowne:
+                    zone.drawerFrontHeights = []
+                case .jednaWysokaDwieNiskie:
+                    zone.drawerCount = 3
+                    zone.drawerFrontHeights = [
+                        niska,
+                        niska,
+                        wysoka
+                    ]
+                case .wysokaNaDoleDwieNiskie:
+                    zone.drawerCount = 3
+                    zone.drawerFrontHeights = [
+                        wysoka,
+                        niska,
+                        niska
+                    ]
+                case .dwieWysokie:
+                    zone.drawerCount = 2
+                    zone.drawerFrontHeights = [
+                        wysoka,
+                        wysoka
+                    ]
+                case .wysokosciNiestandardowe:
+                    if zone.drawerFrontHeights.isEmpty {
+                        zone.drawerFrontHeights =
+                            dopasujWysokosciSzuflad(
+                                aktualneWysokosci,
+                                doLiczby: zone.drawerCount
+                            )
+                    }
+                case .cargo:
+                    zone.drawerCount = 1
+                    zone.drawerFrontHeights = []
+                }
+            }
+        }
+    }
+
+    private func edytorWysokosciSzufladWKreatorze(
+        _ index: Int
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(
+                Array(
+                    modul.zones[index]
+                        .drawerFrontHeights
+                        .indices
+                ),
+                id: \.self
+            ) { drawerIndex in
+                HStack(spacing: 8) {
+                    Picker(
+                        "Szuflada \(drawerIndex + 1)",
+                        selection: Binding(
+                            get: {
+                                najblizszyStandardSzuflady(
+                                    modul.zones[index]
+                                        .drawerFrontHeights[
+                                            drawerIndex
+                                        ]
+                                        .rawValue
+                                )
+                            },
+                            set: { standard in
+                                ustawWysokoscSzuflady(
+                                    standard.wysokoscFrontuMM,
+                                    indeksSzuflady: drawerIndex,
+                                    indeksStrefy: index
+                                )
+                            }
+                        )
+                    ) {
+                        ForEach(
+                            StandardWysokoscSzuflady.allCases
+                        ) { standard in
+                            Text(standard.opis)
+                                .tag(standard)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    PoleWymiaruMM(
+                        tytul:
+                            "mm",
+                        wartosc: Binding(
+                            get: {
+                                modul.zones[index]
+                                    .drawerFrontHeights[
+                                        drawerIndex
+                                    ]
+                                    .rawValue
+                            },
+                            set: { value in
+                                ustawWysokoscSzuflady(
+                                    value,
+                                    indeksSzuflady: drawerIndex,
+                                    indeksStrefy: index
+                                )
+                            }
+                        ),
+                        zakres: 60...600
+                    )
+                }
+            }
+
+            HStack {
+                Button {
+                    wykonajZmianeProdukcji(
+                        "Dodano szufladę"
+                    ) {
+                        modul.updateZone(at: index) {
+                            $0.drawerFrontHeights =
+                                dopasujWysokosciSzuflad(
+                                    $0.drawerFrontHeights + [140],
+                                    doLiczby:
+                                        min(
+                                            $0.drawerCount + 1,
+                                            6
+                                        )
+                                    )
+                            $0.drawerCount =
+                                min($0.drawerCount + 1, 6)
+                        }
+                    }
+                } label: {
+                    Label(
+                        "Dodaj szufladę",
+                        systemImage: "plus.circle"
+                    )
+                }
+                .disabled(
+                    modul.zones[index].drawerCount >= 6
+                )
+
+                Spacer()
+
+                Button {
+                    wykonajZmianeProdukcji(
+                        "Wyrównano fronty szuflad"
+                    ) {
+                        modul.updateZone(at: index) {
+                            $0.drawerFrontHeights = []
+                        }
+                    }
+                } label: {
+                    Label(
+                        "Równe fronty",
+                        systemImage: "equal"
+                    )
+                }
+            }
+            .font(.caption)
+
+            Text(
+                "Wysokości są liczone od dołu do góry i trafiają do rysunku, formatek oraz zapisu modułu."
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func ustawWysokoscSzuflady(
+        _ value: Double,
+        indeksSzuflady: Int,
+        indeksStrefy: Int
+    ) {
+        wykonajZmianeProdukcji(
+            "Zmieniono wysokość frontu szuflady"
+        ) {
+            modul.updateZone(at: indeksStrefy) { zone in
+                guard zone.drawerFrontHeights.indices
+                    .contains(indeksSzuflady) else {
+                    return
+                }
+
+                zone.drawerFrontHeights[indeksSzuflady] =
+                    Millimeters(
+                        przytnij(
+                            zaokraglij10(value),
+                            60...600
+                        )
+                    )
+            }
+        }
+    }
+
+    private func dopasujWysokosciSzuflad(
+        _ heights: [Millimeters],
+        doLiczby count: Int
+    ) -> [Millimeters] {
+        let safeCount = min(max(count, 1), 6)
+        var result = Array(heights.prefix(safeCount))
+
+        while result.count < safeCount {
+            result.append(
+                result.last
+                ?? Millimeters(
+                    StandardWysokoscSzuflady
+                        .srednia
+                        .wysokoscFrontuMM
+                )
+            )
+        }
+
+        return result
+    }
+
+    private func najblizszyStandardSzuflady(
+        _ height: Double
+    ) -> StandardWysokoscSzuflady {
+        StandardWysokoscSzuflady
+            .allCases
+            .min {
+                abs(
+                    $0.wysokoscFrontuMM
+                    - height
+                )
+                < abs(
+                    $1.wysokoscFrontuMM
+                    - height
+                )
+            }
+        ?? .srednia
     }
 
     @ViewBuilder
@@ -793,11 +2292,286 @@ struct ModulEdytorElewacjiView: View {
         VStack(alignment: .leading, spacing: 6) {
             naglowek("Podsumowanie")
             wierszPodsumowania("Strefy", "\(modul.zones.count)")
+            wierszPodsumowania("Komory", "\(modul.cells.count)")
+            wierszPodsumowania("Fronty warstwowe", "\(modul.frontSpans.count)")
             wierszPodsumowania("Fronty", "\(liczbaFrontow)")
             wierszPodsumowania("Półki", "\(liczbaPolek)")
+            wierszPodsumowania("Drążki", "\(liczbaDrazkow)")
             wierszPodsumowania("Przegrody", "\(liczbaPrzegrod)")
             wierszPodsumowania("Formatki", "\(modul.totalCutPieces) szt.")
         }
+    }
+
+    /// Zastrzeżenia produkcyjne z `AssemblyInspector`.
+    ///
+    /// Kolor nie niesie tu znaczenia sam — każdy wiersz ma ikonę i słowo,
+    /// zgodnie z regułą UX projektu, że kolor nie może być jedynym nośnikiem.
+    @ViewBuilder
+    private func sekcjaZastrzezen(
+        _ zastrzezenia: [ProductionIssue]
+    ) -> some View {
+        let bledy = zastrzezenia.filter { $0.severity == .error }
+        let ostrzezenia = zastrzezenia.filter { $0.severity == .warning }
+
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(
+                    systemName: bledy.isEmpty
+                        ? "exclamationmark.triangle"
+                        : "xmark.octagon.fill"
+                )
+                Text(
+                    bledy.isEmpty
+                        ? "Do sprawdzenia"
+                        : "Tego nie da się zbudować"
+                )
+                .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(bledy.isEmpty ? Color.orange : Color.red)
+
+            ForEach(
+                Array((bledy + ostrzezenia).prefix(4).enumerated()),
+                id: \.offset
+            ) { _, uwaga in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(
+                        uwaga.componentCode.map { "\($0): \(uwaga.message)" }
+                            ?? uwaga.message
+                    )
+                    .font(.caption2)
+                    if !uwaga.hint.isEmpty {
+                        Text(uwaga.hint)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if zastrzezenia.count > 4 {
+                Text("…i jeszcze \(zastrzezenia.count - 4)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let plan = propozycjaPodzialu {
+                Divider().padding(.vertical, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.split.2x1")
+                        Text("Proponowany podział")
+                            .font(.caption.weight(.semibold))
+                    }
+                    Text(plan.reason)
+                        .font(.caption2)
+                    Text(opisPodzialkiPlanu(plan))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    (bledy.isEmpty ? Color.orange : Color.red)
+                        .opacity(0.12)
+                )
+        )
+    }
+
+    private var sekcjaKonsekwencjiZmiany: some View {
+        let snapshot =
+            modul.productionSnapshot()
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                naglowek("Konsekwencje zmiany")
+                Spacer()
+                Text("live")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
+            if let ostatniaZmianaProdukcji {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(ostatniaZmianaProdukcji.opis)
+                        .font(.caption.weight(.semibold))
+
+                    if !ostatniaZmianaProdukcji.zastrzezenia.isEmpty {
+                        sekcjaZastrzezen(
+                            ostatniaZmianaProdukcji.zastrzezenia
+                        )
+                    }
+
+                    if ostatniaZmianaProdukcji.delta.hasChanges {
+                        wierszDelta(
+                            "Formatki",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .cutPieceCount,
+                            suffix: " szt."
+                        )
+                        wierszDelta(
+                            "Fronty",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .frontPieceCount,
+                            suffix: " szt."
+                        )
+                        wierszDelta(
+                            "Półki",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .shelfCount,
+                            suffix: " szt."
+                        )
+                        wierszDelta(
+                            "Szuflady",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .drawerBoxCount,
+                            suffix: " dna"
+                        )
+                        wierszDelta(
+                            "Okucia",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .hardwareItemCount,
+                            suffix: " szt."
+                        )
+                        wierszDelta(
+                            "Zawiasy",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .hingeCount,
+                            suffix: " szt."
+                        )
+                        wierszDelta(
+                            "Prowadnice",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .drawerRunnerPairCount,
+                            suffix: " par"
+                        )
+                        wierszDeltaM2(
+                            "Płyta",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .boardAreaM2
+                        )
+                        wierszDeltaM2(
+                            "Fronty m²",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .frontAreaM2
+                        )
+                        wierszDeltaM(
+                            "Okleina est.",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .estimatedBandingM
+                        )
+                        wierszDeltaCurrency(
+                            "Okucia est.",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .estimatedHardwareCostNetto
+                        )
+                        wierszDeltaCurrency(
+                            "Koszt bazowy est.",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .estimatedBaseCostNetto
+                        )
+                        wierszDeltaCurrency(
+                            "Cena netto est.",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .estimatedRetailPriceNetto
+                        )
+                        wierszDeltaCurrency(
+                            "Marża est.",
+                            delta:
+                                ostatniaZmianaProdukcji
+                                    .delta
+                                    .estimatedMarginNetto
+                        )
+                    } else {
+                        Text("Bez zmiany w formatkach, frontach, okuciach ani estymacji okleiny.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.accentColor.opacity(0.09))
+                )
+            } else {
+                Text("Zmień wymiar, typ komory, front albo podział, żeby zobaczyć wpływ na produkcję.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Kwoty są roboczą estymacją na stałych założeniach, dopóki projekt nie ma pełnych cenników.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            wierszPodsumowania(
+                "Aktualnie",
+                "\(snapshot.cutPieceCount) formatek"
+            )
+            wierszPodsumowania(
+                "Powierzchnia",
+                "\(formatM2(snapshot.totalAreaM2)) m²"
+            )
+            wierszPodsumowania(
+                "Okleina est.",
+                "\(formatM(snapshot.estimatedBandingM)) mb"
+            )
+            wierszPodsumowania(
+                "Okucia",
+                "\(snapshot.hardwareItemCount) szt."
+            )
+            wierszPodsumowania(
+                "Okucia est.",
+                formatCurrency(snapshot.estimatedHardwareCostNetto)
+            )
+            wierszPodsumowania(
+                "Koszt bazowy est.",
+                formatCurrency(snapshot.estimatedBaseCostNetto)
+            )
+            wierszPodsumowania(
+                "Cena netto est.",
+                formatCurrency(snapshot.estimatedRetailPriceNetto)
+            )
+            wierszPodsumowania(
+                "Marża est.",
+                formatCurrency(snapshot.estimatedMarginNetto)
+            )
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.tertiarySystemGroupedBackground))
+        )
     }
 
     private func wierszPodsumowania(_ tytul: String, _ wartosc: String) -> some View {
@@ -806,6 +2580,119 @@ struct ModulEdytorElewacjiView: View {
             Spacer()
             Text(wartosc).font(.caption.monospacedDigit().weight(.semibold))
         }
+    }
+
+    private func wierszDelta(
+        _ tytul: String,
+        delta: Int,
+        suffix: String
+    ) -> some View {
+        HStack {
+            Text(tytul)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(formatDelta(delta) + suffix)
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(kolorDelty(delta))
+        }
+    }
+
+    private func wierszDeltaM2(
+        _ tytul: String,
+        delta: Double
+    ) -> some View {
+        HStack {
+            Text(tytul)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(formatDeltaM2(delta) + " m²")
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(kolorDelty(delta))
+        }
+    }
+
+    private func wierszDeltaM(
+        _ tytul: String,
+        delta: Double
+    ) -> some View {
+        HStack {
+            Text(tytul)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(formatDeltaM(delta) + " mb")
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(kolorDelty(delta))
+        }
+    }
+
+    private func wierszDeltaCurrency(
+        _ tytul: String,
+        delta: Double
+    ) -> some View {
+        HStack {
+            Text(tytul)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(formatDeltaCurrency(delta))
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(kolorDelty(delta))
+        }
+    }
+
+    private func formatDelta(_ value: Int) -> String {
+        value > 0 ? "+\(value)" : "\(value)"
+    }
+
+    private func formatDeltaM2(_ value: Double) -> String {
+        let prefix = value > 0 ? "+" : ""
+        return prefix + formatM2(value)
+    }
+
+    private func formatDeltaM(_ value: Double) -> String {
+        let prefix = value > 0 ? "+" : ""
+        return prefix + formatM(value)
+    }
+
+    private func formatDeltaCurrency(_ value: Double) -> String {
+        let prefix = value > 0 ? "+" : ""
+        return prefix + formatCurrency(value)
+    }
+
+    private func formatCurrency(_ value: Double) -> String {
+        value.formatted(
+            .currency(code: "PLN")
+                .precision(.fractionLength(0))
+        )
+    }
+
+    private func formatM2(_ value: Double) -> String {
+        value.formatted(
+            .number.precision(.fractionLength(2))
+        )
+    }
+
+    private func formatM(_ value: Double) -> String {
+        value.formatted(
+            .number.precision(.fractionLength(1))
+        )
+    }
+
+    private func kolorDelty(_ value: Int) -> Color {
+        if value == 0 {
+            return .secondary
+        }
+        return value > 0 ? .orange : .green
+    }
+
+    private func kolorDelty(_ value: Double) -> Color {
+        if abs(value) < 0.0001 {
+            return .secondary
+        }
+        return value > 0 ? .orange : .green
     }
 
     // MARK: - Karta techniczna (inline, bez drugiego sheeta)
@@ -846,6 +2733,24 @@ struct ModulEdytorElewacjiView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .frame(maxWidth: 760)
+        .stolarniaMaterial(
+            .regularMaterial,
+            in: RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+            .stroke(
+                StolarniaPalette.frostStroke,
+                lineWidth: 1
+            )
+        }
     }
 
     // MARK: - Pasek statusu
@@ -873,7 +2778,24 @@ struct ModulEdytorElewacjiView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(.secondarySystemGroupedBackground))
+        .frame(maxWidth: 760)
+        .stolarniaMaterial(
+            .regularMaterial,
+            in: RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+            .stroke(
+                StolarniaPalette.frostStroke,
+                lineWidth: 1
+            )
+        }
     }
 
     // MARK: - Drobne pomocnicze
@@ -894,8 +2816,16 @@ struct ModulEdytorElewacjiView: View {
             Text(tytul)
                 .font(.caption)
                 .lineLimit(1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                // Cel dotyku, nie sam tekst.
+                //
+                // Było `.padding(.vertical, 6)`, czyli ok. 28 pt wysokości —
+                // połowa minimum Apple (44 pt) i grubo poniżej progu komfortu
+                // dla odbiorcy 50+. Te kafle to nie ozdoba: wybiera się nimi
+                // system szuflad, profil i zachowanie układu przy zmianie
+                // gabarytu. Siatki są `adaptive`, więc wyższy kafel dokłada
+                // tylko wysokości i nie rozsadza układu w poziomie.
+                .frame(minHeight: 44)
                 .background(
                     Capsule().fill(aktywny
                         ? Color.accentColor.opacity(0.9)
@@ -903,16 +2833,502 @@ struct ModulEdytorElewacjiView: View {
                 )
                 .foregroundStyle(aktywny ? Color.white : Color.primary)
         }
-        .buttonStyle(.plain)
+        // Tymi kaflami wybiera się system szuflad, profil prowadnicy
+        // i zachowanie układu — muszą potwierdzać dotyk.
+        .stolarniaPressable()
+    }
+
+    private var zaznaczonaKomora: ElevationModule.Cell? {
+        guard let zaznaczonaKomoraID else { return nil }
+        return modul.cells.first { $0.id == zaznaczonaKomoraID }
+    }
+
+    private var zaznaczonyFront: ElevationFrontSpan? {
+        guard let zaznaczonyFrontID else { return nil }
+        return modul.frontSpans.first { $0.id == zaznaczonyFrontID }
+    }
+
+    private func komora(
+        wPunkcieMMX mmX: Double,
+        mmY: Double
+    ) -> ElevationModule.Cell? {
+        modul.cells.first {
+            mmX >= $0.left.rawValue
+            && mmX <= $0.right.rawValue
+            && mmY >= $0.lower.rawValue
+            && mmY <= $0.upper.rawValue
+        }
+    }
+
+    private func front(
+        wPunkcieMMX mmX: Double,
+        mmY: Double
+    ) -> ElevationFrontSpan? {
+        modul.frontSpans.reversed().first { span in
+            guard let bounds = modul.frontSpanBounds(span) else {
+                return false
+            }
+            return mmX >= bounds.left.rawValue
+                && mmX <= bounds.right.rawValue
+                && mmY >= bounds.lower.rawValue
+                && mmY <= bounds.upper.rawValue
+        }
+    }
+
+    private func moznaPodzielicPionowo(
+        _ cell: ElevationModule.Cell
+    ) -> Bool {
+        guard modul.zones.indices.contains(cell.zoneIndex) else {
+            return false
+        }
+        let zone = modul.zones[cell.zoneIndex]
+        return zone.kind != .appliance
+            && zone.columns < 4
+            && cell.width.rawValue >= 240
+    }
+
+    private func moznaPodzielicPoziomo(
+        _ cell: ElevationModule.Cell
+    ) -> Bool {
+        cell.height >= ElevationModule.minimumZoneHeight * 2
+    }
+
+    private func wykonajZmianeProdukcji(
+        _ opis: String,
+        _ zmiana: () -> Void
+    ) {
+        let przed =
+            modul.productionSnapshot()
+        zmiana()
+        let po =
+            modul.productionSnapshot()
+        ostatniaZmianaProdukcji =
+            OstatniaZmianaProdukcji(
+                opis: opis,
+                snapshot: po,
+                delta: ElevationProductionDelta(
+                    before: przed,
+                    after: po
+                ),
+                zastrzezenia: skontrolujWykonalnosc()
+            )
+    }
+
+    /// Buduje zespół z bieżącego modułu i przepuszcza go przez kontrolę
+    /// produkcyjną. Błąd budowy zespołu nie jest zastrzeżeniem produkcyjnym —
+    /// przy niedokończonym podziale `makeAssembly` rzuca i to jest normalne
+    /// w trakcie rysowania, więc zwracamy pustą listę zamiast straszyć.
+    /// Propozycja rozbicia modułu na korpusy, gdy jest za szeroki na jeden.
+    ///
+    /// Kontrola mówi „nie mieści się w arkuszu”, ale sama informacja o problemie
+    /// nie mówi projektantowi, co ma zrobić. Planer podaje konkretne podziałki.
+    /// Świadomie **nie przepisuje** modułu za użytkownika: podział ciągu na
+    /// korpusy to decyzja projektowa (gdzie wypadną boki, gdzie fugi), a nie
+    /// operacja, którą wolno zrobić w tle.
+    private var propozycjaPodzialu: RunSplitPlanner.Plan? {
+        guard RunSplitPlanner.needsSplit(runWidth: modul.width) else { return nil }
+        let plan = RunSplitPlanner.plan(runWidth: modul.width)
+        return plan.count > 1 ? plan : nil
+    }
+
+    private func opisPodzialkiPlanu(_ plan: RunSplitPlanner.Plan) -> String {
+        plan.widths
+            .map { String(format: "%.0f", $0.rawValue) }
+            .joined(separator: " + ") + " mm"
+    }
+
+    private func skontrolujWykonalnosc() -> [ProductionIssue] {
+        guard let zespol = try? modul.makeAssembly(named: modul.name) else {
+            return []
+        }
+        return AssemblyInspector.inspect(zespol)
+    }
+
+    private func podzielKomorePionowo(
+        _ cell: ElevationModule.Cell
+    ) {
+        guard moznaPodzielicPionowo(cell) else { return }
+        wykonajZmianeProdukcji(
+            "Podzielono komorę pionowo"
+        ) {
+            modul.updateZone(at: cell.zoneIndex) {
+                $0.columns += 1
+            }
+        }
+        wybierzKomore(
+            zoneIndex: cell.zoneIndex,
+            columnIndex: min(
+                cell.columnIndex,
+                max(modul.zones[cell.zoneIndex].columns - 1, 0)
+            )
+        )
+    }
+
+    private func podzielKomorePoziomo(
+        _ cell: ElevationModule.Cell
+    ) {
+        guard moznaPodzielicPoziomo(cell) else { return }
+        let y =
+            cell.lower
+            + cell.height / 2
+        var newZoneIndex: Int?
+        wykonajZmianeProdukcji(
+            "Podzielono komorę poziomo"
+        ) {
+            newZoneIndex =
+                modul.splitZone(at: y)
+        }
+        if let newZoneIndex {
+            wybierzKomore(
+                zoneIndex: newZoneIndex,
+                columnIndex: min(cell.columnIndex, 3)
+            )
+        }
+    }
+
+    private func ustawTypKomory(
+        _ kind: ElevationZoneKind,
+        dla cell: ElevationModule.Cell
+    ) {
+        guard modul.zones.indices.contains(cell.zoneIndex) else { return }
+        wykonajZmianeProdukcji(
+            "Zmieniono typ komory na \(kind.displayName)"
+        ) {
+            modul.updateZone(at: cell.zoneIndex) { zone in
+                zone.kind = kind
+                switch kind {
+                case .drawers:
+                    zone.drawerCount = max(zone.drawerCount, 3)
+                    if zone.drawerFrontHeights.count != zone.drawerCount {
+                        zone.drawerFrontHeights = []
+                    }
+                case .shelves:
+                    zone.shelfCount = max(zone.shelfCount, 2)
+                case .hanging:
+                    zone.railHeight = .zero
+                    zone.shelfCount = 0
+                case .doors:
+                    break
+                case .appliance:
+                    zone.columns = 1
+                }
+            }
+        }
+        wybierzKomore(
+            zoneIndex: cell.zoneIndex,
+            columnIndex: kind == .appliance ? 0 : cell.columnIndex
+        )
+    }
+
+    private func ustawWybranaLubNajwiekszaStrefe(
+        jako kind:
+            ElevationZoneKind
+    ) {
+        guard let index =
+            zaznaczonaStrefa
+            ?? najwiekszaStrefaIndex
+        else {
+            return
+        }
+
+        wykonajZmianeProdukcji(
+            "Ustawiono strefę: \(kind.displayName)"
+        ) {
+            modul.updateZone(at: index) { zone in
+                zone.kind = kind
+                switch kind {
+                case .hanging:
+                    zone.railHeight = .zero
+                    zone.shelfCount = 0
+                case .shelves:
+                    zone.shelfCount =
+                        liczbaPolekDlaSwiatla300(
+                            strefa:
+                                index
+                        )
+                case .drawers:
+                    zone.drawerCount = max(zone.drawerCount, 3)
+                case .doors:
+                    break
+                case .appliance:
+                    zone.columns = 1
+                }
+            }
+        }
+
+        wybierzKomore(
+            zoneIndex:
+                index,
+            columnIndex:
+                0
+        )
+    }
+
+    private func ustawKolumnyWStrefie(
+        _ columns:
+            Int
+    ) {
+        guard let index =
+            zaznaczonaStrefa
+            ?? najwiekszaStrefaIndex,
+              modul.zones.indices.contains(index),
+              modul.zones[index].kind != .appliance
+        else {
+            return
+        }
+
+        wykonajZmianeProdukcji(
+            "Zmieniono liczbę kolumn"
+        ) {
+            modul.updateZone(at: index) {
+                $0.columns =
+                    min(max(columns, 1), 4)
+            }
+        }
+
+        wybierzKomore(
+            zoneIndex:
+                index,
+            columnIndex:
+                0
+        )
+    }
+
+    private func ustawPolkiCo300MM(
+        wStrefie index:
+            Int
+    ) {
+        guard modul.zones.indices.contains(index) else {
+            return
+        }
+
+        wykonajZmianeProdukcji(
+            "Ustawiono półki co około 300 mm"
+        ) {
+            modul.updateZone(at: index) {
+                $0.kind = .shelves
+                $0.shelfCount =
+                    liczbaPolekDlaSwiatla300(
+                        strefa:
+                            index
+                    )
+            }
+        }
+    }
+
+    private func dodajNadstawke(
+        _ height:
+            Double
+    ) {
+        wykonajZmianeProdukcji(
+            "Dodano nadstawkę"
+        ) {
+            modul.addTopExtension(
+                height:
+                    Millimeters(height),
+                kind:
+                    .shelves
+            )
+        }
+
+        let index =
+            max(modul.zones.count - 1, 0)
+        wybierzKomore(
+            zoneIndex:
+                index,
+            columnIndex:
+                0
+        )
+    }
+
+    private var najwiekszaStrefaIndex:
+        Int?
+    {
+        modul.segments.max {
+            $0.zoneHeight < $1.zoneHeight
+        }?.index
+    }
+
+    private func liczbaPolekDlaSwiatla300(
+        strefa index:
+            Int
+    ) -> Int {
+        guard modul.segments.indices.contains(index) else {
+            return 2
+        }
+
+        let height =
+            modul.segments[index]
+                .zoneHeight
+                .rawValue
+        let count =
+            Int((height / 300).rounded()) - 1
+        return min(
+            max(count, 0),
+            8
+        )
+    }
+
+    private func wybierzKomore(
+        zoneIndex: Int,
+        columnIndex: Int
+    ) {
+        let id = "z\(zoneIndex)-c\(max(columnIndex, 0))"
+        zaznaczonaKomoraID =
+            modul.cells.contains { $0.id == id }
+            ? id
+            : nil
+        zaznaczonaStrefa =
+            modul.zones.indices.contains(zoneIndex)
+            ? zoneIndex
+            : nil
+    }
+
+    private func aktualizujFront(
+        _ id: UUID,
+        opis:
+            String = "Zmieniono front",
+        _ mutate: (inout ElevationFrontSpan) -> Void
+    ) {
+        wykonajZmianeProdukcji(
+            opis
+        ) {
+            modul.updateFrontSpan(id: id, mutate)
+        }
+        if modul.frontSpans.contains(where: { $0.id == id }) {
+            zaznaczonyFrontID = id
+        } else {
+            zaznaczonyFrontID = nil
+        }
+    }
+
+    private func ustawFrontNaKomore(
+        _ cell: ElevationModule.Cell
+    ) {
+        let span = ElevationFrontSpan(
+            lowerZoneIndex: cell.zoneIndex,
+            upperZoneIndex: cell.zoneIndex,
+            leadingColumnIndex: cell.columnIndex,
+            trailingColumnIndex: cell.columnIndex,
+            opening: domyslneOtwarcieFrontu(dla: cell),
+            coversInternalDrawers: cell.drawerCount > 0
+        )
+        wykonajZmianeProdukcji(
+            "Dodano front komory"
+        ) {
+            modul.setFrontSpans([
+                span
+            ])
+        }
+        zaznaczonyFrontID = span.id
+        zaznaczonaKomoraID = nil
+        zaznaczonaStrefa = cell.zoneIndex
+    }
+
+    private func ustawFrontNaCalyModul(
+        _ cell: ElevationModule.Cell
+    ) {
+        let span = ElevationFrontSpan(
+            lowerZoneIndex: 0,
+            upperZoneIndex: max(modul.zones.count - 1, 0),
+            leadingColumnIndex: 0,
+            trailingColumnIndex: 3,
+            opening: .leftHinged,
+            coversInternalDrawers:
+                modul.cells.contains { $0.drawerCount > 0 }
+        )
+        wykonajZmianeProdukcji(
+            "Dodano front modułu"
+        ) {
+            modul.setFrontSpans([
+                span
+            ])
+        }
+        zaznaczonyFrontID = span.id
+        zaznaczonaKomoraID = nil
+        zaznaczonaStrefa = cell.zoneIndex
+    }
+
+    private func ustawFrontNaZakresStrefy(
+        _ span: ElevationFrontSpan
+    ) {
+        aktualizujFront(
+            span.id,
+            opis: "Rozszerzono front na całą strefę"
+        ) { draft in
+            draft.leadingColumnIndex = 0
+            draft.trailingColumnIndex = 3
+        }
+    }
+
+    private func ustawFrontNaZakresModulu(
+        _ span: ElevationFrontSpan
+    ) {
+        aktualizujFront(
+            span.id,
+            opis: "Rozszerzono front na cały moduł"
+        ) { draft in
+            draft.lowerZoneIndex = 0
+            draft.upperZoneIndex = max(modul.zones.count - 1, 0)
+            draft.leadingColumnIndex = 0
+            draft.trailingColumnIndex = 3
+            draft.coversInternalDrawers =
+                modul.cells.contains { $0.drawerCount > 0 }
+        }
+    }
+
+    private func domyslneOtwarcieFrontu(
+        dla cell: ElevationModule.Cell
+    ) -> FurnitureFrontOpeningV020 {
+        switch cell.kind {
+        case .drawers:
+            return .drawer
+        case .appliance:
+            return .fixed
+        case .doors, .shelves, .hanging:
+            return .leftHinged
+        }
+    }
+
+    private func nazwaOtwarcia(
+        _ opening: FurnitureFrontOpeningV020
+    ) -> String {
+        switch opening {
+        case .leftHinged:
+            return "Lewe"
+        case .rightHinged:
+            return "Prawe"
+        case .liftUp:
+            return "Do góry"
+        case .flapDown:
+            return "W dół"
+        case .drawer:
+            return "Szuflada"
+        case .sliding:
+            return "Przesuwne"
+        case .fixed:
+            return "Stały"
+        }
     }
 
     private var liczbaFrontow: Int {
-        modul.zones.reduce(0) { acc, zone in
+        if !modul.frontSpans.isEmpty {
+            return modul.frontSpans.count
+        }
+        return modul.zones.reduce(0) { acc, zone in
             switch zone.kind {
             case .drawers: return acc + zone.drawerCount * zone.columns
             case .doors: return acc + zone.columns
             default: return acc
             }
+        }
+    }
+
+    private var liczbaDrazkow: Int {
+        modul.zones.reduce(0) { acc, zone in
+            zone.kind == .hanging
+            ? acc + zone.columns
+            : acc
         }
     }
 
@@ -984,34 +3400,67 @@ private struct PoleWymiaruMM: View {
     let zakres: ClosedRange<Double>
 
     @State private var tekst = ""
+    @State private var maNiezatwierdzonaZmiane = false
     @FocusState private var aktywne: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(tytul).font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 6) {
-                Button { zmien(o: -10) } label: { Image(systemName: "minus") }
+                Button { zmien(o: -10) } label: {
+                    Image(systemName: "minus")
+                        .frame(minWidth: 30, minHeight: 30)
+                }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
                 TextField("mm", text: $tekst)
                     .keyboardType(.numberPad)
+                    .submitLabel(.done)
                     .multilineTextAlignment(.center)
                     .textFieldStyle(.roundedBorder)
                     .focused($aktywne)
                     .onSubmit(zatwierdz)
                     .frame(minWidth: 60)
-                Button { zmien(o: 10) } label: { Image(systemName: "plus") }
+                    .onChange(of: tekst) { _, _ in
+                        maNiezatwierdzonaZmiane = true
+                    }
+                    .toolbar {
+                        ToolbarItemGroup(
+                            placement:
+                                .keyboard
+                        ) {
+                            Spacer()
+                            Button("OK") {
+                                zatwierdz()
+                                aktywne = false
+                            }
+                        }
+                    }
+                Button {
+                    zatwierdz()
+                } label: {
+                    Image(
+                        systemName:
+                            maNiezatwierdzonaZmiane
+                            ? "checkmark.circle.fill"
+                            : "checkmark.circle"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!maNiezatwierdzonaZmiane)
+                Button { zmien(o: 10) } label: {
+                    Image(systemName: "plus")
+                        .frame(minWidth: 30, minHeight: 30)
+                }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
                 Text("mm").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .onAppear { tekst = etykieta(wartosc) }
         .onChange(of: wartosc) { _, nowa in
-            if !aktywne { tekst = etykieta(nowa) }
-        }
-        .onChange(of: aktywne) { _, jestAktywne in
-            if !jestAktywne { zatwierdz() }
+            if !aktywne
+                && !maNiezatwierdzonaZmiane {
+                tekst = etykieta(nowa)
+            }
         }
     }
 
@@ -1026,12 +3475,14 @@ private struct PoleWymiaruMM: View {
         let przycieta = min(max(liczba, zakres.lowerBound), zakres.upperBound)
         wartosc = przycieta
         tekst = etykieta(przycieta)
+        maNiezatwierdzonaZmiane = false
     }
 
     private func zmien(o delta: Double) {
         let nowa = min(max(wartosc + delta, zakres.lowerBound), zakres.upperBound)
         wartosc = nowa
         tekst = etykieta(nowa)
+        maNiezatwierdzonaZmiane = false
     }
 }
 
@@ -1050,7 +3501,6 @@ private struct LicznikView: View {
                     Image(systemName: "minus")
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
 
                 Text("\(wartosc)")
                     .font(.body.monospacedDigit().weight(.semibold))
@@ -1062,7 +3512,6 @@ private struct LicznikView: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         }
     }

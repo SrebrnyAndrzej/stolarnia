@@ -8,6 +8,8 @@ struct ElewacjaScianyCanvasView: View {
     let numberedItems: [FurnitureCanvasItemV016]
     let runs: [KitchenRunV015]
     let availableDirections: Set<KitchenAddDirectionV015>
+    let cornerDefinitions:
+        [CornerCabinetDefinitionV025]
     let globalneMaterialy: GlobalneMaterialyPomieszczenia
     let poziomWymiarowania: PoziomWymiarowania2D
     /// Przekazywany z MeblePomieszczeniaViewModel.renderRevision.
@@ -65,6 +67,8 @@ struct ElewacjaScianyCanvasView: View {
         numberedItems: [FurnitureCanvasItemV016],
         runs: [KitchenRunV015],
         availableDirections: Set<KitchenAddDirectionV015>,
+        cornerDefinitions:
+            [CornerCabinetDefinitionV025] = [],
         globalneMaterialy: GlobalneMaterialyPomieszczenia,
         poziomWymiarowania: PoziomWymiarowania2D,
         renderRevision: Int = 0,
@@ -90,6 +94,8 @@ struct ElewacjaScianyCanvasView: View {
         self.numberedItems = numberedItems
         self.runs = runs
         self.availableDirections = availableDirections
+        self.cornerDefinitions =
+            cornerDefinitions
         self.globalneMaterialy = globalneMaterialy
         self.poziomWymiarowania = poziomWymiarowania
         self.renderRevision = renderRevision
@@ -205,6 +211,11 @@ struct ElewacjaScianyCanvasView: View {
                 )
 
                 ramkaZaznaczeniaOverlayV067
+
+                cornerProductionOverlayV086(
+                    furniture: furniture,
+                    projection: projection
+                )
 
                 if draggedFurnitureID == nil,
                    ramkaZaznaczeniaV067 == nil,
@@ -414,6 +425,217 @@ struct ElewacjaScianyCanvasView: View {
         }
     }
 
+    private struct CornerProductionOverlayItemV086:
+        Identifiable
+    {
+        let id:
+            FurnitureAssemblyID
+        let rect:
+            CGRect
+        let definition:
+            CornerCabinetDefinitionV025
+    }
+
+    private func cornerProductionOverlayItemsV086(
+        furniture:
+            [MebelElewacjaScianyElement],
+        projection:
+            ElewacjaScianyProjection
+    ) -> [CornerProductionOverlayItemV086] {
+        furniture.compactMap { item in
+            guard let definition =
+                cornerDefinitions.first(
+                    where: {
+                        $0.assemblyID == item.id
+                    }
+                )
+            else {
+                return nil
+            }
+
+            return CornerProductionOverlayItemV086(
+                id: item.id,
+                rect:
+                    projection.rect(
+                        item.rect
+                    ),
+                definition:
+                    definition
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func cornerProductionOverlayV086(
+        furniture:
+            [MebelElewacjaScianyElement],
+        projection:
+            ElewacjaScianyProjection
+    ) -> some View {
+        ForEach(
+            cornerProductionOverlayItemsV086(
+                furniture: furniture,
+                projection: projection
+            )
+        ) { item in
+            let definition =
+                item.definition
+            let rule =
+                CornerCabinetRuleBookV086
+                    .technologyRule(
+                        for:
+                            definition
+                                .effectiveAccessTechnology
+                    )
+            let fillerW =
+                min(
+                    max(
+                        item.rect.width * 0.10,
+                        5
+                    ),
+                    22
+                )
+            let fillerX =
+                definition.handedness == .left
+                ? item.rect.minX + fillerW / 2
+                : item.rect.maxX - fillerW / 2
+            let deadW =
+                definition.kind == .blindCorner
+                || definition.kind == .halfBlind
+                ? min(
+                    item.rect.width * 0.28,
+                    max(
+                        item.rect.width
+                        * CGFloat(
+                            definition.deadSpaceMM
+                            / max(
+                                definition.leftArmMM,
+                                definition.rightArmMM,
+                                1
+                            )
+                        ),
+                        10
+                    )
+                )
+                : 0
+            let deadX =
+                definition.handedness == .left
+                ? item.rect.maxX - deadW / 2
+                : item.rect.minX + deadW / 2
+
+            ZStack {
+                if definition.effectiveFillerKind != .none {
+                    Rectangle()
+                        .fill(
+                            Color.black
+                                .opacity(0.16)
+                        )
+                        .frame(
+                            width: fillerW,
+                            height:
+                                max(
+                                    item.rect.height,
+                                    1
+                                )
+                        )
+                        .position(
+                            x: fillerX,
+                            y: item.rect.midY
+                        )
+                }
+
+                if deadW > 0 {
+                    Rectangle()
+                        .fill(
+                            Color.black
+                                .opacity(0.10)
+                        )
+                        .overlay {
+                            Rectangle()
+                                .stroke(
+                                    Color.black
+                                        .opacity(0.32),
+                                    style:
+                                        StrokeStyle(
+                                            lineWidth: 1,
+                                            dash: [4, 3]
+                                        )
+                                )
+                        }
+                        .frame(
+                            width: deadW,
+                            height:
+                                max(
+                                    item.rect.height,
+                                    1
+                                )
+                        )
+                        .position(
+                            x: deadX,
+                            y: item.rect.midY
+                        )
+                }
+
+                VStack(spacing: 2) {
+                    Text(
+                        definition
+                            .effectiveAccessTechnology
+                            .title
+                    )
+                    .font(
+                        .caption2
+                            .weight(.bold)
+                    )
+                    Text(
+                        definition
+                            .effectiveFillerKind
+                            .title
+                    )
+                    .font(.caption2)
+                    if rule.requiresManufacturerTemplate {
+                        Text("wiercenia wg szablonu")
+                            .font(.caption2)
+                    }
+                }
+                .foregroundStyle(Color.black)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background(
+                    Color.white.opacity(0.86),
+                    in:
+                        RoundedRectangle(
+                            cornerRadius: 5
+                        )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(
+                            Color.black.opacity(0.22),
+                            lineWidth: 0.7
+                        )
+                }
+                .frame(
+                    maxWidth:
+                        max(
+                            item.rect.width - 8,
+                            1
+                        )
+                )
+                .position(
+                    x: item.rect.midX,
+                    y:
+                        max(
+                            item.rect.minY - 20,
+                            18
+                        )
+                )
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
     @ViewBuilder
     private func directionalButtons(
         for selected: MebelElewacjaScianyElement,
@@ -608,14 +830,14 @@ struct ElewacjaScianyCanvasView: View {
             - projection.y(currentTop)
     }
 
+    /// Wspólne z planem 2D — patrz `PrzyciaganieSasiadow2DV0102`.
     private func idsWykluczoneZeSnapuV066(
         sourceID: FurnitureAssemblyID
     ) -> Set<FurnitureAssemblyID> {
-        guard zaznaczoneFurnitureIDsV066.count > 1,
-              zaznaczoneFurnitureIDsV066.contains(sourceID) else {
-            return [sourceID]
-        }
-        return zaznaczoneFurnitureIDsV066
+        PrzyciaganieSasiadow2DV0102.idsWykluczone(
+            sourceID: sourceID,
+            zaznaczone: zaznaczoneFurnitureIDsV066
+        )
     }
 
     private func verticalSnapNeighbors(
@@ -680,55 +902,21 @@ struct ElewacjaScianyCanvasView: View {
         }
     }
 
+    /// Sąsiedzi do przyciągania — reguła wspólna z drugim płótnem.
+    ///
+    /// Ta funkcja miała identyczne ciało w planie 2D i w elewacji.
+    /// Logika mieszka teraz w `PrzyciaganieSasiadow2DV0102`, żeby
+    /// poprawka przyciągania działała w obu widokach naraz.
     private func snapNeighbors(
         for assembly: FurnitureAssembly,
         placement: FurniturePlacement
     ) -> [ZakresModuluPrzyciagania2D] {
-        let sourceLayer = MebelPlan2DGeometry.layer(
-            for: assembly
+        PrzyciaganieSasiadow2DV0102.sasiedzi(
+            dla: assembly,
+            placement: placement,
+            wsrod: assemblies,
+            zaznaczone: zaznaczoneFurnitureIDsV066
         )
-        let excludedIDs =
-            idsWykluczoneZeSnapuV066(
-                sourceID: assembly.id
-            )
-
-        return assemblies.compactMap { candidate in
-            guard !excludedIDs.contains(candidate.id),
-                  let candidatePlacement =
-                    candidate.placement,
-                  candidatePlacement.wallID
-                    == placement.wallID,
-                  MebelPlan2DGeometry.layer(
-                      for: candidate
-                  ) == sourceLayer,
-                  abs(
-                      candidatePlacement
-                          .bottomOffset
-                          .rawValue
-                      - placement
-                          .bottomOffset
-                          .rawValue
-                  ) <= 1,
-                  abs(
-                      candidatePlacement
-                          .offsetFromWall
-                          .rawValue
-                      - placement
-                          .offsetFromWall
-                          .rawValue
-                  ) <= 1 else {
-                return nil
-            }
-
-            return ZakresModuluPrzyciagania2D(
-                furnitureID: candidate.id,
-                start:
-                    candidatePlacement.offsetAlongWall,
-                end:
-                    candidatePlacement.offsetAlongWall
-                    + candidate.size.width
-            )
-        }
     }
 
     private func movementContext(
@@ -755,17 +943,15 @@ struct ElewacjaScianyCanvasView: View {
             return nil
         }
 
-        let normalized = min(
-            max(
-                (location.x - min(wallStartX, wallEndX))
-                / screenWidth,
-                0
-            ),
-            1
-        )
         let dropAlongWall =
-            projection.wallWidth.rawValue
-            * Double(normalized)
+            min(
+                max(
+                    projection
+                        .millimetersX(location.x),
+                    0
+                ),
+                projection.wallWidth.rawValue
+            )
         let maximumOffset = max(
             projection.wallWidth.rawValue
                 - assembly.size.width.rawValue,
@@ -922,7 +1108,15 @@ struct ElewacjaScianyCanvasView: View {
         return ElewacjaScianyProjection(
             wallWidth: wallWidth,
             wallHeight: wallHeight,
-            size: size
+            size: size,
+            isMirrored:
+                MebelElewacjaScianyGeometry
+                    .shouldMirrorElevation(
+                        wall:
+                            wall,
+                        room:
+                            room
+                    )
         )
     }
 
@@ -2362,6 +2556,8 @@ struct ElewacjaScianyCanvasView: View {
             return .orange
         case .wall:
             return .blue
+        case .upper:
+            return .purple
         case .tall:
             return .green
         }
@@ -2885,6 +3081,7 @@ private struct ElewacjaScianyProjection {
     let wallWidth: Millimeters
     let wallHeight: Millimeters
     let size: CGSize
+    let isMirrored: Bool
 
     private let horizontalPadding: CGFloat = 70
     private let verticalPadding: CGFloat = 70
@@ -2924,7 +3121,11 @@ private struct ElewacjaScianyProjection {
     func x(
         _ value: Millimeters
     ) -> CGFloat {
-        originX + CGFloat(value.rawValue) * scale
+        let modelX =
+            isMirrored
+            ? wallWidth.rawValue - value.rawValue
+            : value.rawValue
+        return originX + CGFloat(modelX) * scale
     }
 
     func y(
@@ -2937,6 +3138,16 @@ private struct ElewacjaScianyProjection {
         _ screenY: CGFloat
     ) -> Double {
         Double((floorY - screenY) / scale)
+    }
+
+    func millimetersX(
+        _ screenX: CGFloat
+    ) -> Double {
+        let visualX =
+            Double((screenX - originX) / scale)
+        return isMirrored
+            ? wallWidth.rawValue - visualX
+            : visualX
     }
 
     func point(
@@ -2952,8 +3163,12 @@ private struct ElewacjaScianyProjection {
     func rect(
         _ value: ElewacjaScianyProstokatMM
     ) -> CGRect {
-        CGRect(
-            x: x(value.x),
+        let startX =
+            x(value.x)
+        let endX =
+            x(value.maxX)
+        return CGRect(
+            x: min(startX, endX),
             y: y(value.maxY),
             width: CGFloat(value.width.rawValue) * scale,
             height: CGFloat(value.height.rawValue) * scale

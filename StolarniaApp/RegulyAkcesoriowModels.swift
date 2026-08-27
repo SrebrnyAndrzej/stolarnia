@@ -269,7 +269,78 @@ struct FormulaWymiarowaniaSzuflady:
         Double?
     var zapasGlebokosciKorpusuMM:
         Double = 0
+    var minimalneOdsuniecieOdScianBocznychMM:
+        Double?
     var opis = ""
+}
+
+struct RegulaSzufladyZaFrontem:
+    Codable,
+    Hashable
+{
+    var zeroProtrusion = false
+    var dopuszczaSzufladyWewnetrzne = false
+    var dopuszczaRollOut = false
+    var minimalnyKatOtwarciaStopnie:
+        Double = 155
+    var zalecaneOdsuniecieOdZawiasuMM:
+        Double = 50
+    var zalecaneOdsuniecieOdStronyWolnejMM:
+        Double = 0
+    var dodatkowyLuzBezpieczenstwaMM:
+        Double = 0
+    var wymagaPotwierdzeniaSKU = true
+    var opis = ""
+
+    var wymaganySymetrycznyDystansMM: Double {
+        max(
+            zalecaneOdsuniecieOdZawiasuMM,
+            zalecaneOdsuniecieOdStronyWolnejMM
+        )
+        + dodatkowyLuzBezpieczenstwaMM
+    }
+
+    static let standard110 =
+        RegulaSzufladyZaFrontem(
+            zeroProtrusion: false,
+            dopuszczaSzufladyWewnetrzne: false,
+            dopuszczaRollOut: false,
+            minimalnyKatOtwarciaStopnie: 155,
+            zalecaneOdsuniecieOdZawiasuMM: 50,
+            zalecaneOdsuniecieOdStronyWolnejMM: 0,
+            dodatkowyLuzBezpieczenstwaMM: 0,
+            wymagaPotwierdzeniaSKU: true,
+            opis:
+                "Standardowy zawias 95-110° nie jest regułą bezpieczną dla szuflad za frontem. Wymaga potwierdzenia toru drzwi albo dystansu/fillera po stronie zawiasu."
+        )
+
+    static let zeroProtrusion155 =
+        RegulaSzufladyZaFrontem(
+            zeroProtrusion: true,
+            dopuszczaSzufladyWewnetrzne: true,
+            dopuszczaRollOut: true,
+            minimalnyKatOtwarciaStopnie: 155,
+            zalecaneOdsuniecieOdZawiasuMM: 0,
+            zalecaneOdsuniecieOdStronyWolnejMM: 0,
+            dodatkowyLuzBezpieczenstwaMM: 3,
+            wymagaPotwierdzeniaSKU: false,
+            opis:
+                "Zawias zero-protrusion 155° odsuwa skrzydło z toru wysuwu. System nadal zostawia 3 mm luzu bezpieczeństwa dla tolerancji montażu."
+        )
+
+    static let zeroProtrusion125RollOut =
+        RegulaSzufladyZaFrontem(
+            zeroProtrusion: true,
+            dopuszczaSzufladyWewnetrzne: false,
+            dopuszczaRollOut: true,
+            minimalnyKatOtwarciaStopnie: 125,
+            zalecaneOdsuniecieOdZawiasuMM: 8,
+            zalecaneOdsuniecieOdStronyWolnejMM: 0,
+            dodatkowyLuzBezpieczenstwaMM: 2,
+            wymagaPotwierdzeniaSKU: true,
+            opis:
+                "Zawias zero-protrusion 125° traktujemy jako regułę dla wewnętrznych roll-outów/cargo, nie dla pełnych szuflad bez potwierdzenia konkretnego SKU."
+        )
 }
 
 struct ProfilAkcesoriumMeblowego:
@@ -333,6 +404,8 @@ struct ProfilAkcesoriumMeblowego:
         [TypElementuSzafki] = []
     var uwagi:
         [String] = []
+    var regulaSzufladyZaFrontem:
+        RegulaSzufladyZaFrontem?
     var zrodlo = ""
 }
 
@@ -370,6 +443,13 @@ struct InstancjaAkcesoriumSzafki:
         Double?
     var wysokoscFrontuMM:
         Double?
+
+    // v0.105: wynik obliczeń geometrycznych, niezależny od profilu/SKU.
+    // Pola opcjonalne zachowują odczyt starszych kart technicznych.
+    var masaFrontuKG: Double? = nil
+    var wspolczynnikMocy: Double? = nil
+    var niewykorzystanaGlebokoscMM: Double? = nil
+    var wymagaPotwierdzeniaSKU: Bool? = nil
 
     // Snapshot ceny zachowuje wycenę nawet po późniejszej aktualizacji cennika.
     var cenaJednostkowaNettoPLN:

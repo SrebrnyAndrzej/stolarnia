@@ -40,6 +40,7 @@ struct BazaOkucView: View {
             }
 
             filters
+            catalogContext
             hardwareList
         }
         .navigationTitle(
@@ -101,31 +102,21 @@ struct BazaOkucView: View {
                 ?? ""
             )
         }
-        .alert(
-            "Usunąć okucie?",
-            isPresented:
-                bindingPendingDelete,
-            presenting:
-                pendingDelete
+        .confirmationDialog(
+            "Usunąć okucie \"\(pendingDelete?.nazwa ?? "")\"?",
+            isPresented: bindingPendingDelete,
+            titleVisibility: .visible,
+            presenting: pendingDelete
         ) { item in
-            Button(
-                "Anuluj",
-                role: .cancel
-            ) {
+            Button("Usuń okucie", role: .destructive) {
+                repository.delete(id: item.id)
                 pendingDelete = nil
             }
-
-            Button(
-                "Usuń",
-                role: .destructive
-            ) {
-                repository.delete(
-                    id: item.id
-                )
+            Button("Anuluj", role: .cancel) {
                 pendingDelete = nil
             }
-        } message: { item in
-            Text(item.nazwa)
+        } message: { _ in
+            Text("Okucie zostanie trwale usunięte z bazy. Projekty które go używały zachowają zapisane dane, ale nie znajdą już tego okucia na liście.")
         }
     }
 
@@ -220,8 +211,7 @@ struct BazaOkucView: View {
                         if hasActiveFilters
                             || !searchText.isEmpty
                         {
-                            clearFilters()
-                            searchText = ""
+                            clearNarrowing()
                         } else {
                             editedItem =
                                 newHardwareDraft()
@@ -477,11 +467,80 @@ struct BazaOkucView: View {
                 .stolarniaFilterControl()
             }
 
-            StolarniaResultCount(
-                count:
-                    filteredItems.count
-            )
         }
+    }
+
+    private var catalogContext:
+        some View
+    {
+        StolarniaCatalogContextBar(
+            title:
+                selectedType?.nazwa
+                ?? "Okucia i systemy",
+            subtitle:
+                activeViewDescription,
+            systemImage:
+                selectedType?.systemImage
+                ?? "shippingbox",
+            count:
+                filteredItems.count,
+            noun:
+                "pozycji",
+            showsClearAction:
+                hasActiveNarrowing,
+            clearAction: {
+                clearNarrowing()
+            }
+        )
+    }
+
+    private var hasActiveNarrowing:
+        Bool
+    {
+        hasActiveFilters
+        || !searchText
+            .trimmingCharacters(
+                in:
+                    .whitespacesAndNewlines
+            )
+            .isEmpty
+    }
+
+    private var activeViewDescription:
+        String
+    {
+        var parts: [String] = []
+
+        if let selectedManufacturer {
+            parts.append(selectedManufacturer)
+        }
+
+        if let selectedTier {
+            parts.append(selectedTier.nazwa)
+        }
+
+        if onlyCatalogSystems {
+            parts.append("systemy katalogowe")
+        }
+
+        if onlyActive {
+            parts.append("tylko aktywne")
+        }
+
+        let query =
+            searchText
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+
+        if !query.isEmpty {
+            parts.append("„\(query)”")
+        }
+
+        return parts.isEmpty
+            ? "Wszystkie pozycje katalogu"
+            : parts.joined(separator: " / ")
     }
 
     private var filteredItems:
@@ -723,6 +782,11 @@ struct BazaOkucView: View {
         selectedTier = nil
         onlyActive = false
         onlyCatalogSystems = false
+    }
+
+    private func clearNarrowing() {
+        clearFilters()
+        searchText = ""
     }
 
     private func toggleActive(

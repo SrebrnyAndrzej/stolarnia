@@ -50,12 +50,11 @@ extension MeblePomieszczeniaViewModel {
                 scianaDocelowa = scianaBazowa
             }
 
-            // Bezpieczne wartości offsetu — obetnij pozycję do zakresu ściany.
+            // Bezpieczne wartości offsetu — normalizacja do >= 0.
+            // Zakres ściany jest walidowany po stronie VM przez `validatePlacement`,
+            // więc plan poza zakresem trafi do `pominiete` z odpowiednim błędem.
             var daneOgraniczone = plan.data
-            daneOgraniczone.offsetAlongWall = min(
-                max(plan.data.offsetAlongWall, .zero),
-                max(scianaDocelowa.length - plan.data.width, .zero)
-            )
+            daneOgraniczone.offsetAlongWall = max(plan.data.offsetAlongWall, .zero)
             daneOgraniczone.offsetFromWall = .zero
 
             let ok = await createModule(

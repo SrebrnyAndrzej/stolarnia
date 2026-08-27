@@ -95,8 +95,7 @@ enum MebelCollisionValidatorV0143 {
     private static func bounds(
         for assembly: FurnitureAssembly
     ) -> Bounds? {
-        guard let placement = assembly.placement,
-              let wallID = placement.wallID else {
+        guard let placement = assembly.placement else {
             return nil
         }
 
@@ -106,7 +105,7 @@ enum MebelCollisionValidatorV0143 {
 
         return Bounds(
             roomID: placement.roomID,
-            wallID: wallID,
+            wallID: placement.wallID,
             alongWall: orderedRange(
                 alongStart,
                 alongStart + assembly.size.width.rawValue
@@ -141,7 +140,7 @@ enum MebelCollisionValidatorV0143 {
 
     private struct Bounds {
         let roomID: RoomID
-        let wallID: WallID
+        let wallID: WallID?
         let alongWall: ClosedRange<Double>
         let fromWall: ClosedRange<Double>
         let vertical: ClosedRange<Double>

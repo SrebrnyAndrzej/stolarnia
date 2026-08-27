@@ -9,6 +9,8 @@ struct Furniture3DPreviewViewV017: View {
     let globalneMaterialy:
         GlobalneMaterialyPomieszczenia
     let room: RoomDefinition?
+    let cornerDefinitions:
+        [CornerCabinetDefinitionV025]
     let allowsFullScreenPresentation: Bool
 
     init(
@@ -17,6 +19,8 @@ struct Furniture3DPreviewViewV017: View {
         globalneMaterialy:
             GlobalneMaterialyPomieszczenia,
         room: RoomDefinition? = nil,
+        cornerDefinitions:
+            [CornerCabinetDefinitionV025] = [],
         allowsFullScreenPresentation: Bool = true
     ) {
         self.title = title
@@ -24,6 +28,8 @@ struct Furniture3DPreviewViewV017: View {
         self.globalneMaterialy =
             globalneMaterialy
         self.room = room
+        self.cornerDefinitions =
+            cornerDefinitions
         self.allowsFullScreenPresentation =
             allowsFullScreenPresentation
     }
@@ -34,25 +40,42 @@ struct Furniture3DPreviewViewV017: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
                 Furniture3DSceneViewV017(
                     assemblies: assemblies,
                     state: presentationState,
                     globalneMaterialy:
                         globalneMaterialy,
-                    room: room
+                    room: room,
+                    cornerDefinitions:
+                        cornerDefinitions
                 )
                 .overlay(alignment: .topLeading) {
                     instructionCard
                 }
-
-                Divider()
+                .overlay(alignment: .topTrailing) {
+                    Furniture3DMaterialLegendV017(
+                        materialy: globalneMaterialy
+                    )
+                    .padding()
+                }
 
                 controls
                     .padding(.horizontal)
                     .padding(.vertical, 10)
-                    .background(.regularMaterial)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity)
+                    .stolarniaMaterial(.regularMaterial)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(StolarniaPalette.frostStroke)
+                            .frame(height: 1)
+                    }
             }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -96,6 +119,8 @@ struct Furniture3DPreviewViewV017: View {
                     globalneMaterialy:
                         globalneMaterialy,
                     room: room,
+                    cornerDefinitions:
+                        cornerDefinitions,
                     presentationState: $presentationState
                 )
             }
@@ -111,7 +136,7 @@ struct Furniture3DPreviewViewV017: View {
                 .foregroundStyle(.secondary)
         }
         .padding(10)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .stolarniaMaterial(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .padding()
     }
 
@@ -176,6 +201,78 @@ struct Furniture3DPreviewViewV017: View {
     }
 }
 
+struct Furniture3DMaterialLegendV017: View {
+    let materialy:
+        GlobalneMaterialyPomieszczenia
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            materialRow(
+                title: "Korpus",
+                material: materialy.korpus
+            )
+            materialRow(
+                title: "Front",
+                material: materialy.front
+            )
+        }
+        .padding(10)
+        .stolarniaMaterial(
+            .thinMaterial,
+            in: RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+            .stroke(
+                StolarniaPalette.frostStroke,
+                lineWidth: 1
+            )
+        }
+    }
+
+    private func materialRow(
+        title: String,
+        material: MigawkaMaterialuGlobalnego
+    ) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(
+                    Color(
+                        stolarniaHEX:
+                            material.kolorHEX
+                    )
+                )
+                .frame(width: 18, height: 18)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(
+                            Color.primary.opacity(0.18),
+                            lineWidth: 1
+                        )
+                }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(material.nazwa)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(material.kod)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
 private struct Furniture3DFullScreenViewV017: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -184,6 +281,8 @@ private struct Furniture3DFullScreenViewV017: View {
     let globalneMaterialy:
         GlobalneMaterialyPomieszczenia
     let room: RoomDefinition?
+    let cornerDefinitions:
+        [CornerCabinetDefinitionV025]
     @Binding var presentationState:
         Furniture3DPresentationStateV017
 
@@ -196,7 +295,9 @@ private struct Furniture3DFullScreenViewV017: View {
                 state: presentationState,
                 globalneMaterialy:
                     globalneMaterialy,
-                room: room
+                room: room,
+                cornerDefinitions:
+                    cornerDefinitions
             )
             .ignoresSafeArea()
 
@@ -216,7 +317,7 @@ private struct Furniture3DFullScreenViewV017: View {
         .persistentSystemOverlays(.hidden)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(StolarniaMotion.pojawienie) {
                 controlsVisible.toggle()
             }
         }
@@ -255,7 +356,7 @@ private struct Furniture3DFullScreenViewV017: View {
             .disabled(assemblies.isEmpty)
 
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(StolarniaMotion.pojawienie) {
                     controlsVisible = false
                 }
             } label: {
@@ -270,7 +371,7 @@ private struct Furniture3DFullScreenViewV017: View {
             .clipShape(Circle())
         }
         .padding()
-        .background(.ultraThinMaterial)
+        .stolarniaMaterial(.ultraThinMaterial)
     }
 
     private var bottomControls: some View {
@@ -280,7 +381,7 @@ private struct Furniture3DFullScreenViewV017: View {
         )
         .padding(.horizontal)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .stolarniaMaterial(.ultraThinMaterial)
     }
 
     private var rotationMenu: some View {

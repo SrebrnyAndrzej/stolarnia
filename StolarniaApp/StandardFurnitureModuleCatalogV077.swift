@@ -33,6 +33,69 @@ nonisolated enum StandardFurnitureModuleKindV077 {
     case slopedBuiltIn
 }
 
+nonisolated struct StandardFurnitureSetupV077:
+    Hashable
+{
+    let summary: String
+    let badges: [String]
+    let drawerFrontHeightsMM: [Int]
+    let internalDrawers: Bool
+    let bayWidthsMM: [Int]
+    let notes: [String]
+
+    init(
+        summary: String = "Setup bazowy",
+        badges: [String] = ["Setup"],
+        drawerFrontHeightsMM: [Int] = [],
+        internalDrawers: Bool = false,
+        bayWidthsMM: [Int] = [],
+        notes: [String] = []
+    ) {
+        self.summary = summary
+        self.badges = badges
+        self.drawerFrontHeightsMM =
+            drawerFrontHeightsMM
+        self.internalDrawers = internalDrawers
+        self.bayWidthsMM = bayWidthsMM
+        self.notes = notes
+    }
+
+    static func drawers(
+        _ summary: String,
+        heights: [Int],
+        internalDrawers: Bool = false,
+        notes: [String] = []
+    ) -> StandardFurnitureSetupV077 {
+        StandardFurnitureSetupV077(
+            summary: summary,
+            badges: [
+                "\(heights.count) szufl.",
+                internalDrawers
+                    ? "wewnętrzne"
+                    : "fronty",
+                "Amix Slimbox"
+            ],
+            drawerFrontHeightsMM: heights,
+            internalDrawers: internalDrawers,
+            notes: notes
+        )
+    }
+
+    static func compartments(
+        _ summary: String,
+        badges: [String],
+        bays: [Int] = [],
+        notes: [String] = []
+    ) -> StandardFurnitureSetupV077 {
+        StandardFurnitureSetupV077(
+            summary: summary,
+            badges: badges,
+            bayWidthsMM: bays,
+            notes: notes
+        )
+    }
+}
+
 nonisolated struct StandardFurniturePresetV077: Hashable {
     let id: String
     let name: String
@@ -48,6 +111,43 @@ nonisolated struct StandardFurniturePresetV077: Hashable {
     let backType: CabinetBackType
     let topConstruction: CabinetTopConstruction
     let openingTechnology: OpeningTechnology
+    let setup: StandardFurnitureSetupV077
+
+    init(
+        id: String,
+        name: String,
+        kind: StandardFurnitureModuleKindV077,
+        category: FurnitureTemplateCategory,
+        builderType: FurnitureBuilderType,
+        anchoring: FurnitureAnchoringMode,
+        widthMM: Int,
+        heightMM: Int,
+        depthMM: Int,
+        shelfCount: Int,
+        frontEnabled: Bool,
+        backType: CabinetBackType,
+        topConstruction: CabinetTopConstruction,
+        openingTechnology: OpeningTechnology,
+        setup: StandardFurnitureSetupV077 =
+            StandardFurnitureSetupV077()
+    ) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.category = category
+        self.builderType = builderType
+        self.anchoring = anchoring
+        self.widthMM = widthMM
+        self.heightMM = heightMM
+        self.depthMM = depthMM
+        self.shelfCount = shelfCount
+        self.frontEnabled = frontEnabled
+        self.backType = backType
+        self.topConstruction = topConstruction
+        self.openingTechnology =
+            openingTechnology
+        self.setup = setup
+    }
 }
 
 nonisolated enum StandardFurnitureModuleCatalogV077 {
@@ -62,7 +162,7 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             kind: .kitchenIsland,
             category: .kitchenBaseCabinet,
             builderType: .baseCabinet,
-            anchoring: .floorStanding,
+            anchoring: .freestanding,
             widthMM: 1200,
             heightMM: 900,
             depthMM: 900,
@@ -78,10 +178,58 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             kind: .kitchenIsland,
             category: .kitchenBaseCabinet,
             builderType: .baseCabinet,
-            anchoring: .floorStanding,
+            anchoring: .freestanding,
             widthMM: 1800,
             heightMM: 900,
             depthMM: 1000,
+            shelfCount: 1,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle
+        ),
+        StandardFurniturePresetV077(
+            id: "kitchen-island-work-1600",
+            name: "Wyspa kuchenna robocza 1600",
+            kind: .kitchenIsland,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .freestanding,
+            widthMM: 1600,
+            heightMM: 900,
+            depthMM: 1000,
+            shelfCount: 1,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle
+        ),
+        StandardFurniturePresetV077(
+            id: "kitchen-island-dwg-2000-1400",
+            name: "Wyspa kuchenna 2000 × 1400",
+            kind: .kitchenIsland,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .freestanding,
+            widthMM: 2000,
+            heightMM: 900,
+            depthMM: 1400,
+            shelfCount: 1,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle
+        ),
+        StandardFurniturePresetV077(
+            id: "kitchen-island-family-2400",
+            name: "Wyspa kuchenna rodzinna 2400",
+            kind: .kitchenIsland,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .freestanding,
+            widthMM: 2400,
+            heightMM: 900,
+            depthMM: 1200,
             shelfCount: 1,
             frontEnabled: true,
             backType: .inset,
@@ -102,7 +250,159 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .frontAndRearRails,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .drawers(
+                "3 równe szuflady z frontami zewnętrznymi",
+                heights: [220, 220, 220]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "drawer-base-600-2-high",
+            name: "Szafka dolna 600 - 2 wysokie szuflady",
+            kind: .kitchenDrawerBase,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .floorStanding,
+            widthMM: 600,
+            heightMM: 720,
+            depthMM: 560,
+            shelfCount: 0,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .frontAndRearRails,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "2 wysokie szuflady na garnki",
+                heights: [280, 280]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "drawer-base-600-3-low-low-high",
+            name: "Szafka dolna 600 - 2 niskie + wysoka",
+            kind: .kitchenDrawerBase,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .floorStanding,
+            widthMM: 600,
+            heightMM: 720,
+            depthMM: 560,
+            shelfCount: 0,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .frontAndRearRails,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "2 niskie szuflady + 1 wysoka",
+                heights: [140, 140, 280]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "drawer-base-600-3-high-low-low",
+            name: "Szafka dolna 600 - wysoka + 2 niskie",
+            kind: .kitchenDrawerBase,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .floorStanding,
+            widthMM: 600,
+            heightMM: 720,
+            depthMM: 560,
+            shelfCount: 0,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .frontAndRearRails,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "1 wysoka szuflada na dole + 2 niskie",
+                heights: [280, 140, 140]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "drawer-base-600-internal-3",
+            name: "Szafka dolna 600 - szuflady za frontem",
+            kind: .kitchenDrawerBase,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .floorStanding,
+            widthMM: 600,
+            heightMM: 720,
+            depthMM: 560,
+            shelfCount: 0,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .frontAndRearRails,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "front zewnętrzny + 3 szuflady wewnętrzne",
+                heights: [140, 140, 280],
+                internalDrawers: true,
+                notes: [
+                    "Szuflady wewnętrzne: standardowy boczny odsuw 21 mm/strona."
+                ]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "drawer-base-800-2-high",
+            name: "Szafka dolna 800 - 2 wysokie szuflady",
+            kind: .kitchenDrawerBase,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .floorStanding,
+            widthMM: 800,
+            heightMM: 720,
+            depthMM: 560,
+            shelfCount: 0,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .frontAndRearRails,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "2 szerokie wysokie szuflady",
+                heights: [280, 280]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "drawer-base-800-4-low",
+            name: "Szafka dolna 800 - 4 niskie szuflady",
+            kind: .kitchenDrawerBase,
+            category: .kitchenBaseCabinet,
+            builderType: .baseCabinet,
+            anchoring: .floorStanding,
+            widthMM: 800,
+            heightMM: 720,
+            depthMM: 560,
+            shelfCount: 0,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .frontAndRearRails,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "4 niskie szuflady robocze",
+                heights: [140, 140, 140, 140]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "space-tower-600-3-zones",
+            name: "Space Tower 600 - 3 komory z szufladami",
+            kind: .pantryStorage,
+            category: .kitchenTallCabinet,
+            builderType: .wardrobe,
+            anchoring: .builtIn,
+            widthMM: 600,
+            heightMM: 2200,
+            depthMM: 600,
+            shelfCount: 2,
+            frontEnabled: true,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "3 komory: dolna wysoka, środkowa robocza, górna półki",
+                badges: ["3 komory", "szuflady", "spiżarnia"],
+                bays: [600],
+                notes: [
+                    "W każdej komorze można dobrać układ wysokie/niskie szuflady."
+                ]
+            )
         ),
         StandardFurniturePresetV077(
             id: "drawer-base-900-4",
@@ -118,7 +418,11 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .frontAndRearRails,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .drawers(
+                "4 fronty szufladowe w szerokim module",
+                heights: [140, 140, 220, 220]
+            )
         ),
         StandardFurniturePresetV077(
             id: "sink-base-800",
@@ -314,35 +618,123 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
         ),
         StandardFurniturePresetV077(
             id: "wardrobe-sliding-1800",
-            name: "Szafa przesuwna 2 skrzydła 1800",
-            kind: .slidingWardrobe,
-            category: .slidingWardrobe,
-            builderType: .slidingWardrobe,
+            name: "Moduły pod drzwi przesuwne 1800",
+            kind: .builtInWardrobe,
+            category: .recessBuiltIn,
+            builderType: .recessBuiltIn,
             anchoring: .builtIn,
             widthMM: 1800,
             heightMM: 2360,
             depthMM: 620,
             shelfCount: 5,
-            frontEnabled: true,
+            frontEnabled: false,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "2 moduły po 900 mm pod system przesuwny",
+                badges: ["2 moduły", "bez drzwi", "tory osobno"],
+                bays: [900, 900],
+                notes: [
+                    "System drzwi przesuwnych dopnij w ekranie Garderoby i drzwi."
+                ]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-sliding-1500-2-bays",
+            name: "Moduły pod drzwi przesuwne 1500",
+            kind: .builtInWardrobe,
+            category: .recessBuiltIn,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 1500,
+            heightMM: 2360,
+            depthMM: 620,
+            shelfCount: 4,
+            frontEnabled: false,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "2 moduły: lewy z półkami, prawy z drążkiem",
+                badges: ["2 moduły", "półki", "drążek"],
+                bays: [750, 750],
+                notes: [
+                    "System drzwi przesuwnych dopnij w ekranie Garderoby i drzwi."
+                ]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-sliding-2000-2-bays",
+            name: "Moduły pod drzwi przesuwne 2000",
+            kind: .builtInWardrobe,
+            category: .recessBuiltIn,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 2000,
+            heightMM: 2360,
+            depthMM: 620,
+            shelfCount: 6,
+            frontEnabled: false,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "2 moduły: sekcja półek i sekcja wisząca",
+                badges: ["2 moduły", "1000/1000", "bez drzwi"],
+                bays: [1000, 1000],
+                notes: [
+                    "System drzwi przesuwnych dopnij w ekranie Garderoby i drzwi."
+                ]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-sliding-2500-3-bays",
+            name: "Moduły pod drzwi przesuwne 2500",
+            kind: .builtInWardrobe,
+            category: .recessBuiltIn,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 2500,
+            heightMM: 2360,
+            depthMM: 620,
+            shelfCount: 7,
+            frontEnabled: false,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "3 moduły: półki, drążek, półki lub szuflady",
+                badges: ["3 moduły", "garderoba", "tory osobno"],
+                bays: [833, 834, 833],
+                notes: [
+                    "System drzwi przesuwnych dopnij w ekranie Garderoby i drzwi."
+                ]
+            )
         ),
         StandardFurniturePresetV077(
             id: "wardrobe-sliding-2700",
-            name: "Szafa przesuwna 3 skrzydła 2700",
-            kind: .slidingWardrobe,
-            category: .slidingWardrobe,
-            builderType: .slidingWardrobe,
+            name: "Moduły pod drzwi przesuwne 2700",
+            kind: .builtInWardrobe,
+            category: .recessBuiltIn,
+            builderType: .recessBuiltIn,
             anchoring: .builtIn,
             widthMM: 2700,
             heightMM: 2360,
             depthMM: 620,
             shelfCount: 6,
-            frontEnabled: true,
+            frontEnabled: false,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "3 moduły po 900 mm pod system przesuwny",
+                badges: ["3 moduły", "bez drzwi", "tory osobno"],
+                bays: [900, 900, 900],
+                notes: [
+                    "System drzwi przesuwnych dopnij w ekranie Garderoby i drzwi."
+                ]
+            )
         ),
         StandardFurniturePresetV077(
             id: "wardrobe-hinged-600",
@@ -358,7 +750,12 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "jedna sekcja: drążek + półka górna",
+                badges: ["1 drzwi", "drążek", "półka"],
+                bays: [600]
+            )
         ),
         StandardFurniturePresetV077(
             id: "wardrobe-hinged-1200",
@@ -374,7 +771,12 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "2 sekcje: półki + drążek",
+                badges: ["2 drzwi", "2 sekcje", "ubrania"],
+                bays: [600, 600]
+            )
         ),
         StandardFurniturePresetV077(
             id: "built-in-wardrobe-2400",
@@ -390,7 +792,117 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: false,
             backType: .none,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "zabudowa wnękowa: 3 sekcje otwarte pod indywidualny front",
+                badges: ["wnęka", "3 sekcje", "bez pleców"],
+                bays: [800, 800, 800]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-bay-500-shelves",
+            name: "Garderoba 500 - same półki",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .wardrobe,
+            anchoring: .floorStanding,
+            widthMM: 500,
+            heightMM: 2360,
+            depthMM: 580,
+            shelfCount: 6,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "wąska sekcja garderoby z sześcioma półkami",
+                badges: ["500", "6 półek", "otwarta"],
+                bays: [500]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-bay-500-drawers-shelves",
+            name: "Garderoba 500 - 3 szuflady + półki",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .wardrobe,
+            anchoring: .floorStanding,
+            widthMM: 500,
+            heightMM: 2360,
+            depthMM: 580,
+            shelfCount: 3,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .drawers(
+                "dolne 3 szuflady wewnętrzne + górne półki",
+                heights: [140, 140, 180],
+                internalDrawers: true
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-bay-750-hanging",
+            name: "Garderoba 750 - drążek + półka",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .wardrobe,
+            anchoring: .floorStanding,
+            widthMM: 750,
+            heightMM: 2360,
+            depthMM: 580,
+            shelfCount: 1,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "sekcja wisząca z drążkiem i półką górną",
+                badges: ["750", "drążek", "półka"],
+                bays: [750]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-bay-1000-double-hanging",
+            name: "Garderoba 1000 - dwa poziomy drążków",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .wardrobe,
+            anchoring: .floorStanding,
+            widthMM: 1000,
+            heightMM: 2360,
+            depthMM: 580,
+            shelfCount: 1,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "dwa poziomy drążków na krótką odzież",
+                badges: ["1000", "2 drążki", "odzież"],
+                bays: [1000]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "wardrobe-bay-1000-pantograph",
+            name: "Garderoba 1000 - pantograf + półki",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .wardrobe,
+            anchoring: .floorStanding,
+            widthMM: 1000,
+            heightMM: 2360,
+            depthMM: 580,
+            shelfCount: 3,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "pantograf w górnej strefie + półki boczne",
+                badges: ["pantograf", "półki", "premium"],
+                bays: [1000]
+            )
         ),
         StandardFurniturePresetV077(
             id: "dressing-open-800",
@@ -406,7 +918,96 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: false,
             backType: .none,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "otwarty moduł garderoby z półkami i drążkiem",
+                badges: ["800", "otwarta", "drążek"],
+                bays: [800]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "rail-closet-620-basic",
+            name: "Garderoba szynowa 620 - bazowa",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 620,
+            heightMM: 2010,
+            depthMM: 400,
+            shelfCount: 3,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "system szynowy: półki + drążek",
+                badges: ["szyny", "620", "otwarta"],
+                bays: [620]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "rail-closet-1250-laundry",
+            name: "Garderoba szynowa 1250 - kosze i półki",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 1250,
+            heightMM: 2010,
+            depthMM: 400,
+            shelfCount: 4,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "system szynowy z koszami, półkami i drążkiem",
+                badges: ["kosze", "1250", "pralnia"],
+                bays: [600, 650]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "rail-closet-1450-shoes",
+            name: "Garderoba szynowa 1450 - buty i odzież",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 1450,
+            heightMM: 2010,
+            depthMM: 400,
+            shelfCount: 6,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "półki na buty + sekcja wisząca",
+                badges: ["buty", "drążek", "1450"],
+                bays: [600, 850]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "rail-closet-2450-walkin",
+            name: "Garderoba szynowa 2450 - walk-in",
+            kind: .dressingRoom,
+            category: .wardrobe,
+            builderType: .recessBuiltIn,
+            anchoring: .builtIn,
+            widthMM: 2450,
+            heightMM: 2010,
+            depthMM: 400,
+            shelfCount: 8,
+            frontEnabled: false,
+            backType: .none,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "układ walk-in: półki, kosze i dwa drążki",
+                badges: ["walk-in", "2450", "kosze"],
+                bays: [600, 800, 1050]
+            )
         ),
         StandardFurniturePresetV077(
             id: "bookcase-800",
@@ -422,7 +1023,54 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: false,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "regał 800 z sześcioma półkami",
+                badges: ["800", "6 półek", "regał"],
+                bays: [800]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "bookcase-400-narrow",
+            name: "Regał wąski 400 - 6 półek",
+            kind: .bookcase,
+            category: .shelving,
+            builderType: .shelving,
+            anchoring: .floorStanding,
+            widthMM: 400,
+            heightMM: 2200,
+            depthMM: 320,
+            shelfCount: 6,
+            frontEnabled: false,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "wąski regał pomocniczy z sześcioma półkami",
+                badges: ["400", "6 półek", "wąski"],
+                bays: [400]
+            )
+        ),
+        StandardFurniturePresetV077(
+            id: "bookcase-1200-divided",
+            name: "Regał 1200 - 2 sekcje / 6 półek",
+            kind: .bookcase,
+            category: .shelving,
+            builderType: .shelving,
+            anchoring: .floorStanding,
+            widthMM: 1200,
+            heightMM: 2200,
+            depthMM: 350,
+            shelfCount: 12,
+            frontEnabled: false,
+            backType: .inset,
+            topConstruction: .fullPanel,
+            openingTechnology: .handle,
+            setup: .compartments(
+                "2 pionowe sekcje, po 6 półek w każdej",
+                badges: ["2 sekcje", "12 półek", "regał"],
+                bays: [600, 600]
+            )
         ),
         StandardFurniturePresetV077(
             id: "bookcase-low-1200",
@@ -438,7 +1086,12 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: false,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "niski regał / konsola z trzema półkami",
+                badges: ["niski", "1200", "3 półki"],
+                bays: [1200]
+            )
         ),
         StandardFurniturePresetV077(
             id: "desk-1200",
@@ -502,7 +1155,12 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "komoda 1600: 2 sekcje z frontami",
+                badges: ["2 sekcje", "fronty", "salon"],
+                bays: [800, 800]
+            )
         ),
         StandardFurniturePresetV077(
             id: "pantry-tall-600",
@@ -518,7 +1176,12 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "słupek spiżarniany z półkami",
+                badges: ["600", "półki", "spiżarnia"],
+                bays: [600]
+            )
         ),
         StandardFurniturePresetV077(
             id: "pantry-wide-900",
@@ -534,7 +1197,12 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             frontEnabled: true,
             backType: .inset,
             topConstruction: .fullPanel,
-            openingTechnology: .handle
+            openingTechnology: .handle,
+            setup: .compartments(
+                "szeroka spiżarnia: 2 sekcje półek",
+                badges: ["900", "2 sekcje", "półki"],
+                bays: [450, 450]
+            )
         ),
         StandardFurniturePresetV077(
             id: "bathroom-vanity-600",
@@ -778,6 +1446,18 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
         preset(for: template.id)?.anchoring
     }
 
+    static func setup(
+        for template: FurnitureTemplate
+    ) -> StandardFurnitureSetupV077? {
+        setup(for: template.id)
+    }
+
+    static func setup(
+        for templateID: FurnitureTemplateID
+    ) -> StandardFurnitureSetupV077? {
+        preset(for: templateID)?.setup
+    }
+
     static func defaultBottomOffset(
         for template: FurnitureTemplate
     ) -> Millimeters? {
@@ -790,13 +1470,21 @@ nonisolated enum StandardFurnitureModuleCatalogV077 {
             : .zero
     }
 
+    /// Odwrotny indeks `templateID → preset`, budowany **raz**.
+    /// Powód i pomiar: patrz `StandardKitchenTemplatesV0143.indeksPresetowV098`.
+    private static let indeksPresetowV098: [FurnitureTemplateID: StandardFurniturePresetV077] = {
+        var indeks: [FurnitureTemplateID: StandardFurniturePresetV077] = [:]
+        indeks.reserveCapacity(all.count)
+        for preset in all {
+            indeks[stableTemplateID(for: preset.id)] = preset
+        }
+        return indeks
+    }()
+
     static func preset(
         for templateID: FurnitureTemplateID
     ) -> StandardFurniturePresetV077? {
-        all.first {
-            stableTemplateID(for: $0.id)
-                == templateID
-        }
+        indeksPresetowV098[templateID]
     }
 
     private static func makeTemplate(
@@ -1097,6 +1785,22 @@ nonisolated struct ParametricFurnitureBuilderV077:
         case doubleSided
     }
 
+    private struct BayLayoutV077 {
+        let widths: [Millimeters]
+        let origins: [Millimeters]
+
+        var count: Int {
+            widths.count
+        }
+
+        func dividerX(
+            beforeBayAt index: Int,
+            thickness: Millimeters
+        ) -> Millimeters {
+            origins[index] - thickness
+        }
+    }
+
     private func buildStandardModule(
         _ kind: StandardFurnitureModuleKindV077,
         template: FurnitureTemplate,
@@ -1223,11 +1927,11 @@ nonisolated struct ParametricFurnitureBuilderV077:
                 parameters: parameters,
                 preservingIDsFrom: existingAssembly,
                 preferredBayWidth: 900,
-                frontStyle: .sliding,
+                frontStyle: .none,
                 addClothesRails: true,
                 addMaskingPanels: true,
                 addWorktopOverhang: false,
-                subassemblyName: "Szafa przesuwna"
+                subassemblyName: "Moduły pod drzwi przesuwne"
             )
 
         case .hingedWardrobe,
@@ -1344,20 +2048,19 @@ nonisolated struct ParametricFurnitureBuilderV077:
             template: template,
             existingAssembly: existingAssembly
         )
-        let thickness = resolved.carcassThickness
-        let bayCount = suggestedBayCount(
-            width: resolved.width,
+        let setup =
+            StandardFurnitureModuleCatalogV077
+            .setup(for: template)
+        let layout = try bayLayout(
+            resolved: resolved,
+            setup: setup,
             preferredBayWidth: preferredBayWidth,
+            minimumBayWidth: minimumBayWidth,
             maximum: frontStyle == .sliding ? 4 : 5
         )
-        let dividerCount = max(0, bayCount - 1)
-        let bayWidth =
-            (resolved.innerWidth
-                - thickness * Double(dividerCount))
-            / Double(bayCount)
 
-        guard bayWidth > minimumBayWidth,
-              resolved.innerHeight > thickness else {
+        guard resolved.innerHeight
+            > resolved.carcassThickness else {
             throw DomainError.invariantViolation(
                 "Moduł \(template.name) ma zbyt mały gabaryt dla podziału na komory."
             )
@@ -1367,15 +2070,13 @@ nonisolated struct ParametricFurnitureBuilderV077:
         try appendSegmentedCarcassShell(
             to: &components,
             resolved: resolved,
-            bayWidth: bayWidth,
-            bayCount: bayCount,
+            layout: layout,
             existingAssembly: existingAssembly
         )
         try appendDistributedShelves(
             to: &components,
             resolved: resolved,
-            bayWidth: bayWidth,
-            bayCount: bayCount,
+            layout: layout,
             existingAssembly: existingAssembly
         )
 
@@ -1383,8 +2084,7 @@ nonisolated struct ParametricFurnitureBuilderV077:
             try appendClothesRails(
                 to: &components,
                 resolved: resolved,
-                bayWidth: bayWidth,
-                bayCount: bayCount,
+                layout: layout,
                 existingAssembly: existingAssembly
             )
         }
@@ -1392,7 +2092,8 @@ nonisolated struct ParametricFurnitureBuilderV077:
         try appendFronts(
             to: &components,
             resolved: resolved,
-            bayCount: bayCount,
+            layout: layout,
+            setup: setup,
             frontStyle: frontStyle,
             existingAssembly: existingAssembly
         )
@@ -1522,8 +2223,7 @@ nonisolated struct ParametricFurnitureBuilderV077:
     private func appendSegmentedCarcassShell(
         to components: inout [FurnitureComponent],
         resolved: CabinetBuildParameters,
-        bayWidth: Millimeters,
-        bayCount: Int,
+        layout: BayLayoutV077,
         existingAssembly: FurnitureAssembly?
     ) throws {
         let thickness = resolved.carcassThickness
@@ -1670,11 +2370,11 @@ nonisolated struct ParametricFurnitureBuilderV077:
             )
         }
 
-        guard bayCount > 1 else {
+        guard layout.count > 1 else {
             return
         }
 
-        for index in 1..<bayCount {
+        for index in 1..<layout.count {
             let code = String(
                 format: "PRZEGRODA-%02d",
                 index
@@ -1693,9 +2393,10 @@ nonisolated struct ParametricFurnitureBuilderV077:
                         depth: resolved.rearUsablePlane
                     ),
                     localPosition: Point3MM(
-                        x: thickness
-                            + bayWidth * Double(index)
-                            + thickness * Double(index - 1),
+                        x: layout.dividerX(
+                            beforeBayAt: index,
+                            thickness: thickness
+                        ),
                         y: thickness,
                         z: .zero
                     )
@@ -1707,31 +2408,28 @@ nonisolated struct ParametricFurnitureBuilderV077:
     private func appendDistributedShelves(
         to components: inout [FurnitureComponent],
         resolved: CabinetBuildParameters,
-        bayWidth: Millimeters,
-        bayCount: Int,
+        layout: BayLayoutV077,
         existingAssembly: FurnitureAssembly?
     ) throws {
         let distribution = shelfDistribution(
             total: resolved.shelfCount,
-            bays: bayCount
+            bays: layout.count
         )
         let thickness = resolved.carcassThickness
 
-        for bayIndex in 0..<bayCount {
+        for bayIndex in 0..<layout.count {
             let shelfCount = distribution[bayIndex]
             guard shelfCount > 0 else {
                 continue
             }
 
+            let bayWidth = layout.widths[bayIndex]
             let clearHeight =
                 resolved.innerHeight
                 - thickness * Double(shelfCount)
             let clearGap =
                 clearHeight / Double(shelfCount + 1)
-            let bayX =
-                thickness
-                + (bayWidth + thickness)
-                    * Double(bayIndex)
+            let bayX = layout.origins[bayIndex]
 
             for shelfIndex in 1...shelfCount {
                 let code = String(
@@ -1772,22 +2470,14 @@ nonisolated struct ParametricFurnitureBuilderV077:
     private func appendClothesRails(
         to components: inout [FurnitureComponent],
         resolved: CabinetBuildParameters,
-        bayWidth: Millimeters,
-        bayCount: Int,
+        layout: BayLayoutV077,
         existingAssembly: FurnitureAssembly?
     ) throws {
-        guard resolved.height >= 1400,
-              bayWidth > 260 else {
+        guard resolved.height >= 1400 else {
             return
         }
 
         let railSize: Millimeters = 28
-        let railWidth = Millimeters(
-            max(
-                180,
-                bayWidth.rawValue - 120
-            )
-        )
         let railY = Millimeters(
             min(
                 resolved.height.rawValue
@@ -1806,15 +2496,22 @@ nonisolated struct ParametricFurnitureBuilderV077:
             )
         )
 
-        for bayIndex in 0..<bayCount {
+        for bayIndex in 0..<layout.count {
+            let bayWidth = layout.widths[bayIndex]
+            guard bayWidth > 260 else {
+                continue
+            }
+            let railWidth = Millimeters(
+                max(
+                    180,
+                    bayWidth.rawValue - 120
+                )
+            )
             let code = String(
                 format: "DRAZEK-%02d",
                 bayIndex + 1
             )
-            let bayX =
-                resolved.carcassThickness
-                + (bayWidth + resolved.carcassThickness)
-                    * Double(bayIndex)
+            let bayX = layout.origins[bayIndex]
 
             components.append(
                 try FurnitureComponent(
@@ -1848,7 +2545,8 @@ nonisolated struct ParametricFurnitureBuilderV077:
     private func appendFronts(
         to components: inout [FurnitureComponent],
         resolved: CabinetBuildParameters,
-        bayCount: Int,
+        layout: BayLayoutV077,
+        setup: StandardFurnitureSetupV077?,
         frontStyle: SegmentedFrontStyleV077,
         existingAssembly: FurnitureAssembly?
     ) throws {
@@ -1863,32 +2561,34 @@ nonisolated struct ParametricFurnitureBuilderV077:
 
         case .hinged,
              .doubleSided:
-            let frontCount = max(1, bayCount)
-            let totalGap =
-                resolved.frontGap
-                * Double(frontCount + 1)
-            let frontWidth =
-                (resolved.width - totalGap)
-                / Double(frontCount)
             let frontHeight =
                 resolved.height - resolved.frontGap * 2
+            let segments =
+                frontSegments(
+                    resolved: resolved,
+                    layout: layout
+                )
 
-            guard frontWidth > .zero,
-                  frontHeight > .zero else {
+            guard frontHeight > .zero,
+                  !segments.isEmpty else {
                 throw DomainError.invariantViolation(
                     "Fronty nie mieszczą się w gabarycie modułu."
                 )
             }
 
-            for index in 0..<frontCount {
+            for (index, segment) in segments.enumerated() {
                 let code = String(
                     format: "FRONT-%02d",
                     index + 1
                 )
-                let x =
-                    resolved.frontGap
-                    + (frontWidth + resolved.frontGap)
-                        * Double(index)
+                let frontWidth = segment.width
+
+                guard frontWidth > .zero else {
+                    throw DomainError.invariantViolation(
+                        "Fronty nie mieszczą się w gabarycie modułu."
+                    )
+                }
+
                 components.append(
                     try FurnitureComponent(
                         id: componentID(
@@ -1903,7 +2603,7 @@ nonisolated struct ParametricFurnitureBuilderV077:
                             depth: resolved.frontThickness
                         ),
                         localPosition: Point3MM(
-                            x: x,
+                            x: segment.x,
                             y: resolved.frontGap,
                             z: -resolved.frontThickness
                                 + resolved.frontInset
@@ -1933,7 +2633,7 @@ nonisolated struct ParametricFurnitureBuilderV077:
                             depth: resolved.frontThickness
                         ),
                         localPosition: Point3MM(
-                            x: x,
+                            x: segment.x,
                             y: resolved.frontGap,
                             z: resolved.depth - resolved.frontInset
                         )
@@ -1945,6 +2645,7 @@ nonisolated struct ParametricFurnitureBuilderV077:
             try appendDrawerStack(
                 to: &components,
                 resolved: resolved,
+                setup: setup,
                 existingAssembly: existingAssembly
             )
 
@@ -1953,11 +2654,7 @@ nonisolated struct ParametricFurnitureBuilderV077:
                 2,
                 min(
                     4,
-                    suggestedBayCount(
-                        width: resolved.width,
-                        preferredBayWidth: 900,
-                        maximum: 4
-                    )
+                    layout.count
                 )
             )
             let overlap: Millimeters = 40
@@ -2049,20 +2746,19 @@ nonisolated struct ParametricFurnitureBuilderV077:
     private func appendDrawerStack(
         to components: inout [FurnitureComponent],
         resolved: CabinetBuildParameters,
+        setup: StandardFurnitureSetupV077?,
         existingAssembly: FurnitureAssembly?
     ) throws {
-        let drawerCount =
-            resolved.width.rawValue >= 850
-            ? 4
-            : 3
-        let totalGap =
-            resolved.frontGap
-            * Double(drawerCount + 1)
+        let frontHeights =
+            drawerFrontHeights(
+                resolved: resolved,
+                setup: setup
+            )
+        let drawerCount = frontHeights.count
         let frontWidth =
             resolved.width - resolved.frontGap * 2
-        let frontHeight =
-            (resolved.height - totalGap)
-            / Double(drawerCount)
+        let internalDrawers =
+            setup?.internalDrawers == true
         let sideThickness: Millimeters = minMillimeters(
             resolved.carcassThickness,
             16
@@ -2081,23 +2777,17 @@ nonisolated struct ParametricFurnitureBuilderV077:
                 - Millimeters(24),
             500
         )
+        let sideInset: Millimeters =
+            internalDrawers ? 21 : .zero
         let drawerWidth =
-            resolved.innerWidth - Millimeters(26)
-        let drawerSideHeight = Millimeters(
-            min(
-                180,
-                max(
-                    90,
-                    frontHeight.rawValue - 72
-                )
-            )
-        )
+            resolved.innerWidth
+            - Millimeters(26)
+            - sideInset * 2
 
         guard frontWidth > .zero,
-              frontHeight > .zero,
+              drawerCount > 0,
               drawerWidth > sideThickness * 2,
-              drawerDepth > 180,
-              drawerSideHeight > bottomThickness else {
+              drawerDepth > 180 else {
             throw DomainError.invariantViolation(
                 "Szuflady nie mieszczą się w gabarycie modułu."
             )
@@ -2113,12 +2803,53 @@ nonisolated struct ParametricFurnitureBuilderV077:
         let guideHeight: Millimeters = 35
         let guideWidth: Millimeters = 12
 
+        if internalDrawers {
+            let externalFrontHeight =
+                resolved.height - resolved.frontGap * 2
+            components.append(
+                try FurnitureComponent(
+                    id: componentID(
+                        for: "FRONT-ZEW-SZ",
+                        in: existingAssembly
+                    ),
+                    code: "FRONT-ZEW-SZ",
+                    role: .front,
+                    size: Size3MM(
+                        width: frontWidth,
+                        height: externalFrontHeight,
+                        depth: resolved.frontThickness
+                    ),
+                    localPosition: Point3MM(
+                        x: resolved.frontGap,
+                        y: resolved.frontGap,
+                        z: frontZ
+                    )
+                )
+            )
+        }
+
+        var currentY = resolved.frontGap
         for index in 0..<drawerCount {
             let number = index + 1
-            let frontY =
-                resolved.frontGap
-                + (frontHeight + resolved.frontGap)
-                    * Double(index)
+            let frontHeight = frontHeights[index]
+            let frontY = currentY
+            let drawerSideHeight = Millimeters(
+                min(
+                    180,
+                    max(
+                        90,
+                        frontHeight.rawValue - 72
+                    )
+                )
+            )
+
+            guard frontHeight > .zero,
+                  drawerSideHeight > bottomThickness else {
+                throw DomainError.invariantViolation(
+                    "Szuflady nie mieszczą się w gabarycie modułu."
+                )
+            }
+
             let boxY =
                 frontY
                 + maxMillimeters(
@@ -2126,7 +2857,10 @@ nonisolated struct ParametricFurnitureBuilderV077:
                     (frontHeight - drawerSideHeight) / 2
                 )
             let frontCode = String(
-                format: "FRONT-SZ-%02d",
+                format:
+                    internalDrawers
+                    ? "FRONT-SZ-WEW-%02d"
+                    : "FRONT-SZ-%02d",
                 number
             )
 
@@ -2139,14 +2873,23 @@ nonisolated struct ParametricFurnitureBuilderV077:
                     code: frontCode,
                     role: .front,
                     size: Size3MM(
-                        width: frontWidth,
+                        width:
+                            internalDrawers
+                            ? drawerWidth
+                            : frontWidth,
                         height: frontHeight,
                         depth: resolved.frontThickness
                     ),
                     localPosition: Point3MM(
-                        x: resolved.frontGap,
+                        x:
+                            internalDrawers
+                            ? boxX
+                            : resolved.frontGap,
                         y: frontY,
-                        z: frontZ
+                        z:
+                            internalDrawers
+                            ? boxZ - resolved.frontThickness
+                            : frontZ
                     )
                 )
             )
@@ -2233,7 +2976,10 @@ nonisolated struct ParametricFurnitureBuilderV077:
                         depth: drawerDepth
                     ),
                     position: Point3MM(
-                        x: resolved.carcassThickness,
+                        x:
+                            internalDrawers
+                            ? boxX
+                            : resolved.carcassThickness,
                         y: boxY,
                         z: boxZ
                     )
@@ -2250,9 +2996,12 @@ nonisolated struct ParametricFurnitureBuilderV077:
                         depth: drawerDepth
                     ),
                     position: Point3MM(
-                        x: resolved.width
-                            - resolved.carcassThickness
-                            - guideWidth,
+                        x:
+                            internalDrawers
+                            ? boxX + drawerWidth - guideWidth
+                            : resolved.width
+                                - resolved.carcassThickness
+                                - guideWidth,
                         y: boxY,
                         z: boxZ
                     )
@@ -2273,6 +3022,8 @@ nonisolated struct ParametricFurnitureBuilderV077:
                     )
                 )
             }
+
+            currentY += frontHeight + resolved.frontGap
         }
     }
 
@@ -2340,6 +3091,177 @@ nonisolated struct ParametricFurnitureBuilderV077:
                 )
             )
         )
+    }
+
+    private func bayLayout(
+        resolved: CabinetBuildParameters,
+        setup: StandardFurnitureSetupV077?,
+        preferredBayWidth: Double,
+        minimumBayWidth: Millimeters,
+        maximum: Int
+    ) throws -> BayLayoutV077 {
+        let thickness = resolved.carcassThickness
+        let explicitWidths =
+            setup?.bayWidthsMM
+            .filter { $0 > 0 }
+            .prefix(maximum)
+            .map { Double($0) }
+            ?? []
+
+        let bayCount: Int =
+            explicitWidths.isEmpty
+            ? suggestedBayCount(
+                width: resolved.width,
+                preferredBayWidth: preferredBayWidth,
+                maximum: maximum
+            )
+            : max(1, explicitWidths.count)
+
+        let dividerCount = max(0, bayCount - 1)
+        let availableForBays =
+            resolved.innerWidth
+            - thickness * Double(dividerCount)
+
+        guard availableForBays > .zero else {
+            throw DomainError.invariantViolation(
+                "Moduł ma zbyt mały gabaryt dla zadanych sekcji."
+            )
+        }
+
+        let widths: [Millimeters]
+        if explicitWidths.isEmpty {
+            let width =
+                availableForBays / Double(bayCount)
+            widths = Array(
+                repeating: width,
+                count: bayCount
+            )
+        } else {
+            let total =
+                explicitWidths.reduce(0, +)
+            widths = explicitWidths.map {
+                availableForBays
+                    * ($0 / max(total, 1))
+            }
+        }
+
+        guard widths.allSatisfy({
+            $0 > minimumBayWidth
+        }) else {
+            throw DomainError.invariantViolation(
+                "Jedna z sekcji modułu jest zbyt wąska."
+            )
+        }
+
+        var origins: [Millimeters] = []
+        var cursor = thickness
+        for width in widths {
+            origins.append(cursor)
+            cursor += width + thickness
+        }
+
+        return BayLayoutV077(
+            widths: widths,
+            origins: origins
+        )
+    }
+
+    private func frontSegments(
+        resolved: CabinetBuildParameters,
+        layout: BayLayoutV077
+    ) -> [(x: Millimeters, width: Millimeters)] {
+        guard layout.count > 0 else {
+            return []
+        }
+
+        return (0..<layout.count).map {
+            index in
+            let start: Millimeters =
+                index == 0
+                ? .zero
+                : layout.dividerX(
+                    beforeBayAt: index,
+                    thickness:
+                        resolved.carcassThickness
+                )
+            let end: Millimeters =
+                index == layout.count - 1
+                ? resolved.width
+                : layout.dividerX(
+                    beforeBayAt: index + 1,
+                    thickness:
+                        resolved.carcassThickness
+                )
+            let segmentWidth =
+                end - start
+            return (
+                x: start + resolved.frontGap,
+                width:
+                    segmentWidth
+                    - resolved.frontGap * 2
+            )
+        }
+    }
+
+    private func drawerFrontHeights(
+        resolved: CabinetBuildParameters,
+        setup: StandardFurnitureSetupV077?
+    ) -> [Millimeters] {
+        let nominal =
+            setup?.drawerFrontHeightsMM
+            .filter { $0 > 0 }
+            .map { Double($0) }
+            ?? []
+        let count =
+            nominal.isEmpty
+            ? (resolved.width.rawValue >= 850 ? 4 : 3)
+            : min(max(nominal.count, 1), 6)
+        let totalGap =
+            resolved.frontGap
+            * Double(count + 1)
+        let availableHeight =
+            resolved.height - totalGap
+
+        guard availableHeight > .zero else {
+            return []
+        }
+
+        if nominal.isEmpty {
+            return Array(
+                repeating:
+                    availableHeight
+                    / Double(count),
+                count: count
+            )
+        }
+
+        let limitedNominal =
+            Array(nominal.prefix(count))
+        let total =
+            limitedNominal.reduce(0, +)
+
+        if setup?.internalDrawers == true {
+            let exactHeights =
+                limitedNominal.map {
+                    Millimeters($0)
+                }
+            let requiredHeight =
+                exactHeights.reduce(
+                    Millimeters.zero,
+                    +
+                )
+                + resolved.frontGap
+                    * Double(exactHeights.count + 1)
+
+            if requiredHeight <= resolved.height {
+                return exactHeights
+            }
+        }
+
+        return limitedNominal.map {
+            availableHeight
+                * ($0 / max(total, 1))
+        }
     }
 
     private func suggestedBayCount(

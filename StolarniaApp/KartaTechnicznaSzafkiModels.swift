@@ -1,3 +1,4 @@
+import DomainCore
 import Foundation
 
 enum StronaElementuTechnicznego:
@@ -76,6 +77,301 @@ struct PunktWierceniaSzafki:
     var srednicaMM = 5.0
     var glebokoscMM = 12.0
     var opis = ""
+}
+
+enum TypLiniiWierceniaSzafki:
+    String,
+    Codable,
+    CaseIterable,
+    Identifiable
+{
+    case osProwadnicySzuflady
+    case liniaSystemu32
+    case liniaPomocnicza
+    case osMechanizmuNaroznego
+    case kopertaRuchuMechanizmu
+    case granicaMartwejStrefy
+
+    var id: String { rawValue }
+
+    var nazwa: String {
+        switch self {
+        case .osProwadnicySzuflady:
+            return "Oś prowadnicy szuflady"
+        case .liniaSystemu32:
+            return "Linia Systemu 32"
+        case .liniaPomocnicza:
+            return "Linia pomocnicza"
+        case .osMechanizmuNaroznego:
+            return "Oś mechanizmu narożnego"
+        case .kopertaRuchuMechanizmu:
+            return "Koperta ruchu mechanizmu"
+        case .granicaMartwejStrefy:
+            return "Granica martwej strefy"
+        }
+    }
+}
+
+struct LiniaWierceniaSzafki:
+    Identifiable,
+    Codable,
+    Hashable
+{
+    var id = UUID()
+    var element = ""
+    var typ:
+        TypLiniiWierceniaSzafki =
+            .liniaPomocnicza
+    var strona:
+        StronaElementuTechnicznego =
+            .wewnetrzna
+    var xStartMM = 0.0
+    var xEndMM = 0.0
+    var yMM = 0.0
+    var etykieta = ""
+    var opis = ""
+}
+
+struct LiniaProwadnicySzufladyKartyV084:
+    Identifiable,
+    Hashable
+{
+    var id: String
+    var bok: String
+    var etykietaBoku: String
+    var etykietaSzuflady: String
+    var producent: String
+    var model: String
+    var statusWeryfikacji: String
+    var nominalnaDlugoscMM: Double
+    var xStartMM: Double
+    var xEndMM: Double
+    var yMM: Double
+    var opis: String
+
+    var bokSkrot: String {
+        switch bok {
+        case "Lewy":
+            return "L"
+        case "Prawy":
+            return "P"
+        default:
+            return bok
+        }
+    }
+
+    var systemSkrocony: String {
+        [
+            producent,
+            model
+        ]
+        .map {
+            $0.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        }
+        .filter {
+            !$0.isEmpty && $0 != "—"
+        }
+        .joined(separator: " ")
+        .ifEmpty("—")
+    }
+}
+
+enum KartaTechnicznaProwadniceSzufladV084 {
+    static func linie(
+        w card: KartaTechnicznaSzafki
+    ) -> [LiniaProwadnicySzufladyKartyV084] {
+        let drawersByLabel =
+            card
+                .efektywneSzuflady
+                .reduce(
+                    into:
+                        [
+                            String:
+                                SzufladaModulu
+                        ]()
+                ) {
+                    result,
+                    drawer in
+
+                    result[
+                        drawer.etykieta
+                    ] = drawer
+                }
+
+        return card
+            .efektywneElementy
+            .filter(jestBokiemKorpusu)
+            .flatMap {
+                side in
+
+                side
+                    .efektywneLinieWiercenia
+                    .map {
+                        line in
+
+                        let isDrawerLine =
+                            line.typ
+                            == .osProwadnicySzuflady
+                        let drawer =
+                            isDrawerLine
+                            ? drawersByLabel[
+                                line.etykieta
+                            ]
+                            : nil
+                        let profile =
+                            drawer.flatMap {
+                                KatalogRegulAkcesoriow
+                                    .profil(
+                                        id:
+                                            $0.profilID
+                                    )
+                            }
+                        let fallbackProfileID =
+                            drawer?.profilID
+                            ?? line.typ.nazwa
+                        let model =
+                            profile
+                                .map {
+                                    [
+                                        $0.rodzina,
+                                        $0.model
+                                    ]
+                                    .filter {
+                                        !$0.isEmpty
+                                    }
+                                    .joined(separator: " ")
+                                }
+                                ?? fallbackProfileID
+                        let lineLength =
+                            abs(
+                                line.xEndMM
+                                - line.xStartMM
+                            )
+
+                        return LiniaProwadnicySzufladyKartyV084(
+                            id:
+                                "\(side.id.uuidString)|\(line.id.uuidString)",
+                            bok:
+                                bok(
+                                    dla: side
+                                ),
+                            etykietaBoku:
+                                side.etykieta
+                                    .ifEmpty(
+                                        side.nazwa
+                                    ),
+                            etykietaSzuflady:
+                                line.etykieta
+                                    .ifEmpty("—"),
+                            producent:
+                                profile?
+                                    .producent
+                                ?? (
+                                    isDrawerLine
+                                    ? "—"
+                                    : "Linia"
+                                ),
+                            model:
+                                model.ifEmpty(
+                                    line.typ.nazwa
+                                ),
+                            statusWeryfikacji:
+                                profile?
+                                    .status
+                                    .nazwa
+                                ?? (
+                                    isDrawerLine
+                                    ? "Brak profilu"
+                                    : "Pomocnicza"
+                                ),
+                            nominalnaDlugoscMM:
+                                drawer?
+                                    .nominalnaDlugoscMM
+                                ?? lineLength,
+                            xStartMM:
+                                min(
+                                    line.xStartMM,
+                                    line.xEndMM
+                                ),
+                            xEndMM:
+                                max(
+                                    line.xStartMM,
+                                    line.xEndMM
+                                ),
+                            yMM:
+                                line.yMM,
+                            opis:
+                                line.opis
+                        )
+                    }
+            }
+            .sorted {
+                lhs,
+                rhs in
+
+                if abs(lhs.yMM - rhs.yMM) > 0.01 {
+                    return lhs.yMM < rhs.yMM
+                }
+
+                if lhs.etykietaSzuflady
+                    != rhs.etykietaSzuflady {
+                    return lhs.etykietaSzuflady
+                        < rhs.etykietaSzuflady
+                }
+
+                return lhs.bok < rhs.bok
+            }
+    }
+
+    private static func jestBokiemKorpusu(
+        _ element: ElementTechnicznySzafki
+    ) -> Bool {
+        element.typ == .scianaBoczna
+            || element.typ == .sciankaMaskujaca
+    }
+
+    private static func bok(
+        dla element: ElementTechnicznySzafki
+    ) -> String {
+        let text =
+            [
+                element.etykieta,
+                element.nazwa
+            ]
+            .joined(separator: " ")
+
+        if text.localizedCaseInsensitiveContains(
+            "lew"
+        ) {
+            return "Lewy"
+        }
+
+        if text.localizedCaseInsensitiveContains(
+            "praw"
+        ) {
+            return "Prawy"
+        }
+
+        return element
+            .etykieta
+            .ifEmpty(element.nazwa)
+            .ifEmpty("Bok")
+    }
+}
+
+private extension String {
+    func ifEmpty(
+        _ replacement: String
+    ) -> String {
+        trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        .isEmpty
+            ? replacement
+            : self
+    }
 }
 
 struct ZamkniecieBrylySzafki:
@@ -225,6 +521,24 @@ struct ElementTechnicznySzafki:
     var uwagi = ""
     var punktyWiercenia:
         [PunktWierceniaSzafki] = []
+
+    // v0.84: produkcyjne linie wierceń/montażu, np. oś prowadnicy
+    // szuflady Amix/GTV na bokach korpusu. Opcjonalne dla zgodności
+    // z kartami zapisanymi przed dodaniem tej warstwy.
+    var linieWierceniaV084:
+        [LiniaWierceniaSzafki]? = nil
+
+    var efektywneLinieWiercenia:
+        [LiniaWierceniaSzafki]
+    {
+        get {
+            linieWierceniaV084 ?? []
+        }
+        set {
+            linieWierceniaV084 = newValue
+        }
+    }
+
     var parametrySystemu32:
         ParametrySystemu32?
 
@@ -239,6 +553,90 @@ struct ElementTechnicznySzafki:
     var jestScietySkosemV0691: Bool {
         katCieciaGornejKrawedziStopnieV0691 != nil
         || konturSkosuV0691 != nil
+    }
+}
+
+struct NarożnikTechnicznyKartyV086:
+    Codable,
+    Hashable
+{
+    var kind:
+        CornerCabinetKindV025
+    var handedness:
+        CornerCabinetHandednessV025
+    var accessTechnology:
+        CornerCabinetAccessTechnologyV085
+    var fillerKind:
+        CornerCabinetFillerKindV086
+    var primaryWallSpanMM: Double
+    var secondaryWallSpanMM: Double
+    var depthMM: Double
+    var frontOpeningMM: Double
+    var deadZoneMM: Double
+    var frontAngleDegrees: Double
+    var fillerWidthMM: Double
+    var clearHeightMM: Double
+    var handleProjectionMM: Double
+    var requiresMotionEnvelopeCheck: Bool
+    var requiresOpeningAngleLimiter: Bool
+    var requiresManufacturerTemplate: Bool
+    var productionNotes:
+        [String]
+
+    init(
+        footprint:
+            CornerCabinetFootprintV085
+    ) {
+        kind =
+            footprint.kind
+        handedness =
+            footprint.handedness
+        accessTechnology =
+            footprint.accessTechnology
+        fillerKind =
+            footprint.fillerKind
+        primaryWallSpanMM =
+            footprint.primaryWallSpanMM
+        secondaryWallSpanMM =
+            footprint.secondaryWallSpanMM
+        depthMM =
+            footprint.depthMM
+        frontOpeningMM =
+            footprint.frontOpeningMM
+        deadZoneMM =
+            footprint.deadZoneMM
+        frontAngleDegrees =
+            footprint.frontAngleDegrees
+        fillerWidthMM =
+            footprint.fillerWidthMM
+        clearHeightMM =
+            footprint.clearHeightMM
+        handleProjectionMM =
+            footprint.handleProjectionMM
+        requiresMotionEnvelopeCheck =
+            footprint
+                .technologyRule
+                .requiresMotionEnvelopeCheck
+        requiresOpeningAngleLimiter =
+            footprint
+                .technologyRule
+                .requiresOpeningAngleLimiter
+        requiresManufacturerTemplate =
+            footprint
+                .technologyRule
+                .requiresManufacturerTemplate
+        productionNotes =
+            footprint.productionNotes
+    }
+
+    var shouldShowDeadZone:
+        Bool
+    {
+        deadZoneMM > 0
+            && (
+                kind == .blindCorner
+                || kind == .halfBlind
+            )
     }
 }
 
@@ -284,6 +682,22 @@ struct KartaTechnicznaSzafki:
     // v0.80: wnęki specjalne dla customCarcass (np. iRobot).
     // Pole opcjonalne zachowuje odczyt kart sprzed tej wersji.
     var wnekiSpecjalneV080: [WnekaSpecjalnaV080]? = nil
+
+    // v0.86: rzut i reguły produkcyjne szafek narożnych.
+    /// Po której stronie wisi front uchylny tej szafki.
+    ///
+    /// Potrzebne do **asymetrycznego** odsunięcia szuflad za frontem: front
+    /// zostaje w świetle tylko po stronie zawiasu. Do 2026-08-27 ta informacja
+    /// nie wychodziła poza edytor elewacji, więc silnik odsuwał skrzynkę po
+    /// obu stronach.
+    ///
+    /// `nil` znaczy „nieznana" — wtedy odsunięcie zostaje symetryczne.
+    /// Zgadywanie strony byłoby gorsze niż jej brak: skrzynka wyszłaby
+    /// odsunięta w złą stronę i nie zmieściłaby się przy zawiasie.
+    var stronaZawiasuV0104: FurnitureFrontOpeningV020?
+
+    var narożnikTechnicznyV086:
+        NarożnikTechnicznyKartyV086? = nil
 
     var wneki: [WnekaSpecjalnaV080] {
         wnekiSpecjalneV080 ?? []

@@ -204,6 +204,8 @@ enum ProjectReadinessEngineV078 {
             to: &issues
         )
         appendProductionIssues(
+            assemblies:
+                assemblies,
             lista: lista,
             raport: raport,
             to: &issues
@@ -591,6 +593,8 @@ enum ProjectReadinessEngineV078 {
     }
 
     private static func appendProductionIssues(
+        assemblies:
+            [StoredFurnitureAssembly],
         lista:
             ListaFormatekProjektuV070,
         raport:
@@ -657,6 +661,74 @@ enum ProjectReadinessEngineV078 {
                 "Szuflady w BOM",
                 "Generator uwzględnia \(generatedDrawers.count) formatek szuflad i frontów szufladowych w produkcji.",
                 "Zweryfikuj prowadnice, cofnięcie i fronty w karcie technicznej modułu.",
+                to: &issues
+            )
+        }
+
+        appendCornerProductionIssues(
+            assemblies: assemblies,
+            to: &issues
+        )
+    }
+
+    private static func appendCornerProductionIssues(
+        assemblies:
+            [StoredFurnitureAssembly],
+        to issues:
+            inout [ProjectReadinessIssueV078]
+    ) {
+        let assemblyIDs =
+            Set(
+                assemblies.map {
+                    $0.assembly.id
+                }
+            )
+        let definitions =
+            CornerCabinetRepositoryV025
+                .loadAll()
+                .filter {
+                    assemblyIDs.contains(
+                        $0.assemblyID
+                    )
+                }
+
+        guard !definitions.isEmpty else {
+            return
+        }
+
+        let mechanisms =
+            Set(
+                definitions
+                    .map {
+                        $0.effectiveAccessTechnology.title
+                    }
+            )
+                .sorted()
+                .joined(separator: " / ")
+
+        append(
+            "production-corner-cabinets",
+            .info,
+            .production,
+            "Narożniki technologiczne",
+            "\(definitions.count) modułów narożnych ma blendy, martwe strefy lub mechanizmy: \(mechanisms).",
+            "Sprawdź rzut narożnika, kopertę ruchu i wiercenia wg szablonu producenta w kartach technicznych.",
+            to: &issues
+        )
+
+        let invalid =
+            definitions.filter {
+                !$0.validationMessages.isEmpty
+            }
+
+        if !invalid.isEmpty {
+            append(
+                "production-corner-cabinet-rules",
+                .warning,
+                .production,
+                "Narożniki wymagają korekty",
+                "\(invalid.count) definicji narożnika ma ostrzeżenia reguł technologicznych.",
+                "Otwórz edytor narożnika i popraw światło frontu, głębokość, blendę albo zgodność mechanizmu.",
                 to: &issues
             )
         }

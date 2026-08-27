@@ -159,7 +159,15 @@ enum PaneleProdukcyjneSkosuV0691 {
     static let minimalnyWymiarPaneluMM = 2.0
     static let domyslnaGruboscPlytyMM = 18.0
     static let domyslnaGruboscPlecowMM = 3.0
-    static let szczelinaMiedzyFrontamiMM = 2.0
+    /// Fuga między frontami — z konwencji warsztatu.
+    ///
+    /// Stało tu `2.0`, czyli **luz na jedno lico wzięty za całą fugę**.
+    /// To ta sama pomyłka nazewnicza, przed którą ostrzega komentarz
+    /// w `ProductionRules`: `frontClearancePerEdge` (2 mm) to luz od krawędzi,
+    /// a `frontToFrontGap` (4 mm) to odstęp między dwoma frontami.
+    /// Panele skosu wychodziły przez to o 2 mm szersze, niż powinny.
+    static let szczelinaMiedzyFrontamiMM =
+        ProductionRules.frontToFrontGap.rawValue
 
     // MARK: - Punkt wejścia (obie wersje skosów)
 

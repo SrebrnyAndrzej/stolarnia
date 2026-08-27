@@ -69,6 +69,17 @@ struct OtworElewacjaScianyElement: Identifiable, Hashable {
 }
 
 enum MebelElewacjaScianyGeometry {
+    static func shouldMirrorElevation(
+        wall:
+            WallSegment,
+        room:
+            RoomDefinition
+    ) -> Bool {
+        signedArea(
+            room.geometry.boundary
+        ) > 0
+    }
+
     static func wallLength(
         wall: WallSegment,
         room: RoomDefinition
@@ -779,5 +790,34 @@ enum MebelElewacjaScianyGeometry {
             Int(($0.rawValue * 10).rounded())
         }
         return rounded.values.compactMap(\.first).sorted()
+    }
+
+    private static func signedArea(
+        _ contour:
+            ClosedContour2D
+    ) -> Double {
+        let points =
+            contour.segments.map(\.start)
+        guard points.count >= 3 else {
+            return 0
+        }
+
+        let shifted =
+            Array(points.dropFirst())
+            + Array(points.prefix(1))
+
+        return zip(
+            points,
+            shifted
+        )
+        .reduce(0.0) {
+            partial,
+            pair in
+
+            partial
+            + pair.0.x.rawValue * pair.1.y.rawValue
+            - pair.1.x.rawValue * pair.0.y.rawValue
+        }
+        / 2
     }
 }

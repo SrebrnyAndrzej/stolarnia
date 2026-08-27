@@ -1,5 +1,30 @@
 [
   {
+    "id": "base-shelves-200",
+    "name": "Szafka dolna z półkami 200",
+    "category": "base",
+    "construction": "shelves",
+    "anchoring": "floorStanding",
+    "widthMM": 200,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "drzwi",
+      "półki"
+    ]
+  },
+  {
     "id": "base-shelves-300",
     "name": "Szafka dolna z półkami 300",
     "category": "base",
@@ -15,7 +40,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -39,7 +65,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -63,7 +90,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -87,7 +115,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -111,7 +140,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -135,7 +165,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -159,12 +190,87 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
       "drzwi",
       "półki"
+    ]
+  },
+  {
+    "id": "base-shelves-1000",
+    "name": "Szafka dolna z półkami 1000",
+    "category": "base",
+    "construction": "shelves",
+    "anchoring": "floorStanding",
+    "widthMM": 1000,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "drzwi",
+      "półki"
+    ]
+  },
+  {
+    "id": "base-shelves-1200",
+    "name": "Szafka dolna z półkami 1200",
+    "category": "base",
+    "construction": "shelves",
+    "anchoring": "floorStanding",
+    "widthMM": 1200,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "drzwi",
+      "półki"
+    ]
+  },
+  {
+    "id": "base-drawers-200",
+    "name": "Szafka dolna z szufladami 200",
+    "category": "base",
+    "construction": "drawers",
+    "anchoring": "floorStanding",
+    "widthMM": 200,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "szuflady"
     ]
   },
   {
@@ -183,7 +289,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -206,7 +313,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -229,7 +337,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -252,7 +361,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -275,7 +385,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -298,7 +409,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -321,7 +433,56 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "szuflady"
+    ]
+  },
+  {
+    "id": "base-drawers-1000",
+    "name": "Szafka dolna z szufladami 1000",
+    "category": "base",
+    "construction": "drawers",
+    "anchoring": "floorStanding",
+    "widthMM": 1000,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "szuflady"
+    ]
+  },
+  {
+    "id": "base-drawers-1200",
+    "name": "Szafka dolna z szufladami 1200",
+    "category": "base",
+    "construction": "drawers",
+    "anchoring": "floorStanding",
+    "widthMM": 1200,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -344,7 +505,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -368,7 +530,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -392,7 +555,33 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "cargo",
+      "wysuw"
+    ]
+  },
+  {
+    "id": "base-cargo-400",
+    "name": "Cargo dolne 400",
+    "category": "base",
+    "construction": "cargo",
+    "anchoring": "floorStanding",
+    "widthMM": 400,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -416,7 +605,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -440,7 +630,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -464,7 +655,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -488,7 +680,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -512,7 +705,58 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "zlew",
+      "sortowanie"
+    ]
+  },
+  {
+    "id": "base-sink-1000",
+    "name": "Szafka pod zlew 1000",
+    "category": "appliance",
+    "construction": "sink",
+    "anchoring": "floorStanding",
+    "widthMM": 1000,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "zlew",
+      "sortowanie"
+    ]
+  },
+  {
+    "id": "base-sink-1200",
+    "name": "Szafka pod zlew 1200",
+    "category": "appliance",
+    "construction": "sink",
+    "anchoring": "floorStanding",
+    "widthMM": 1200,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -536,12 +780,94 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
       "AGD",
       "piekarnik"
+    ]
+  },
+  {
+    "id": "base-cooktop-600",
+    "name": "Szafka dolna pod płytę 600",
+    "category": "appliance",
+    "construction": "cooktop",
+    "anchoring": "floorStanding",
+    "widthMM": 600,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "AGD",
+      "płyta",
+      "płyta grzewcza",
+      "indukcja"
+    ]
+  },
+  {
+    "id": "base-cooktop-800",
+    "name": "Szafka dolna pod płytę 800",
+    "category": "appliance",
+    "construction": "cooktop",
+    "anchoring": "floorStanding",
+    "widthMM": 800,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "AGD",
+      "płyta",
+      "płyta grzewcza",
+      "indukcja"
+    ]
+  },
+  {
+    "id": "base-cooktop-900",
+    "name": "Szafka dolna pod płytę 900",
+    "category": "appliance",
+    "construction": "cooktop",
+    "anchoring": "floorStanding",
+    "widthMM": 900,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "AGD",
+      "płyta",
+      "płyta grzewcza",
+      "indukcja"
     ]
   },
   {
@@ -610,7 +936,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -634,7 +961,8 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -658,7 +986,33 @@
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
+    ],
+    "tags": [
+      "dolna",
+      "narożna",
+      "ślepa"
+    ]
+  },
+  {
+    "id": "base-blind-corner-1200",
+    "name": "Szafka narożna ślepa 1200",
+    "category": "corner",
+    "construction": "blindCorner",
+    "anchoring": "floorStanding",
+    "widthMM": 1200,
+    "heightMM": 720,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
     ],
     "tags": [
       "dolna",
@@ -690,6 +1044,59 @@
     ]
   },
   {
+    "id": "base-l-corner-1000",
+    "name": "Szafka narożna L 1000 × 1000",
+    "category": "corner",
+    "construction": "lCorner",
+    "anchoring": "floorStanding",
+    "widthMM": 1000,
+    "heightMM": 720,
+    "depthMM": 1000,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      1000
+    ],
+    "tags": [
+      "dolna",
+      "narożna",
+      "L"
+    ]
+  },
+  {
+    "id": "wall-shelves-200",
+    "name": "Szafka wisząca z półkami 200",
+    "category": "wall",
+    "construction": "shelves",
+    "anchoring": "wallMounted",
+    "widthMM": 200,
+    "heightMM": 720,
+    "depthMM": 320,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800,
+      900,
+      1000
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "drzwi",
+      "półki"
+    ]
+  },
+  {
     "id": "wall-shelves-300",
     "name": "Szafka wisząca z półkami 300",
     "category": "wall",
@@ -710,7 +1117,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -739,7 +1147,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -768,7 +1177,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -797,7 +1207,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -826,7 +1237,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -855,7 +1267,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -884,12 +1297,100 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
       "drzwi",
       "półki"
+    ]
+  },
+  {
+    "id": "wall-shelves-1000",
+    "name": "Szafka wisząca z półkami 1000",
+    "category": "wall",
+    "construction": "shelves",
+    "anchoring": "wallMounted",
+    "widthMM": 1000,
+    "heightMM": 720,
+    "depthMM": 320,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800,
+      900,
+      1000
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "drzwi",
+      "półki"
+    ]
+  },
+  {
+    "id": "wall-shelves-1200",
+    "name": "Szafka wisząca z półkami 1200",
+    "category": "wall",
+    "construction": "shelves",
+    "anchoring": "wallMounted",
+    "widthMM": 1200,
+    "heightMM": 720,
+    "depthMM": 320,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800,
+      900,
+      1000
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "drzwi",
+      "półki"
+    ]
+  },
+  {
+    "id": "wall-lift-up-400",
+    "name": "Szafka wisząca uchylna 400",
+    "category": "wall",
+    "construction": "liftUp",
+    "anchoring": "wallMounted",
+    "widthMM": 400,
+    "heightMM": 400,
+    "depthMM": 320,
+    "bottomOffsetMM": 1600,
+    "availableHeightsMM": [
+      360,
+      400,
+      500,
+      600
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "uchylna"
     ]
   },
   {
@@ -911,7 +1412,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -937,7 +1439,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -963,7 +1466,62 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "uchylna"
+    ]
+  },
+  {
+    "id": "wall-lift-up-1000",
+    "name": "Szafka wisząca uchylna 1000",
+    "category": "wall",
+    "construction": "liftUp",
+    "anchoring": "wallMounted",
+    "widthMM": 1000,
+    "heightMM": 400,
+    "depthMM": 320,
+    "bottomOffsetMM": 1600,
+    "availableHeightsMM": [
+      360,
+      400,
+      500,
+      600
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "uchylna"
+    ]
+  },
+  {
+    "id": "wall-lift-up-1200",
+    "name": "Szafka wisząca uchylna 1200",
+    "category": "wall",
+    "construction": "liftUp",
+    "anchoring": "wallMounted",
+    "widthMM": 1200,
+    "heightMM": 400,
+    "depthMM": 320,
+    "bottomOffsetMM": 1600,
+    "availableHeightsMM": [
+      360,
+      400,
+      500,
+      600
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -988,7 +1546,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -1014,7 +1573,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -1040,7 +1600,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -1073,6 +1634,57 @@
     ]
   },
   {
+    "id": "wall-corner-800",
+    "name": "Szafka wisząca narożna 800 × 800",
+    "category": "corner",
+    "construction": "wallCorner",
+    "anchoring": "wallMounted",
+    "widthMM": 800,
+    "heightMM": 720,
+    "depthMM": 800,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      600,
+      720,
+      800,
+      900
+    ],
+    "availableDepthsMM": [
+      800
+    ],
+    "tags": [
+      "wisząca",
+      "narożna"
+    ]
+  },
+  {
+    "id": "tall-pantry-300",
+    "name": "Słupek spiżarniany 300",
+    "category": "tall",
+    "construction": "shelves",
+    "anchoring": "builtIn",
+    "widthMM": 300,
+    "heightMM": 2070,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      2000,
+      2070,
+      2200,
+      2400
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "wysoka",
+      "spiżarnia",
+      "półki"
+    ]
+  },
+  {
     "id": "tall-pantry-400",
     "name": "Słupek spiżarniany 400",
     "category": "tall",
@@ -1085,11 +1697,40 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
+    ],
+    "tags": [
+      "wysoka",
+      "spiżarnia",
+      "półki"
+    ]
+  },
+  {
+    "id": "tall-pantry-450",
+    "name": "Słupek spiżarniany 450",
+    "category": "tall",
+    "construction": "shelves",
+    "anchoring": "builtIn",
+    "widthMM": 450,
+    "heightMM": 2070,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      2000,
+      2070,
+      2200,
+      2400
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
     ],
     "tags": [
       "wysoka",
@@ -1110,11 +1751,13 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "wysoka",
@@ -1135,11 +1778,40 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
+    ],
+    "tags": [
+      "wysoka",
+      "spiżarnia",
+      "półki"
+    ]
+  },
+  {
+    "id": "tall-pantry-800",
+    "name": "Słupek spiżarniany 800",
+    "category": "tall",
+    "construction": "shelves",
+    "anchoring": "builtIn",
+    "widthMM": 800,
+    "heightMM": 2070,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      2000,
+      2070,
+      2200,
+      2400
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
     ],
     "tags": [
       "wysoka",
@@ -1160,7 +1832,35 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "wysoka",
+      "AGD",
+      "lodówka"
+    ]
+  },
+  {
+    "id": "tall-refrigerator-700",
+    "name": "Słupek pod lodówkę 700",
+    "category": "appliance",
+    "construction": "refrigerator",
+    "anchoring": "builtIn",
+    "widthMM": 700,
+    "heightMM": 2070,
+    "depthMM": 600,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      2000,
+      2070,
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
@@ -1186,11 +1886,13 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "wysoka",
@@ -1211,17 +1913,45 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "wysoka",
       "AGD",
       "piekarnik",
       "mikrofalówka"
+    ]
+  },
+  {
+    "id": "tall-utility-450",
+    "name": "Słupek gospodarczy 450",
+    "category": "tall",
+    "construction": "utility",
+    "anchoring": "builtIn",
+    "widthMM": 450,
+    "heightMM": 2070,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      2000,
+      2070,
+      2200,
+      2400
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "wysoka",
+      "gospodarcza"
     ]
   },
   {
@@ -1237,15 +1967,206 @@
     "availableHeightsMM": [
       2000,
       2070,
-      2200
+      2200,
+      2400
     ],
     "availableDepthsMM": [
       560,
-      600
+      600,
+      650
     ],
     "tags": [
       "wysoka",
       "gospodarcza"
+    ]
+  },
+  {
+    "id": "tall-utility-800",
+    "name": "Słupek gospodarczy 800",
+    "category": "tall",
+    "construction": "utility",
+    "anchoring": "builtIn",
+    "widthMM": 800,
+    "heightMM": 2070,
+    "depthMM": 560,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      2000,
+      2070,
+      2200,
+      2400
+    ],
+    "availableDepthsMM": [
+      560,
+      600,
+      650
+    ],
+    "tags": [
+      "wysoka",
+      "gospodarcza"
+    ]
+  },
+  {
+    "id": "island-1200-work",
+    "name": "Wyspa robocza 1200 × 900",
+    "category": "island",
+    "construction": "island",
+    "anchoring": "freestanding",
+    "widthMM": 1200,
+    "heightMM": 900,
+    "depthMM": 900,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      860,
+      900,
+      920
+    ],
+    "availableDepthsMM": [
+      900,
+      1000,
+      1200,
+      1400
+    ],
+    "tags": [
+      "wyspa",
+      "robocza",
+      "kompaktowa"
+    ]
+  },
+  {
+    "id": "island-1600-work",
+    "name": "Wyspa robocza 1600 × 1000",
+    "category": "island",
+    "construction": "island",
+    "anchoring": "freestanding",
+    "widthMM": 1600,
+    "heightMM": 900,
+    "depthMM": 1000,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      860,
+      900,
+      920
+    ],
+    "availableDepthsMM": [
+      900,
+      1000,
+      1200,
+      1400
+    ],
+    "tags": [
+      "wyspa",
+      "robocza",
+      "szuflady"
+    ]
+  },
+  {
+    "id": "island-1800-seating",
+    "name": "Wyspa z miejscem do siedzenia 1800 × 1000",
+    "category": "island",
+    "construction": "island",
+    "anchoring": "freestanding",
+    "widthMM": 1800,
+    "heightMM": 900,
+    "depthMM": 1000,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      860,
+      900,
+      920
+    ],
+    "availableDepthsMM": [
+      900,
+      1000,
+      1200,
+      1400
+    ],
+    "tags": [
+      "wyspa",
+      "hoker",
+      "siedzenie"
+    ]
+  },
+  {
+    "id": "island-2000-work",
+    "name": "Wyspa robocza 2000 × 1400",
+    "category": "island",
+    "construction": "island",
+    "anchoring": "freestanding",
+    "widthMM": 2000,
+    "heightMM": 900,
+    "depthMM": 1400,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      860,
+      900,
+      920
+    ],
+    "availableDepthsMM": [
+      900,
+      1000,
+      1200,
+      1400
+    ],
+    "tags": [
+      "wyspa",
+      "robocza",
+      "DWG",
+      "Kamień"
+    ]
+  },
+  {
+    "id": "island-2400-family",
+    "name": "Wyspa rodzinna 2400 × 1200",
+    "category": "island",
+    "construction": "island",
+    "anchoring": "freestanding",
+    "widthMM": 2400,
+    "heightMM": 900,
+    "depthMM": 1200,
+    "bottomOffsetMM": 0,
+    "availableHeightsMM": [
+      860,
+      900,
+      920
+    ],
+    "availableDepthsMM": [
+      900,
+      1000,
+      1200,
+      1400
+    ],
+    "tags": [
+      "wyspa",
+      "rodzinna",
+      "hoker",
+      "szuflady"
+    ]
+  },
+  {
+    "id": "top-box-400",
+    "name": "Nadstawka górna 400",
+    "category": "wall",
+    "construction": "topBox",
+    "anchoring": "wallMounted",
+    "widthMM": 400,
+    "heightMM": 400,
+    "depthMM": 320,
+    "bottomOffsetMM": 2200,
+    "availableHeightsMM": [
+      360,
+      400,
+      500
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "nadstawka"
     ]
   },
   {
@@ -1266,7 +2187,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -1291,7 +2213,8 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
@@ -1316,11 +2239,91 @@
     "availableDepthsMM": [
       320,
       350,
-      370
+      370,
+      400
     ],
     "tags": [
       "wisząca",
       "nadstawka"
+    ]
+  },
+  {
+    "id": "top-box-1000",
+    "name": "Nadstawka górna 1000",
+    "category": "wall",
+    "construction": "topBox",
+    "anchoring": "wallMounted",
+    "widthMM": 1000,
+    "heightMM": 400,
+    "depthMM": 320,
+    "bottomOffsetMM": 2200,
+    "availableHeightsMM": [
+      360,
+      400,
+      500
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "nadstawka"
+    ]
+  },
+  {
+    "id": "top-box-1200",
+    "name": "Nadstawka górna 1200",
+    "category": "wall",
+    "construction": "topBox",
+    "anchoring": "wallMounted",
+    "widthMM": 1200,
+    "heightMM": 400,
+    "depthMM": 320,
+    "bottomOffsetMM": 2200,
+    "availableHeightsMM": [
+      360,
+      400,
+      500
+    ],
+    "availableDepthsMM": [
+      320,
+      350,
+      370,
+      400
+    ],
+    "tags": [
+      "wisząca",
+      "nadstawka"
+    ]
+  },
+  {
+    "id": "open-shelf-200",
+    "name": "Regał otwarty 200",
+    "category": "open",
+    "construction": "openShelf",
+    "anchoring": "wallMounted",
+    "widthMM": 200,
+    "heightMM": 720,
+    "depthMM": 300,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      250,
+      300,
+      320
+    ],
+    "tags": [
+      "wisząca",
+      "otwarta",
+      "półki"
     ]
   },
   {
@@ -1330,6 +2333,33 @@
     "construction": "openShelf",
     "anchoring": "wallMounted",
     "widthMM": 300,
+    "heightMM": 720,
+    "depthMM": 300,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      250,
+      300,
+      320
+    ],
+    "tags": [
+      "wisząca",
+      "otwarta",
+      "półki"
+    ]
+  },
+  {
+    "id": "open-shelf-400",
+    "name": "Regał otwarty 400",
+    "category": "open",
+    "construction": "openShelf",
+    "anchoring": "wallMounted",
+    "widthMM": 400,
     "heightMM": 720,
     "depthMM": 300,
     "bottomOffsetMM": 1400,
@@ -1378,12 +2408,66 @@
     ]
   },
   {
+    "id": "open-shelf-800",
+    "name": "Regał otwarty 800",
+    "category": "open",
+    "construction": "openShelf",
+    "anchoring": "wallMounted",
+    "widthMM": 800,
+    "heightMM": 720,
+    "depthMM": 300,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      250,
+      300,
+      320
+    ],
+    "tags": [
+      "wisząca",
+      "otwarta",
+      "półki"
+    ]
+  },
+  {
     "id": "open-shelf-900",
     "name": "Regał otwarty 900",
     "category": "open",
     "construction": "openShelf",
     "anchoring": "wallMounted",
     "widthMM": 900,
+    "heightMM": 720,
+    "depthMM": 300,
+    "bottomOffsetMM": 1400,
+    "availableHeightsMM": [
+      400,
+      600,
+      720,
+      800
+    ],
+    "availableDepthsMM": [
+      250,
+      300,
+      320
+    ],
+    "tags": [
+      "wisząca",
+      "otwarta",
+      "półki"
+    ]
+  },
+  {
+    "id": "open-shelf-1200",
+    "name": "Regał otwarty 1200",
+    "category": "open",
+    "construction": "openShelf",
+    "anchoring": "wallMounted",
+    "widthMM": 1200,
     "heightMM": 720,
     "depthMM": 300,
     "bottomOffsetMM": 1400,

@@ -10,6 +10,8 @@ import SwiftUI
 /// Widoki aksonometrii i 3D dostępne osobno przez podgląd 3D.
 struct KartyTechniczneModulowV028: View {
     let assemblies: [FurnitureAssembly]
+    var cornerDefinitions:
+        [CornerCabinetDefinitionV025] = []
     /// Opcjonalne wywołanie zamknięcia — jeżeli widok jest prezentowany jako sheet/fullscreen.
     var onClose: (() -> Void)? = nil
 
@@ -96,7 +98,7 @@ struct KartyTechniczneModulowV028: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.regularMaterial)
+        .stolarniaMaterial(.regularMaterial)
     }
 
     // MARK: - Dane karty per moduł
@@ -108,21 +110,65 @@ struct KartyTechniczneModulowV028: View {
         let key = assembly.id.rawValue.uuidString
 
         if let saved = KartaTechnicznaSzafkiStore.card(forModuleKey: key) {
-            return saved
+            var card =
+                saved
+            KartaTechnicznaSzafkiBuilder
+                .applyProductionDrillings(
+                    to:
+                        &card,
+                    assembly:
+                        assembly,
+                    numer:
+                        numer
+                )
+
+            return cardWithCornerRules(
+                card,
+                assembly: assembly
+            )
         }
 
-        return KartaTechnicznaSzafki(
-            draftID: UUID(),
-            numerSzafki: String(numer),
-            nazwa: assembly.name,
-            szerokoscMM: assembly.size.width.rawValue,
-            wysokoscMM: assembly.size.height.rawValue,
-            glebokoscMM: assembly.size.depth.rawValue,
-            rodzajKonstrukcji: assembly.kind.rawValue,
-            materialKorpusu: "",
-            materialFrontu: "",
-            liczbaSegmentow: 1,
-            kluczModulu: key
+        let card =
+            KartaTechnicznaSzafkiBuilder
+            .build(
+                assembly:
+                    assembly,
+                numer:
+                    numer
+            )
+
+        return cardWithCornerRules(
+            card,
+            assembly: assembly
         )
+    }
+
+    private func cardWithCornerRules(
+        _ source:
+            KartaTechnicznaSzafki,
+        assembly:
+            FurnitureAssembly
+    ) -> KartaTechnicznaSzafki {
+        guard let definition =
+            cornerDefinitions.first(
+                where: {
+                    $0.assemblyID
+                        == assembly.id
+                }
+            )
+        else {
+            return source
+        }
+
+        var card = source
+        KartaTechnicznaSzafkiBuilder
+            .applyCornerCabinetRules(
+                to: &card,
+                definition:
+                    definition,
+                assembly:
+                    assembly
+            )
+        return card
     }
 }

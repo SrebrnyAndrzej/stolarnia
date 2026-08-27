@@ -262,6 +262,7 @@ extension FurnitureComponentRole {
         case .reinforcement: return "Wzmocnienie"
         case .rail: return "Listwa"
         case .leg: return "Noga"
+        case .drawerBox: return "Element skrzynki szuflady"
         case .custom: return "Element niestandardowy"
         }
     }

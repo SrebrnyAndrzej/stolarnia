@@ -36,14 +36,26 @@ struct WycenaWariantowaView:
     @State private var vatOverrideProcent:
         Double? = nil
 
+    /// Wycena wciśnięta w warsztat zamiast pokazana jako osobne okno.
+    ///
+    /// Ekran projektu otwiera ją nadal jako `sheet` i tam potrzebny jest
+    /// własny `NavigationSplitView` z listą wariantów oraz przycisk
+    /// `Zamknij`. W warsztacie oba są przeszkodą: pasek boczny już istnieje,
+    /// a drugi pasek w środku pierwszego znaczy dwa poziomy nawigacji obok
+    /// siebie. Osadzona wersja pokazuje samą treść, a warianty przenosi
+    /// na segmentowany przełącznik nad nią.
+    let osadzona: Bool
+
     init(
         projekt:
-            ProjektWyceny? = nil
+            ProjektWyceny? = nil,
+        osadzona: Bool = false
     ) {
         _projekt = State(
             initialValue:
                 projekt
         )
+        self.osadzona = osadzona
     }
 
     private var ustawienia:
@@ -122,6 +134,108 @@ struct WycenaWariantowaView:
     }
 
     var body: some View {
+        if osadzona {
+            trescOsadzonaV0103
+        } else {
+            widokPelnoekranowy
+        }
+    }
+
+    /// Wersja dla warsztatu: przełącznik wariantów + ta sama treść co w oknie.
+    ///
+    /// Ceny wariantów stoją **wprost na przełączniku**, a nie dopiero po
+    /// wejściu w wariant — o to chodzi przy wycenie: różnicę widzi się
+    /// wtedy, gdy się porównuje, a nie wtedy, gdy się klika po kolei.
+    @ViewBuilder
+    private var trescOsadzonaV0103: some View {
+        VStack(spacing: 0) {
+            przelacznikWariantowV0103
+            Divider()
+            if let projekt,
+               let summary = selectedSummary {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header(summary, projekt: projekt)
+                        summaryCards(summary)
+                        costTable(summary)
+                        hardwareDatabaseCard
+                        offerArchiveCard
+                        customerOfferCard
+                        purchaseListCard
+                        marginsCard(summary)
+                    }
+                    .padding(22)
+                }
+            } else {
+                ContentUnavailableView(
+                    "Brak danych wyceny",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text(
+                        "Dodaj moduły do pomieszczenia — wycena liczy się z tego, co stoi na ścianach."
+                    )
+                )
+                .frame(maxHeight: .infinity)
+            }
+        }
+        .stolarniaScreenSurface(.detail)
+        .stolarniaReadableInterface()
+        .navigationTitle("Wycena")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $activeSheet) { sheet in
+            activeSheetView(sheet)
+        }
+    }
+
+    private var przelacznikWariantowV0103: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(WariantWyceny.allCases, id: \.self) { wariant in
+                    let aktywny = selectedVariant == wariant
+                    let summary = wyceny.first { $0.wariant == wariant }
+
+                    Button {
+                        selectedVariant = wariant
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(wariant.nazwa)
+                                .font(.subheadline.weight(aktywny ? .semibold : .regular))
+                            Text(
+                                summary?.cenaBrutto
+                                    .formatted(.currency(code: "PLN"))
+                                ?? "—"
+                            )
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(aktywny ? .primary : .secondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 56, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(
+                                    aktywny
+                                    ? Color.accentColor.opacity(0.16)
+                                    : Color(.tertiarySystemFill)
+                                )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(
+                                    aktywny
+                                    ? Color.accentColor.opacity(0.6)
+                                    : Color.clear,
+                                    lineWidth: 1
+                                )
+                        )
+                    }
+                    .stolarniaPressable()
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var widokPelnoekranowy: some View {
         NavigationSplitView {
             List(
                 WariantWyceny.allCases,
@@ -316,6 +430,7 @@ struct WycenaWariantowaView:
                 .disabled(
                     projekt == nil
                 )
+                .help("Zapisane wersje ofert dla tego projektu")
 
                 Button {
                     activeSheet =
@@ -331,6 +446,7 @@ struct WycenaWariantowaView:
                     selectedSummary == nil
                     || projekt == nil
                 )
+                .help("Wygeneruj ofertę PDF dla klienta")
 
                 Button {
                     activeSheet =
@@ -346,6 +462,7 @@ struct WycenaWariantowaView:
                     selectedSummary == nil
                     || projekt == nil
                 )
+                .help("Skonsolidowana lista materiałów do zakupu")
 
                 Button {
                     activeSheet = .bom
@@ -359,6 +476,7 @@ struct WycenaWariantowaView:
                     selectedSummary == nil
                     || projekt == nil
                 )
+                .help("Bill of Materials — techniczne zestawienie materiałów")
 
                 Button {
                     activeSheet = .editor
@@ -372,6 +490,7 @@ struct WycenaWariantowaView:
                 .disabled(
                     projekt == nil
                 )
+                .help("Edytuj parametry projektu — moduły, godziny, transport")
             }
         }
         .sheet(
@@ -402,7 +521,7 @@ struct WycenaWariantowaView:
                     wybranyWariant:
                         selectedVariant,
                     ustawienia:
-                        ustawienia
+                        efektywneUstawienia
                 )
             }
 
@@ -581,6 +700,8 @@ struct WycenaWariantowaView:
             )
             .font(.title3.bold())
 
+            kompletnoscCennikaV0103(summary)
+
             ForEach(
                 summary.pozycje
             ) { item in
@@ -606,6 +727,23 @@ struct WycenaWariantowaView:
                                 .foregroundStyle(
                                     .secondary
                                 )
+                        }
+
+                        // Brak ceny oznaczamy **przy pozycji**, nie w stopce.
+                        //
+                        // Wzorzec z systemów CPQ: ostrzeżenie stoi przy
+                        // niekompletnej grupie, żeby od razu było widać,
+                        // czego brakuje. Dotąd `jestBledemWyceny` było
+                        // ustawiane przez silnik i **nic go nie pokazywało** —
+                        // pozycja bez ceny wyglądała jak każda inna, tylko
+                        // z zerem, a suma wyglądała na policzoną.
+                        if item.jestBledemWyceny {
+                            Label(
+                                "Brak ceny w cenniku",
+                                systemImage: "exclamationmark.triangle.fill"
+                            )
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.orange)
                         }
                     }
 
@@ -641,6 +779,65 @@ struct WycenaWariantowaView:
                 )
             )
         )
+    }
+
+    /// Stan cennika jako **część wyniku**, nie przypis.
+    ///
+    /// Cennik jest uzupełniany na bieżąco, więc suma prawie zawsze stoi na
+    /// niepełnych danych. Liczba bez tego zastrzeżenia jest obietnicą, której
+    /// nie ma z czego dotrzymać — a to ona idzie do klienta.
+    ///
+    /// Pokazujemy **ile z ilu** pozycji ma cenę, a nie sam procent: „38 z 52"
+    /// mówi też, jak dużo pracy zostało przy uzupełnianiu.
+    @ViewBuilder
+    private func kompletnoscCennikaV0103(
+        _ summary: PodsumowanieWariantuWyceny
+    ) -> some View {
+        let wszystkie = summary.pozycje.count
+        let bezCeny = summary.pozycje.filter(\.jestBledemWyceny).count
+        let zCena = wszystkie - bezCeny
+
+        if wszystkie > 0 {
+            HStack(alignment: .top, spacing: 10) {
+                Image(
+                    systemName: bezCeny == 0
+                    ? "checkmark.seal.fill"
+                    : "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(bezCeny == 0 ? Color.green : Color.orange)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(
+                        bezCeny == 0
+                        ? "Cennik kompletny — wszystkie \(wszystkie) pozycji ma cenę"
+                        : "\(zCena) z \(wszystkie) pozycji ma cenę"
+                    )
+                    .font(.subheadline.weight(.semibold))
+
+                    if bezCeny > 0 {
+                        Text(
+                            "Suma jest szacunkiem. Pozycje bez ceny są oznaczone "
+                            + "na liście poniżej — uzupełnij je w bazie materiałów "
+                            + "i okuć, a wycena przeliczy się sama."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(
+                        (bezCeny == 0 ? Color.green : Color.orange)
+                            .opacity(0.10)
+                    )
+            )
+        }
     }
 
     private var hardwareDatabaseCard:

@@ -29,6 +29,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
     let globalneMaterialy:
         GlobalneMaterialyPomieszczenia
     let room: RoomDefinition?
+    let cornerDefinitions:
+        [CornerCabinetDefinitionV025]
     /// Lista materiałów z BazaMaterialow — używana do
     /// wczytywania kolorów per-moduł (korpus / front).
     let materialy: [MaterialStolarski]
@@ -39,6 +41,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
         globalneMaterialy:
             GlobalneMaterialyPomieszczenia,
         room: RoomDefinition? = nil,
+        cornerDefinitions:
+            [CornerCabinetDefinitionV025] = [],
         materialy: [MaterialStolarski] = []
     ) {
         self.assemblies = assemblies
@@ -46,6 +50,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
         self.globalneMaterialy =
             globalneMaterialy
         self.room = room
+        self.cornerDefinitions =
+            cornerDefinitions
         self.materialy = materialy
     }
 
@@ -67,6 +73,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             globalneMaterialy:
                 globalneMaterialy,
             room: room,
+            cornerDefinitions:
+                cornerDefinitions,
             materialy: materialy
         )
         return view
@@ -82,6 +90,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 globalneMaterialy,
             assemblies: assemblies,
             room: room,
+            cornerDefinitions:
+                cornerDefinitions,
             materialy: materialy
         )
     }
@@ -109,10 +119,14 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             [FurnitureAssembly] = []
         private var currentRoom:
             RoomDefinition?
-        /// Kolory aktualnie budowanego modułu (korpus / front).
+        private var currentCornerDefinitions:
+            [CornerCabinetDefinitionV025] = []
+        /// Profile aktualnie budowanego modułu (korpus / front).
         /// Ustawiane przez prepareAssemblyColors przed każdym montażem.
-        private var currentAssemblyKorpusColor: UIColor?
-        private var currentAssemblyFrontColor: UIColor?
+        private var currentAssemblyKorpusProfile:
+            RenderMaterialProfile?
+        private var currentAssemblyFrontProfile:
+            RenderMaterialProfile?
 
         private var cameraDistance: Float = 3.2
         private var cameraTarget = SIMD3<Float>.zero
@@ -122,6 +136,7 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
         private var meshCache: [MeshKey: MeshResource] = [:]
         /// Klucz: "<assemblyID>_<role.rawValue>" — każdy moduł ma własną paletę.
         private var materialCache: [String: SimpleMaterial] = [:]
+        private var detailMaterialCache: [String: SimpleMaterial] = [:]
         private var currentAssemblyIDString: String = ""
 
         private var lastCameraUpdateTime: CFTimeInterval = 0
@@ -146,6 +161,28 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             let open: Transform
         }
 
+        private enum MaterialPattern {
+            case plain
+            case wood
+            case stone
+            case concrete
+            case fabric
+        }
+
+        private enum MaterialFinish {
+            case matte
+            case satin
+            case gloss
+        }
+
+        private struct RenderMaterialProfile {
+            let color: UIColor
+            let signature: String
+            let pattern: MaterialPattern
+            let finish: MaterialFinish
+            let directional: Bool
+        }
+
         @MainActor
         func configure(
             view: ARView,
@@ -153,6 +190,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             globalneMaterialy:
                 GlobalneMaterialyPomieszczenia,
             room: RoomDefinition?,
+            cornerDefinitions:
+                [CornerCabinetDefinitionV025],
             materialy: [MaterialStolarski]
         ) {
             self.view = view
@@ -161,6 +200,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 globalneMaterialy
             self.currentMaterialy = materialy
             self.currentRoom = room
+            self.currentCornerDefinitions =
+                cornerDefinitions
 
             root.addChild(modelRoot)
             view.scene.addAnchor(
@@ -190,6 +231,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 GlobalneMaterialyPomieszczenia,
             assemblies: [FurnitureAssembly],
             room: RoomDefinition?,
+            cornerDefinitions:
+                [CornerCabinetDefinitionV025],
             materialy: [MaterialStolarski]
         ) {
             let materialyIDs = materialy.map(\.id)
@@ -197,6 +240,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             let geometryChanged =
                 assemblies != lastAssemblies
                 || room != currentRoom
+                || cornerDefinitions
+                    != currentCornerDefinitions
                 || globalneMaterialy
                     != currentGlobalneMaterialy
                 || materialyIDs != currentMaterialyIDs
@@ -207,6 +252,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 currentGlobalneMaterialy =
                     globalneMaterialy
                 currentMaterialy = materialy
+                currentCornerDefinitions =
+                    cornerDefinitions
 
                 buildScene(
                     from: assemblies
@@ -310,9 +357,10 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             explodedMotions.removeAll()
             meshCache.removeAll(keepingCapacity: true)
             materialCache.removeAll(keepingCapacity: true)
+            detailMaterialCache.removeAll(keepingCapacity: true)
             currentAssemblyIDString = ""
-            currentAssemblyKorpusColor = nil
-            currentAssemblyFrontColor = nil
+            currentAssemblyKorpusProfile = nil
+            currentAssemblyFrontProfile = nil
 
             let sorted = assemblies.sorted {
                 ($0.placement?.offsetAlongWall.rawValue ?? 0)
@@ -328,20 +376,12 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 let assemblyRoot = Entity()
                 assemblyRoot.name = assembly.name
 
-                let x = meters(
-                    assembly.placement?.offsetAlongWall
-                        ?? .zero
-                )
-                let y = meters(
-                    assembly.placement?.bottomOffset
-                        ?? .zero
-                )
-                let z = -meters(
-                    assembly.placement?.offsetFromWall
-                        ?? .zero
-                )
-
-                assemblyRoot.position = SIMD3<Float>(x, y, z)
+                let placementTransform =
+                    transform3D(for: assembly)
+                assemblyRoot.position =
+                    placementTransform.position
+                assemblyRoot.orientation =
+                    placementTransform.rotation
                 modelRoot.addChild(assemblyRoot)
 
                 let baseComponents =
@@ -433,6 +473,10 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                     to: assemblyRoot,
                     assembly: assembly
                 )
+                addCornerTechnicalOverlaysIfNeeded(
+                    to: assemblyRoot,
+                    assembly: assembly
+                )
 
                 let closed = assemblyRoot.transform
                 var exploded = closed
@@ -449,6 +493,219 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                     )
                 )
             }
+        }
+
+        private struct AssemblyTransform3D {
+            var position: SIMD3<Float>
+            var rotation: simd_quatf
+        }
+
+        private func transform3D(
+            for assembly: FurnitureAssembly
+        ) -> AssemblyTransform3D {
+            guard let placement = assembly.placement else {
+                return AssemblyTransform3D(
+                    position: .zero,
+                    rotation: simd_quatf()
+                )
+            }
+
+            if placement.anchoringMode == .freestanding
+                || placement.wallID == nil {
+                return AssemblyTransform3D(
+                    position: SIMD3<Float>(
+                        meters(placement.offsetAlongWall),
+                        meters(placement.bottomOffset),
+                        -meters(placement.offsetFromWall)
+                    ),
+                    rotation:
+                        rotationForPlanAngle(
+                            placement.rotationDegrees
+                        )
+                )
+            }
+
+            guard
+                let room = currentRoom,
+                placement.roomID == room.id,
+                let wallID = placement.wallID,
+                let segment = room.geometry.geometry(of: wallID),
+                case .line(let line) = segment
+            else {
+                return AssemblyTransform3D(
+                    position: SIMD3<Float>(
+                        meters(placement.offsetAlongWall),
+                        meters(placement.bottomOffset),
+                        -meters(placement.offsetFromWall)
+                    ),
+                    rotation: simd_quatf()
+                )
+            }
+
+            let startX = line.start.x.rawValue
+            let startY = line.start.y.rawValue
+            let endX = line.end.x.rawValue
+            let endY = line.end.y.rawValue
+            let wallDX = endX - startX
+            let wallDY = endY - startY
+            let wallLength = hypot(wallDX, wallDY)
+
+            guard wallLength > 0 else {
+                return AssemblyTransform3D(
+                    position: .zero,
+                    rotation: simd_quatf()
+                )
+            }
+
+            let direction = (
+                x: wallDX / wallLength,
+                y: wallDY / wallLength
+            )
+            let backStart = (
+                x: startX
+                    + direction.x
+                    * placement.offsetAlongWall.rawValue,
+                y: startY
+                    + direction.y
+                    * placement.offsetAlongWall.rawValue
+            )
+            let backEnd = (
+                x: backStart.x
+                    + direction.x
+                    * assembly.size.width.rawValue,
+                y: backStart.y
+                    + direction.y
+                    * assembly.size.width.rawValue
+            )
+            let center = roomCentroid(room)
+            let spanMid = (
+                x: (backStart.x + backEnd.x) / 2,
+                y: (backStart.y + backEnd.y) / 2
+            )
+            let firstNormal = (
+                x: -direction.y,
+                y: direction.x
+            )
+            let secondNormal = (
+                x: direction.y,
+                y: -direction.x
+            )
+            let towardCenter = (
+                x: center.x - spanMid.x,
+                y: center.y - spanMid.y
+            )
+            let firstDot =
+                firstNormal.x * towardCenter.x
+                + firstNormal.y * towardCenter.y
+            let inward =
+                firstDot >= 0
+                ? firstNormal
+                : secondNormal
+
+            // Lokalny model ma szerokość po osi X, a front na płaszczyźnie Z=0.
+            // Dobieramy styczną tak, żeby lokalne +Z wskazywało do wnętrza pokoju.
+            let tangent = (
+                x: inward.y,
+                y: -inward.x
+            )
+            let usesWallDirection =
+                tangent.x * direction.x
+                + tangent.y * direction.y
+                >= 0
+            let frontStart = (
+                x: backStart.x
+                    + inward.x
+                    * (
+                        placement.offsetFromWall.rawValue
+                        + assembly.size.depth.rawValue
+                    ),
+                y: backStart.y
+                    + inward.y
+                    * (
+                        placement.offsetFromWall.rawValue
+                        + assembly.size.depth.rawValue
+                    )
+            )
+            let frontEnd = (
+                x: backEnd.x
+                    + inward.x
+                    * (
+                        placement.offsetFromWall.rawValue
+                        + assembly.size.depth.rawValue
+                    ),
+                y: backEnd.y
+                    + inward.y
+                    * (
+                        placement.offsetFromWall.rawValue
+                        + assembly.size.depth.rawValue
+                    )
+            )
+            let localOrigin =
+                usesWallDirection
+                ? frontStart
+                : frontEnd
+            let origin = (
+                x: localOrigin.x,
+                y: localOrigin.y
+            )
+
+            return AssemblyTransform3D(
+                position: SIMD3<Float>(
+                    Float(origin.x / 1_000),
+                    meters(placement.bottomOffset),
+                    Float(origin.y / 1_000)
+                ),
+                rotation:
+                    rotationForPlanVector(
+                        x: tangent.x,
+                        y: tangent.y
+                    )
+            )
+        }
+
+        private func roomCentroid(
+            _ room: RoomDefinition
+        ) -> (x: Double, y: Double) {
+            let points =
+                room.geometry.boundary.segments.flatMap {
+                    Plan2DGeometryAdapter.sampledPoints(for: $0)
+                }
+            guard !points.isEmpty else {
+                return (0, 0)
+            }
+
+            let sumX = points.reduce(0) {
+                $0 + $1.x.rawValue
+            }
+            let sumY = points.reduce(0) {
+                $0 + $1.y.rawValue
+            }
+            return (
+                sumX / Double(points.count),
+                sumY / Double(points.count)
+            )
+        }
+
+        private func rotationForPlanAngle(
+            _ degrees: Double
+        ) -> simd_quatf {
+            rotationForPlanVector(
+                x: cos(degrees * .pi / 180),
+                y: sin(degrees * .pi / 180)
+            )
+        }
+
+        private func rotationForPlanVector(
+            x: Double,
+            y: Double
+        ) -> simd_quatf {
+            let angle = Float(
+                atan2(-y, x)
+            )
+            return simd_quatf(
+                angle: angle,
+                axis: SIMD3<Float>(0, 1, 0)
+            )
         }
 
         @MainActor
@@ -508,6 +765,11 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 materials: [material]
             )
             model.name = component.code
+            addSurfaceDetails(
+                to: model,
+                component: component,
+                size: safeSize
+            )
 
             let center = inferredCenter(
                 component: component,
@@ -675,6 +937,404 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
                 model.position = center
                 assemblyRoot.addChild(model)
             }
+        }
+
+        @MainActor
+        private func addSurfaceDetails(
+            to model: ModelEntity,
+            component: FurnitureComponent,
+            size: SIMD3<Float>
+        ) {
+            guard component.role != .rail,
+                  component.role != .leg,
+                  size.x > 0.035,
+                  size.y > 0.035,
+                  size.z > 0.002
+            else {
+                return
+            }
+
+            let frontRoles: Set<FurnitureComponentRole> = [
+                .front,
+                .filler,
+                .maskingPanel,
+                .decorativeSide
+            ]
+            let isFrontSurface =
+                frontRoles.contains(component.role)
+            let profile =
+                renderProfile(for: component.role)
+
+            addEdgeBanding(
+                to: model,
+                size: size,
+                role: component.role,
+                prominent: isFrontSurface
+            )
+
+            if isFrontSurface
+                || profile.pattern != .plain
+                || component.role == .worktop {
+                addDecorPattern(
+                    to: model,
+                    size: size,
+                    profile: profile,
+                    prominent: isFrontSurface
+                )
+            }
+        }
+
+        @MainActor
+        private func addEdgeBanding(
+            to model: ModelEntity,
+            size: SIMD3<Float>,
+            role: FurnitureComponentRole,
+            prominent: Bool
+        ) {
+            let band = prominent ? Float(0.006) : Float(0.0035)
+            let depth = Float(0.0016)
+            let z =
+                size.z / 2
+                + depth / 2
+                + 0.0009
+            let color = edgeColor(
+                for: role,
+                prominent: prominent
+            )
+
+            addDetailBox(
+                to: model,
+                size: SIMD3<Float>(
+                    size.x,
+                    band,
+                    depth
+                ),
+                position: SIMD3<Float>(
+                    0,
+                    size.y / 2 - band / 2,
+                    z
+                ),
+                color: color,
+                cacheSuffix: "edge-top-\(role.rawValue)"
+            )
+
+            addDetailBox(
+                to: model,
+                size: SIMD3<Float>(
+                    size.x,
+                    band,
+                    depth
+                ),
+                position: SIMD3<Float>(
+                    0,
+                    -size.y / 2 + band / 2,
+                    z
+                ),
+                color: color,
+                cacheSuffix: "edge-bottom-\(role.rawValue)"
+            )
+
+            addDetailBox(
+                to: model,
+                size: SIMD3<Float>(
+                    band,
+                    size.y,
+                    depth
+                ),
+                position: SIMD3<Float>(
+                    -size.x / 2 + band / 2,
+                    0,
+                    z
+                ),
+                color: color,
+                cacheSuffix: "edge-left-\(role.rawValue)"
+            )
+
+            addDetailBox(
+                to: model,
+                size: SIMD3<Float>(
+                    band,
+                    size.y,
+                    depth
+                ),
+                position: SIMD3<Float>(
+                    size.x / 2 - band / 2,
+                    0,
+                    z
+                ),
+                color: color,
+                cacheSuffix: "edge-right-\(role.rawValue)"
+            )
+        }
+
+        @MainActor
+        private func addDecorPattern(
+            to model: ModelEntity,
+            size: SIMD3<Float>,
+            profile: RenderMaterialProfile,
+            prominent: Bool
+        ) {
+            let depth = Float(0.0012)
+            let z =
+                size.z / 2
+                + depth / 2
+                + 0.0018
+            let primary =
+                mixedColor(
+                    profile.color,
+                    with:
+                        isDark(profile.color)
+                        ? .white
+                        : .black,
+                    amount:
+                        prominent ? 0.16 : 0.10
+                )
+                .withAlphaComponent(0.92)
+            let secondary =
+                mixedColor(
+                    profile.color,
+                    with:
+                        isDark(profile.color)
+                        ? .white
+                        : .black,
+                    amount:
+                        prominent ? 0.08 : 0.05
+                )
+                .withAlphaComponent(0.86)
+
+            switch profile.pattern {
+            case .wood:
+                addLinearGrain(
+                    to: model,
+                    size: size,
+                    z: z,
+                    colorA: primary,
+                    colorB: secondary,
+                    vertical:
+                        profile.directional
+                        || size.y >= size.x
+                )
+
+            case .stone:
+                addStoneVeins(
+                    to: model,
+                    size: size,
+                    z: z,
+                    color: primary
+                )
+
+            case .concrete,
+                 .fabric:
+                addLinearGrain(
+                    to: model,
+                    size: size,
+                    z: z,
+                    colorA: secondary,
+                    colorB: primary,
+                    vertical: false
+                )
+
+            case .plain:
+                guard prominent else {
+                    return
+                }
+                addSubtleSheen(
+                    to: model,
+                    size: size,
+                    z: z,
+                    color:
+                        mixedColor(
+                            profile.color,
+                            with: .white,
+                            amount: isDark(profile.color) ? 0.20 : 0.10
+                        )
+                        .withAlphaComponent(0.72)
+                )
+            }
+        }
+
+        @MainActor
+        private func addLinearGrain(
+            to model: ModelEntity,
+            size: SIMD3<Float>,
+            z: Float,
+            colorA: UIColor,
+            colorB: UIColor,
+            vertical: Bool
+        ) {
+            let reference = vertical ? size.x : size.y
+            let count = max(
+                3,
+                min(
+                    9,
+                    Int((reference / 0.11).rounded())
+                )
+            )
+
+            for index in 0..<count {
+                let fraction =
+                    Float(index + 1)
+                    / Float(count + 1)
+                let wobble =
+                    sin(Float(index) * 1.37)
+                    * 0.006
+                let thickness =
+                    Float(index.isMultiple(of: 3) ? 0.0035 : 0.002)
+                let color =
+                    index.isMultiple(of: 2)
+                    ? colorA
+                    : colorB
+
+                if vertical {
+                    addDetailBox(
+                        to: model,
+                        size: SIMD3<Float>(
+                            thickness,
+                            size.y * 0.88,
+                            0.0011
+                        ),
+                        position: SIMD3<Float>(
+                            -size.x / 2
+                            + size.x * fraction
+                            + wobble,
+                            0,
+                            z
+                        ),
+                        color: color,
+                        cacheSuffix: "grain-v-\(index)"
+                    )
+                } else {
+                    addDetailBox(
+                        to: model,
+                        size: SIMD3<Float>(
+                            size.x * 0.88,
+                            thickness,
+                            0.0011
+                        ),
+                        position: SIMD3<Float>(
+                            0,
+                            -size.y / 2
+                            + size.y * fraction
+                            + wobble,
+                            z
+                        ),
+                        color: color,
+                        cacheSuffix: "grain-h-\(index)"
+                    )
+                }
+            }
+        }
+
+        @MainActor
+        private func addStoneVeins(
+            to model: ModelEntity,
+            size: SIMD3<Float>,
+            z: Float,
+            color: UIColor
+        ) {
+            let count = max(
+                2,
+                min(5, Int((size.x / 0.22).rounded()))
+            )
+
+            for index in 0..<count {
+                let fraction =
+                    Float(index + 1)
+                    / Float(count + 1)
+                let width =
+                    size.x * 0.58
+                let thickness =
+                    Float(0.002)
+                let vein = ModelEntity(
+                    mesh:
+                        cachedMesh(
+                            for: SIMD3<Float>(
+                                width,
+                                thickness,
+                                0.0012
+                            )
+                        ),
+                    materials: [
+                        cachedDetailMaterial(
+                            color: color,
+                            suffix:
+                                "stone-\(index)"
+                        )
+                    ]
+                )
+                vein.position =
+                    SIMD3<Float>(
+                        -size.x * 0.18
+                        + size.x * fraction * 0.35,
+                        -size.y / 2
+                        + size.y * fraction,
+                        z
+                    )
+                vein.orientation =
+                    simd_quatf(
+                        angle:
+                            (index.isMultiple(of: 2)
+                             ? 0.16
+                             : -0.13),
+                        axis:
+                            SIMD3<Float>(
+                                0,
+                                0,
+                                1
+                            )
+                    )
+                model.addChild(vein)
+            }
+        }
+
+        @MainActor
+        private func addSubtleSheen(
+            to model: ModelEntity,
+            size: SIMD3<Float>,
+            z: Float,
+            color: UIColor
+        ) {
+            addDetailBox(
+                to: model,
+                size: SIMD3<Float>(
+                    max(size.x * 0.18, 0.012),
+                    size.y * 0.84,
+                    0.001
+                ),
+                position: SIMD3<Float>(
+                    -size.x * 0.23,
+                    0,
+                    z
+                ),
+                color: color,
+                cacheSuffix: "front-sheen"
+            )
+        }
+
+        @MainActor
+        private func addDetailBox(
+            to model: ModelEntity,
+            size: SIMD3<Float>,
+            position: SIMD3<Float>,
+            color: UIColor,
+            cacheSuffix: String
+        ) {
+            let entity = ModelEntity(
+                mesh: cachedMesh(
+                    for: maxVector(
+                        size,
+                        minimum: 0.001
+                    )
+                ),
+                materials: [
+                    cachedDetailMaterial(
+                        color: color,
+                        suffix: cacheSuffix
+                    )
+                ]
+            )
+            entity.position = position
+            model.addChild(entity)
         }
 
 
@@ -1652,6 +2312,194 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
         }
 
         @MainActor
+        private func addCornerTechnicalOverlaysIfNeeded(
+            to assemblyRoot: Entity,
+            assembly: FurnitureAssembly
+        ) {
+            guard let definition =
+                currentCornerDefinitions.first(
+                    where: {
+                        $0.assemblyID == assembly.id
+                    }
+                )
+            else {
+                return
+            }
+
+            let width =
+                max(
+                    meters(assembly.size.width),
+                    0.01
+                )
+            let height =
+                max(
+                    meters(assembly.size.height),
+                    0.01
+                )
+            let depth =
+                max(
+                    meters(assembly.size.depth),
+                    0.01
+                )
+            let fillerWidth =
+                max(
+                    Float(
+                        definition
+                            .effectiveFillerWidthMM
+                        / 1_000
+                    ),
+                    0.012
+                )
+            let handedness =
+                definition.handedness
+
+            if definition.effectiveFillerKind != .none {
+                let stripSize =
+                    SIMD3<Float>(
+                        min(
+                            fillerWidth,
+                            width * 0.32
+                        ),
+                        height * 0.96,
+                        0.012
+                    )
+                let strip =
+                    cornerOverlayBox(
+                        name:
+                            "Blenda narożna",
+                        size:
+                            stripSize,
+                        color:
+                            UIColor.systemYellow
+                                .withAlphaComponent(0.38)
+                    )
+                strip.position =
+                    SIMD3<Float>(
+                        handedness == .left
+                        ? stripSize.x / 2
+                        : width - stripSize.x / 2,
+                        height / 2,
+                        -depth - 0.008
+                    )
+                assemblyRoot.addChild(strip)
+                accessoryEntities.append(strip)
+            }
+
+            if definition.kind == .blindCorner
+                || definition.kind == .halfBlind {
+                let deadWidth =
+                    min(
+                        max(
+                            Float(
+                                definition.deadSpaceMM
+                                / 1_000
+                            ),
+                            0.06
+                        ),
+                        width * 0.55
+                    )
+                let deadSize =
+                    SIMD3<Float>(
+                        deadWidth,
+                        height * 0.84,
+                        depth * 0.88
+                    )
+                let dead =
+                    cornerOverlayBox(
+                        name:
+                            "Martwa strefa narożnika",
+                        size:
+                            deadSize,
+                        color:
+                            UIColor.systemGray
+                                .withAlphaComponent(0.24)
+                    )
+                dead.position =
+                    SIMD3<Float>(
+                        handedness == .left
+                        ? width - deadWidth / 2
+                        : deadWidth / 2,
+                        height * 0.48,
+                        -depth * 0.48
+                    )
+                assemblyRoot.addChild(dead)
+                accessoryEntities.append(dead)
+            }
+
+            let rule =
+                CornerCabinetRuleBookV086
+                    .technologyRule(
+                        for:
+                            definition
+                                .effectiveAccessTechnology
+                    )
+
+            if rule.requiresMotionEnvelopeCheck {
+                let envelopeWidth =
+                    min(
+                        max(
+                            Float(
+                                definition.frontWidthMM
+                                / 1_000
+                            ),
+                            width * 0.35
+                        ),
+                        width * 0.88
+                    )
+                let envelope =
+                    cornerOverlayBox(
+                        name:
+                            "Koperta ruchu \(definition.effectiveAccessTechnology.title)",
+                        size:
+                            SIMD3<Float>(
+                                envelopeWidth,
+                                0.018,
+                                depth * 0.78
+                            ),
+                        color:
+                            UIColor.systemBlue
+                                .withAlphaComponent(0.28)
+                    )
+                envelope.position =
+                    SIMD3<Float>(
+                        width / 2,
+                        height * 0.56,
+                        -depth * 0.50
+                    )
+                assemblyRoot.addChild(envelope)
+                accessoryEntities.append(envelope)
+            }
+        }
+
+        @MainActor
+        private func cornerOverlayBox(
+            name: String,
+            size: SIMD3<Float>,
+            color: UIColor
+        ) -> ModelEntity {
+            let model =
+                ModelEntity(
+                    mesh:
+                        cachedMesh(
+                            for:
+                                maxVector(
+                                    size,
+                                    minimum: 0.004
+                                )
+                        ),
+                    materials: [
+                        cachedDetailMaterial(
+                            color: color,
+                            suffix:
+                                "corner-\(name)"
+                        )
+                    ]
+                )
+            model.name = name
+            return model
+        }
+
+        @MainActor
         private func animate(
             _ motions: [Motion],
             open: Bool
@@ -1981,8 +2829,8 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             return mesh
         }
 
-        /// Ustawia currentAssemblyKorpusColor / currentAssemblyFrontColor na podstawie
-        /// KartaTechnicznaSzafki i BazaMaterialow. Musi być wywołane przed budową każdego modułu.
+        /// Ustawia profile korpusu/frontu na podstawie KartaTechnicznaSzafki
+        /// i BazaMaterialow. Musi być wywołane przed budową każdego modułu.
         private func prepareAssemblyColors(
             for assembly: FurnitureAssembly
         ) {
@@ -1993,30 +2841,37 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
 
             // Korpus
             if let korpusID = card?.materialKorpusuID,
-               let mat = currentMaterialy.first(where: { $0.id == korpusID }),
-               let col = UIColor(stolarniaHEX: mat.kolorHEX)
+               let mat = currentMaterialy.first(where: { $0.id == korpusID })
             {
-                currentAssemblyKorpusColor = col
+                currentAssemblyKorpusProfile =
+                    renderProfile(from: mat)
             } else {
-                currentAssemblyKorpusColor = nil  // fallback do globalnych
+                currentAssemblyKorpusProfile = nil
             }
 
             // Front
             if let frontID = card?.materialFrontuID,
-               let mat = currentMaterialy.first(where: { $0.id == frontID }),
-               let col = UIColor(stolarniaHEX: mat.kolorHEX)
+               let mat = currentMaterialy.first(where: { $0.id == frontID })
             {
-                currentAssemblyFrontColor = col
+                currentAssemblyFrontProfile =
+                    renderProfile(from: mat)
             } else {
-                currentAssemblyFrontColor = nil  // fallback do globalnych
+                currentAssemblyFrontProfile = nil
             }
         }
 
         private func cachedMaterial(
             for role: FurnitureComponentRole
         ) -> SimpleMaterial {
+            let profile =
+                renderProfile(for: role)
             let cacheKey =
-                "\(currentAssemblyIDString)_\(role.rawValue)"
+                [
+                    currentAssemblyIDString,
+                    role.rawValue,
+                    profile.signature
+                ]
+                .joined(separator: "_")
             if let cached = materialCache[cacheKey] {
                 return cached
             }
@@ -2032,7 +2887,13 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             } else {
                 material = SimpleMaterial(
                     color: color(for: role),
-                    roughness: 0.78,
+                    roughness:
+                        .float(
+                            roughness(
+                                for: role,
+                                profile: profile
+                            )
+                        ),
                     isMetallic: false
                 )
             }
@@ -2041,59 +2902,424 @@ struct Furniture3DSceneViewV017: UIViewRepresentable {
             return material
         }
 
+        private func cachedDetailMaterial(
+            color: UIColor,
+            suffix: String
+        ) -> SimpleMaterial {
+            let key =
+                [
+                    currentAssemblyIDString,
+                    suffix,
+                    colorSignature(color)
+                ]
+                .joined(separator: "_")
+
+            if let cached = detailMaterialCache[key] {
+                return cached
+            }
+
+            let material = SimpleMaterial(
+                color: color,
+                roughness: 0.86,
+                isMetallic: false
+            )
+            detailMaterialCache[key] = material
+            return material
+        }
+
         private func color(
             for role: FurnitureComponentRole
         ) -> UIColor {
-            let globalKorpus =
-                UIColor(
-                    stolarniaHEX:
-                        currentGlobalneMaterialy
-                            .korpus
-                            .kolorHEX
-                )
-                ?? UIColor(
-                    red: 0.76,
-                    green: 0.63,
-                    blue: 0.49,
-                    alpha: 1
-                )
-            let globalFront =
-                UIColor(
-                    stolarniaHEX:
-                        currentGlobalneMaterialy
-                            .front
-                            .kolorHEX
-                )
-                ?? UIColor(
-                    red: 0.93,
-                    green: 0.92,
-                    blue: 0.94,
-                    alpha: 1
-                )
-
-            // Per-moduł kolory z BazaMaterialow (jeśli przypisane)
-            let carcass =
-                currentAssemblyKorpusColor
-                ?? globalKorpus
-            let front =
-                currentAssemblyFrontColor
-                ?? globalFront
+            let base =
+                renderProfile(for: role)
+                    .color
 
             switch role {
-            case .front,
-                 .filler,
-                 .maskingPanel,
-                 .decorativeSide:
-                return front
             case .back:
-                return carcass.withAlphaComponent(
-                    0.72
+                return mixedColor(
+                    base,
+                    with: .black,
+                    amount: 0.12
+                )
+                .withAlphaComponent(0.86)
+            case .plinth:
+                return mixedColor(
+                    base,
+                    with: .black,
+                    amount: 0.22
+                )
+            case .worktop:
+                return mixedColor(
+                    base,
+                    with:
+                        isDark(base)
+                        ? .white
+                        : .black,
+                    amount: 0.08
                 )
             case .rail:
                 return .darkGray
             default:
-                return carcass
+                return base
             }
+        }
+
+        private func renderProfile(
+            for role: FurnitureComponentRole
+        ) -> RenderMaterialProfile {
+            let frontRoles: Set<FurnitureComponentRole> = [
+                .front,
+                .filler,
+                .maskingPanel,
+                .decorativeSide
+            ]
+
+            if frontRoles.contains(role) {
+                return currentAssemblyFrontProfile
+                    ?? renderProfile(
+                        from:
+                            currentGlobalneMaterialy
+                                .front,
+                        fallbackColor:
+                            UIColor(
+                                red: 0.93,
+                                green: 0.92,
+                                blue: 0.94,
+                                alpha: 1
+                            )
+                    )
+            }
+
+            return currentAssemblyKorpusProfile
+                ?? renderProfile(
+                    from:
+                        currentGlobalneMaterialy
+                            .korpus,
+                    fallbackColor:
+                        UIColor(
+                            red: 0.76,
+                            green: 0.63,
+                            blue: 0.49,
+                            alpha: 1
+                        )
+                )
+        }
+
+        private func renderProfile(
+            from material: MaterialStolarski
+        ) -> RenderMaterialProfile {
+            let text = materialSearchText(
+                [
+                    material.nazwa,
+                    material.dekor,
+                    material.producent,
+                    material.struktura,
+                    material.grupaDekoru,
+                    material.kodProducenta,
+                    material.kod
+                ]
+            )
+            let color =
+                UIColor(stolarniaHEX: material.kolorHEX)
+                ?? .systemGray
+
+            // Wygląd bierzemy z **kodu struktury**, a nie z nazwy dekoru.
+            // Nazwy producentów to często same kody (`K358`, `H1176`) albo słowa
+            // bez znaczenia dla powierzchni („Silk Flow"), więc dopasowywanie
+            // napisów gubiło większość katalogu. Kod struktury (ST9, ST37, PW…)
+            // jest przy dekorze zawsze i mówi wprost o połysku, wytłoczeniu
+            // i porze zsynchronizowanym.
+            let powierzchnia = DecorSurfaceCatalog.resolve(
+                structureCode: material.struktura,
+                group: material.grupaDekoru
+            )
+            let znanaStruktura = !powierzchnia.structureCode.isEmpty
+
+            return RenderMaterialProfile(
+                color: color,
+                signature:
+                    [
+                        material.id.uuidString,
+                        material.kolorHEX,
+                        material.dekor,
+                        material.struktura ?? "",
+                        powierzchnia.structureCode,
+                        material.kierunekDekoru ? "D" : "N"
+                    ]
+                    .joined(separator: "|"),
+                pattern: znanaStruktura
+                    ? pattern(dla: powierzchnia.family)
+                    : materialPattern(from: text),
+                finish: znanaStruktura
+                    ? finish(dlaPolysku: powierzchnia.glossLevel)
+                    : materialFinish(from: text),
+                directional:
+                    material.kierunekDekoru
+                    || powierzchnia.family == .wood
+                    || text.contains("usloj")
+                    || text.contains("slój")
+                    || text.contains("sloj")
+            )
+        }
+
+        private func pattern(
+            dla rodzina: DecorSurface.Family
+        ) -> MaterialPattern {
+            switch rodzina {
+            case .uni:      return .plain
+            case .wood:     return .wood
+            case .stone:    return .stone
+            case .concrete: return .concrete
+            case .fabric:   return .fabric
+            }
+        }
+
+        /// Progi odpowiadają opisom producentów: struktury super-matowe i matowe
+        /// (SM, ST9, ST10) siedzą nisko, `SU` Supreme to satyna, `BS` Brilliant
+        /// Shine to połysk.
+        private func finish(
+            dlaPolysku polysk: Double
+        ) -> MaterialFinish {
+            switch polysk {
+            case ..<0.18:  return .matte
+            case ..<0.60:  return .satin
+            default:       return .gloss
+            }
+        }
+
+        private func renderProfile(
+            from snapshot: MigawkaMaterialuGlobalnego,
+            fallbackColor: UIColor
+        ) -> RenderMaterialProfile {
+            let text = materialSearchText(
+                [
+                    snapshot.nazwa,
+                    snapshot.kod,
+                    snapshot.producent
+                ]
+            )
+            let color =
+                UIColor(stolarniaHEX: snapshot.kolorHEX)
+                ?? fallbackColor
+
+            return RenderMaterialProfile(
+                color: color,
+                signature:
+                    [
+                        snapshot.kod,
+                        snapshot.kolorHEX,
+                        snapshot.nazwa
+                    ]
+                    .joined(separator: "|"),
+                pattern: materialPattern(from: text),
+                finish: materialFinish(from: text),
+                directional:
+                    text.contains("usloj")
+                    || text.contains("slój")
+                    || text.contains("sloj")
+            )
+        }
+
+        private func materialSearchText(
+            _ parts: [String?]
+        ) -> String {
+            parts
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .folding(
+                    options: [
+                        .diacriticInsensitive,
+                        .caseInsensitive
+                    ],
+                    locale: .current
+                )
+                .lowercased()
+        }
+
+        private func materialPattern(
+            from text: String
+        ) -> MaterialPattern {
+            if text.contains("marmur")
+                || text.contains("marble")
+                || text.contains("kamien")
+                || text.contains("stone")
+                || text.contains("terrazzo") {
+                return .stone
+            }
+
+            if text.contains("beton")
+                || text.contains("concrete")
+                || text.contains("cement") {
+                return .concrete
+            }
+
+            if text.contains("tkan")
+                || text.contains("fabric")
+                || text.contains("linen") {
+                return .fabric
+            }
+
+            if text.contains("dab")
+                || text.contains("oak")
+                || text.contains("orzech")
+                || text.contains("walnut")
+                || text.contains("jesion")
+                || text.contains("ash")
+                || text.contains("buk")
+                || text.contains("beech")
+                || text.contains("wenge")
+                || text.contains("sonoma")
+                || text.contains("wood")
+                || text.contains("drewn")
+                || text.contains("sloj") {
+                return .wood
+            }
+
+            return .plain
+        }
+
+        private func materialFinish(
+            from text: String
+        ) -> MaterialFinish {
+            if text.contains("polysk")
+                || text.contains("połysk")
+                || text.contains("gloss")
+                || text.contains("akryl")
+                || text.contains("lakier") {
+                return .gloss
+            }
+
+            if text.contains("mat")
+                || text.contains("supermat")
+                || text.contains("soft") {
+                return .matte
+            }
+
+            return .satin
+        }
+
+        private func roughness(
+            for role: FurnitureComponentRole,
+            profile: RenderMaterialProfile
+        ) -> Float {
+            if role == .back {
+                return 0.90
+            }
+
+            switch profile.finish {
+            case .gloss:
+                return 0.34
+            case .matte:
+                return 0.88
+            case .satin:
+                return role == .front ? 0.58 : 0.72
+            }
+        }
+
+        private func edgeColor(
+            for role: FurnitureComponentRole,
+            prominent: Bool
+        ) -> UIColor {
+            let base = renderProfile(for: role).color
+            let target: UIColor =
+                isDark(base) ? .white : .black
+            return mixedColor(
+                base,
+                with: target,
+                amount: prominent ? 0.22 : 0.16
+            )
+            .withAlphaComponent(0.96)
+        }
+
+        private func mixedColor(
+            _ color: UIColor,
+            with target: UIColor,
+            amount: CGFloat
+        ) -> UIColor {
+            let amount = min(max(amount, 0), 1)
+            let sourceRGBA = rgbaComponents(color)
+            let targetRGBA = rgbaComponents(target)
+
+            return UIColor(
+                red:
+                    sourceRGBA.red
+                    + (targetRGBA.red - sourceRGBA.red)
+                    * amount,
+                green:
+                    sourceRGBA.green
+                    + (targetRGBA.green - sourceRGBA.green)
+                    * amount,
+                blue:
+                    sourceRGBA.blue
+                    + (targetRGBA.blue - sourceRGBA.blue)
+                    * amount,
+                alpha:
+                    sourceRGBA.alpha
+                    + (targetRGBA.alpha - sourceRGBA.alpha)
+                    * amount
+            )
+        }
+
+        private func isDark(
+            _ color: UIColor
+        ) -> Bool {
+            let rgba = rgbaComponents(color)
+            let luminance =
+                0.2126 * rgba.red
+                + 0.7152 * rgba.green
+                + 0.0722 * rgba.blue
+            return luminance < 0.42
+        }
+
+        private func rgbaComponents(
+            _ color: UIColor
+        ) -> (
+            red: CGFloat,
+            green: CGFloat,
+            blue: CGFloat,
+            alpha: CGFloat
+        ) {
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var alpha: CGFloat = 0
+
+            if color.getRed(
+                &red,
+                green: &green,
+                blue: &blue,
+                alpha: &alpha
+            ) {
+                return (red, green, blue, alpha)
+            }
+
+            var white: CGFloat = 0
+            if color.getWhite(
+                &white,
+                alpha: &alpha
+            ) {
+                return (white, white, white, alpha)
+            }
+
+            return (0.5, 0.5, 0.5, 1)
+        }
+
+        private func colorSignature(
+            _ color: UIColor
+        ) -> String {
+            let rgba = rgbaComponents(color)
+            return [
+                rgba.red,
+                rgba.green,
+                rgba.blue,
+                rgba.alpha
+            ]
+            .map {
+                String(
+                    Int(($0 * 255).rounded())
+                )
+            }
+            .joined(separator: "-")
         }
 
         private func meters(

@@ -5,7 +5,9 @@ import SwiftUI
 enum TrybWorkspaceProjektowegoV063: String, CaseIterable, Identifiable {
     case plan = "Plan"
     case elewacja = "Elewacja"
+    case elewacjaWyspy = "Elewacja wyspy"
     case widok3D = "3D"
+    case garderobyDrzwi = "Garderoby"
 
     var id: String { rawValue }
 
@@ -13,24 +15,45 @@ enum TrybWorkspaceProjektowegoV063: String, CaseIterable, Identifiable {
         switch self {
         case .plan: return "square.grid.2x2"
         case .elewacja: return "rectangle.portrait"
+        case .elewacjaWyspy: return "rectangle.center.inset.filled"
         case .widok3D: return "cube"
+        case .garderobyDrzwi: return "rectangle.split.3x1"
         }
     }
 }
 
-private enum WorkspaceProjektowySheetV063:
-    Identifiable
-{
-    case furnitureLibrary(WallID)
+private enum WorkspacePresentationStyleV084 {
+    case sheet
+    case fullScreen
+}
+
+private enum WorkspacePresentationV084: Identifiable {
+    case furnitureLibrary(
+        wallID: WallID,
+        initialGroup: FurnitureLibraryGroupV016?,
+        initialCategory: FurnitureLibraryCategoryV016?
+    )
     case sciankaPodziałowa(SciankaPodzialowaDefinicjaV075?)
     case furnitureCreator
     case layoutPrzeglad
     case wykonczeniaKuchni
+    case dwgImport
+    case elevationCreator
 
     var id: String {
         switch self {
-        case .furnitureLibrary(let wallID):
-            return "furniture-library.\(wallID.description)"
+        case .furnitureLibrary(
+            let wallID,
+            let initialGroup,
+            let initialCategory
+        ):
+            return [
+                "furniture-library",
+                wallID.description,
+                initialGroup?.rawValue ?? "default",
+                initialCategory?.rawValue ?? "all"
+            ]
+            .joined(separator: ".")
         case .sciankaPodziałowa(let s):
             return "scianka-\(s?.id.uuidString ?? "nowa")"
         case .furnitureCreator:
@@ -39,8 +62,39 @@ private enum WorkspaceProjektowySheetV063:
             return "layout-przeglad"
         case .wykonczeniaKuchni:
             return "wykończenia-kuchni"
+        case .dwgImport:
+            return "dwg-import"
+        case .elevationCreator:
+            return "elevation-creator"
         }
     }
+
+    var style: WorkspacePresentationStyleV084 {
+        switch self {
+        case .elevationCreator:
+            return .fullScreen
+        default:
+            return .sheet
+        }
+    }
+}
+
+private enum WorkspaceNextStepActionV084 {
+    case addModule
+    case showInspector
+    case showElevation
+    case show3D
+    case showProductionReadiness
+    case returnToMeasurement
+}
+
+private struct WorkspaceNextStepV084 {
+    let title: String
+    let description: String
+    let status: StolarniaReadinessStatus
+    let actionTitle: String
+    let actionSystemImage: String
+    let action: WorkspaceNextStepActionV084
 }
 
 struct WorkspaceProjektowyViewV063: View {
@@ -63,10 +117,12 @@ struct WorkspaceProjektowyViewV063: View {
     @ObservedObject var sciankaRepo: SciankaPodzialowaRepository
     @StateObject private var historiaV065 = HistoriaEdycjiModulowV065()
     @StateObject private var bazaMaterialowRepository = BazaMaterialowRepository()
+    /// Potrzebne do policzenia ceny pokazywanej w pasku bocznym —
+    /// `SilnikWycenyWariantowej` liczy okucia razem z płytą.
+    @StateObject private var bazaOkucRepositoryV0103 = BazaOkucRepository()
     @State private var presentation3D = Furniture3DPresentationStateV017()
-    @State private var activeSheetV063:
-        WorkspaceProjektowySheetV063?
-    @State private var pokazKreatorElewacjiV090 = false
+    @State private var activePresentationV084:
+        WorkspacePresentationV084?
     @State private var pokazPotwierdzenieUsunieciaV065 = false
     @StateObject private var wykonczeniaRepo = WykonczeniaKuchenneRepositoryV082()
     @State private var dxfExportURL: URL?
@@ -74,6 +130,8 @@ struct WorkspaceProjektowyViewV063: View {
     @State private var zaznaczoneFurnitureIDsV066:
         Set<FurnitureAssemblyID> = []
     @State private var trybWielokrotnegoZaznaczaniaV066 = false
+    @State private var manualSlidingPartitionCandidateV092:
+        SlidingRoomPartitionCandidateV092?
 
     // MARK: - Performance caches (Task #91)
     // listaFormatekV074 i reportGotowosciV078 były drogie computed vars
@@ -84,6 +142,19 @@ struct WorkspaceProjektowyViewV063: View {
     @State private var cachedReportGotowosciV074: ProjectReadinessReportV078 =
         .init(issues: [])
     @State private var cachedNumberedItemsV074: [FurnitureCanvasItemV016] = []
+    /// Wycena pomieszczenia trzymana w tym samym cache co reszta.
+    ///
+    /// Liczona **raz na zmianę modułów**, nie w `body`.
+    /// `ProjektWycenyBuilder.zbuduj` przechodzi po wszystkich zespołach
+    /// i ich komponentach; w ciele widoku oznaczałoby to pełne przeliczenie
+    /// przy każdym dotknięciu modułu, a cena wisi w pasku bocznym, czyli
+    /// jest na ekranie cały czas.
+    @State private var cachedWycenaV0103: ProjektWyceny?
+    /// Podsumowanie wariantu standardowego — źródło ceny w pasku bocznym.
+    @State private var cachedPodsumowanieWycenyV0103: PodsumowanieWariantuWyceny?
+    /// Raport rozkroju liczony i tak w `refreshWorkspaceCachesV091` na potrzeby
+    /// gotowości — zapamiętany, żeby zamówienie nie liczyło go drugi raz.
+    @State private var cachedRozkrojV0103: RaportRozkrojuPlytV071?
 
     @AppStorage(
         Wymiarowanie2DUstawienia.poziomAppStorageKey
@@ -112,7 +183,16 @@ struct WorkspaceProjektowyViewV063: View {
                         .blockingCount,
                 liczbaOstrzezenGotowosci:
                     reportGotowosciV078
-                        .warningCount
+                        .warningCount,
+                cenaBruttoPomieszczenia:
+                    cachedPodsumowanieWycenyV0103?
+                        .cenaBrutto,
+                brakiCennika:
+                    cachedPodsumowanieWycenyV0103?
+                        .pozycje
+                        .filter(\.jestBledemWyceny)
+                        .count
+                    ?? 0
             )
             .navigationSplitViewColumnWidth(
                 min: 238,
@@ -159,17 +239,28 @@ struct WorkspaceProjektowyViewV063: View {
                         )
                     }
                     .fullScreenCover(
-                        isPresented: $pokazKreatorElewacjiV090
+                        item:
+                            activeFullScreenPresentationBindingV084
                     ) {
-                        ModulEdytorElewacjiView()
-                    }
-                    .sheet(item: $activeSheetV063) {
-                        sheet in
+                        presentation in
 
-                        activeSheetViewV063(sheet)
+                        activePresentationViewV084(
+                            presentation
+                        )
+                    }
+                    .sheet(
+                        item:
+                            activeSheetPresentationBindingV084
+                    ) {
+                        presentation in
+
+                        activePresentationViewV084(
+                            presentation
+                        )
                     }
                     .onChange(of: selectedFurnitureID) { _, newValue in
                         zsynchronizujGlowneZaznaczenieV066(newValue)
+                        manualSlidingPartitionCandidateV092 = nil
                     }
                     .onChange(of: mebleViewModel.renderRevision) { _, _ in
                         usunNieistniejaceZaznaczeniaV066()
@@ -186,11 +277,53 @@ struct WorkspaceProjektowyViewV063: View {
         }
     }
 
+    private var activeSheetPresentationBindingV084:
+        Binding<WorkspacePresentationV084?>
+    {
+        Binding(
+            get: {
+                activePresentationV084?.style == .sheet
+                    ? activePresentationV084
+                    : nil
+            },
+            set: { newValue in
+                if let newValue {
+                    activePresentationV084 = newValue
+                } else if activePresentationV084?.style == .sheet {
+                    activePresentationV084 = nil
+                }
+            }
+        )
+    }
+
+    private var activeFullScreenPresentationBindingV084:
+        Binding<WorkspacePresentationV084?>
+    {
+        Binding(
+            get: {
+                activePresentationV084?.style == .fullScreen
+                    ? activePresentationV084
+                    : nil
+            },
+            set: { newValue in
+                if let newValue {
+                    activePresentationV084 = newValue
+                } else if activePresentationV084?.style == .fullScreen {
+                    activePresentationV084 = nil
+                }
+            }
+        )
+    }
+
     @ViewBuilder
     private var workspaceDetailV074:
         some View
     {
-        if destinationV074
+        if destinationV074 == .wycena {
+            wycenaContentV0103
+        } else if destinationV074 == .zakupPlyt {
+            zamowienieContentV0103
+        } else if destinationV074
             .jestProjektem {
             projektContentV074
         } else {
@@ -198,10 +331,135 @@ struct WorkspaceProjektowyViewV063: View {
         }
     }
 
+    /// Wycena pomieszczenia **w warsztacie**, nie w osobnym oknie.
+    ///
+    /// Dotąd, żeby wycenić to, co się właśnie narysowało, trzeba było zamknąć
+    /// cały warsztat (`fullScreenCover`) i otworzyć wycenę jako `sheet` na
+    /// ekranie projektu — czyli na warstwie *pod* warsztatem. Droga
+    /// „projektuję → wyceniam → rozkrój" oznaczała trzykrotną utratę
+    /// kontekstu, mimo że to jedna linia pracy.
+    ///
+    /// **To jest wycena tego pomieszczenia, nie całego projektu.** Oferta
+    /// projektowa obejmująca wszystkie pomieszczenia zostaje tam, gdzie była
+    /// — jest dokumentem dla klienta. Tutaj odpowiadamy na inne pytanie:
+    /// „ile kosztuje to, co mam przed sobą".
+    ///
+    /// Liczona przy każdym wejściu z aktualnych modułów, bo w trakcie
+    /// projektowania nieaktualna cena jest gorsza niż jej brak.
+    /// Widoki etapu „Projekt" — plan, elewacja, 3D.
+    ///
+    /// Były osobnymi pozycjami paska bocznego, co sugerowało trzy różne
+    /// miejsca w aplikacji. To są trzy spojrzenia na ten sam mebel, więc
+    /// przełącznik stoi nad rysunkiem, przy treści, której dotyczy.
+    ///
+    /// Elewacja wyspy i garderoby są tu wyszarzone, gdy w pomieszczeniu nie
+    /// ma czego pokazać — zostają widoczne, żeby było wiadomo, że istnieją.
+    private var przelacznikWidokuProjektuV0103: some View {
+        PrzelacznikWidokuV0103(
+            widoki: WorkspaceDestinationV074
+                .cele(etapu: .projekt)
+                .map { cel in
+                    PrzelacznikWidokuV0103.Widok(
+                        id: cel.rawValue,
+                        tytul: cel.tytulSkrocony,
+                        ikona: cel.symbol,
+                        wylaczony: !celDostepnyV0103(cel)
+                    )
+                },
+            wybrany: Binding(
+                get: { destinationV074.rawValue },
+                set: { nowy in
+                    if let cel = WorkspaceDestinationV074(rawValue: nowy) {
+                        destinationV074 = cel
+                    }
+                }
+            )
+        )
+    }
+
+    /// Czy w tym pomieszczeniu ten widok ma co pokazać.
+    private func celDostepnyV0103(
+        _ cel: WorkspaceDestinationV074
+    ) -> Bool {
+        switch cel {
+        case .elewacjaWyspy:
+            return mebleViewModel.storedAssemblies.contains {
+                $0.assembly.placement?.wallID == nil
+            }
+        case .garderobyDrzwi:
+            return !mebleViewModel.storedAssemblies.isEmpty
+        default:
+            return true
+        }
+    }
+
+    /// Etap „Zamówienie" — płyty i okucia jako jedna lista.
+    ///
+    /// Zakładka `Zakup płyt` pokazuje, zgodnie z nazwą, **same arkusze**.
+    /// Okucia szły osobną drogą przez wycenę i listę zakupową, więc komplet
+    /// do hurtowni trzeba było zszywać z dwóch miejsc.
+    ///
+    /// Stara zakładka **nie znika** — nadal jest w pasku zakładek produkcji,
+    /// razem z rozkrojem, obrzeżami i CNC. Tu jest widok zamówienia.
+    private var zamowienieContentV0103: some View {
+        ZamowienieDoHurtowniV0103(
+            nazwaPomieszczenia: room.name,
+            zapotrzebowaniePlyt:
+                cachedRozkrojV0103?.zapotrzebowanie ?? [],
+            podsumowanieWyceny: cachedPodsumowanieWycenyV0103
+        )
+        .id(mebleViewModel.renderRevision)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var wycenaContentV0103: some View {
+        WycenaWariantowaView(
+            projekt: cachedWycenaV0103,
+            osadzona: true
+        )
+        .id(mebleViewModel.renderRevision)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func przeliczWycenePomieszczeniaV0103() -> ProjektWyceny? {
+        let assemblies = mebleViewModel.storedAssemblies.map(\.assembly)
+        guard !assemblies.isEmpty else { return nil }
+
+        return ProjektWycenyBuilder.zbuduj(
+            nazwaProjektu: room.name,
+            assemblies: assemblies,
+            materialyPomieszczen: [
+                room.id.description:
+                    globalneMaterialyRepository.ustawienia
+            ]
+        )
+    }
+
     private var projektContentV074:
         some View
     {
         centralContent
+            .safeAreaInset(edge: .top, spacing: 0) {
+                przelacznikWidokuProjektuV0103
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                workspaceNextStepStripV084
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+                    .background {
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(
+                                        StolarniaPalette
+                                            .frostStroke
+                                    )
+                                    .frame(height: 1)
+                            }
+                    }
+            }
             .frame(
                 maxWidth: .infinity,
                 maxHeight: .infinity
@@ -266,7 +524,7 @@ struct WorkspaceProjektowyViewV063: View {
                         onEditSlope(wall)
                     },
                     onOpenCreator: {
-                        activeSheetV063 = .furnitureCreator
+                        activePresentationV084 = .furnitureCreator
                     }
                 )
                 .inspectorColumnWidth(
@@ -275,6 +533,149 @@ struct WorkspaceProjektowyViewV063: View {
                     max: 390
                 )
             }
+    }
+
+    private var workspaceNextStepStripV084:
+        some View
+    {
+        let guidance = workspaceNextStepV084
+
+        return StolarniaNextStepStrip(
+            title: guidance.title,
+            description: guidance.description,
+            status: guidance.status,
+            actionTitle: guidance.actionTitle,
+            actionSystemImage: guidance.actionSystemImage
+        ) {
+            wykonajNextStepV084(
+                guidance.action
+            )
+        }
+    }
+
+    private var workspaceNextStepV084:
+        WorkspaceNextStepV084
+    {
+        if room.geometry.walls.isEmpty {
+            return WorkspaceNextStepV084(
+                title: "Brakuje geometrii pomieszczenia",
+                description: "Uzupełnij pomiar ścian, zanim dodasz pierwszy moduł.",
+                status: .blocked,
+                actionTitle: "Wróć do pomiaru",
+                actionSystemImage: "arrow.left",
+                action: .returnToMeasurement
+            )
+        }
+
+        if mebleViewModel.storedAssemblies.isEmpty {
+            return WorkspaceNextStepV084(
+                title: "Zacznij od pierwszego ciągu",
+                description: "Wybierz ścianę i dodaj moduły z biblioteki setupów.",
+                status: .neutral,
+                actionTitle: "Dodaj moduł",
+                actionSystemImage: "plus.square.on.square",
+                action: .addModule
+            )
+        }
+
+        if reportGotowosciV078.blockingCount > 0 {
+            return WorkspaceNextStepV084(
+                title: reportGotowosciV078.title,
+                description: reportGotowosciV078.message,
+                status: .blocked,
+                actionTitle: "Sprawdź status",
+                actionSystemImage: "shippingbox",
+                action: .showProductionReadiness
+            )
+        }
+
+        if aktywnieZaznaczoneIDsV066.count > 1 {
+            return WorkspaceNextStepV084(
+                title: "Zaznaczono \(aktywnieZaznaczoneIDsV066.count) modułów",
+                description: "Możesz wyrównać, przesunąć, skopiować albo sprawdzić wspólną ścianę w inspektorze.",
+                status: .neutral,
+                actionTitle: "Pokaż inspektor",
+                actionSystemImage: "sidebar.trailing",
+                action: .showInspector
+            )
+        }
+
+        if selectedFurniture != nil {
+            return WorkspaceNextStepV084(
+                title: "Moduł gotowy do dopracowania",
+                description: "Sprawdź parametry, komory, fronty i konsekwencje zmiany w inspektorze lub elewacji.",
+                status: .neutral,
+                actionTitle:
+                    pokazInspektorV074
+                    ? "Elewacja"
+                    : "Pokaż inspektor",
+                actionSystemImage:
+                    pokazInspektorV074
+                    ? "rectangle.portrait"
+                    : "sidebar.trailing",
+                action:
+                    pokazInspektorV074
+                    ? .showElevation
+                    : .showInspector
+            )
+        }
+
+        if reportGotowosciV078.warningCount > 0 {
+            return WorkspaceNextStepV084(
+                title: reportGotowosciV078.title,
+                description: reportGotowosciV078.message,
+                status: .warning,
+                actionTitle: "Sprawdź status",
+                actionSystemImage: "shippingbox",
+                action: .showProductionReadiness
+            )
+        }
+
+        if aktywnyTrybProjektowyV074 != .widok3D {
+            return WorkspaceNextStepV084(
+                title: "Projekt gotowy do kontroli",
+                description: "Sprawdź bryłę w 3D albo przejdź do produkcji, jeśli układ jest zaakceptowany.",
+                status: .ready,
+                actionTitle: "Widok 3D",
+                actionSystemImage: "cube",
+                action: .show3D
+            )
+        }
+
+        return WorkspaceNextStepV084(
+            title: "Można przejść do produkcji",
+            description: reportGotowosciV078.message,
+            status: .ready,
+            actionTitle: "Produkcja",
+            actionSystemImage: "shippingbox",
+            action: .showProductionReadiness
+        )
+    }
+
+    private func wykonajNextStepV084(
+        _ action:
+            WorkspaceNextStepActionV084
+    ) {
+        switch action {
+        case .addModule:
+            destinationV074 = .plan
+            rozpocznijDodawanieModuluZPlanuV077()
+
+        case .showInspector:
+            pokazInspektorV074 = true
+
+        case .showElevation:
+            destinationV074 = .elewacja
+
+        case .show3D:
+            destinationV074 = .widok3D
+
+        case .showProductionReadiness:
+            destinationV074 = .produkcjaStart
+
+        case .returnToMeasurement:
+            dismiss()
+        }
     }
 
     private var produkcjaContentV074:
@@ -363,211 +764,29 @@ struct WorkspaceProjektowyViewV063: View {
                     .primaryAction
             ) {
                 Button {
-                    Task {
-                        let result =
-                            await historiaV065
-                                .cofnij(
-                                    viewModel:
-                                        mebleViewModel
-                                )
-
-                        if result.powodzenie {
-                            zastosujZaznaczeniePoHistoriiV066(
-                                result
-                            )
-                        }
-                    }
+                    destinationV074 = .plan
+                    rozpocznijDodawanieModuluZPlanuV077()
                 } label: {
                     Label(
-                        "Cofnij",
+                        "Dodaj",
                         systemImage:
-                            "arrow.uturn.backward"
+                            "plus.square.on.square"
                     )
                 }
                 .disabled(
-                    !historiaV065
-                        .moznaCofnac
+                    room
+                        .geometry
+                        .walls
+                        .isEmpty
                 )
                 .keyboardShortcut(
-                    "z",
+                    "n",
                     modifiers: .command
                 )
                 .help(
-                    historiaV065
-                        .nazwaCofniecia
-                        .map {
-                            "Cofnij: \($0)"
-                        }
-                    ?? "Brak operacji do cofnięcia"
+                    "Dodaj moduł do aktywnej ściany"
                 )
 
-                Button {
-                    Task {
-                        let result =
-                            await historiaV065
-                                .ponow(
-                                    viewModel:
-                                        mebleViewModel
-                                )
-
-                        if result.powodzenie {
-                            zastosujZaznaczeniePoHistoriiV066(
-                                result
-                            )
-                        }
-                    }
-                } label: {
-                    Label(
-                        "Ponów",
-                        systemImage:
-                            "arrow.uturn.forward"
-                    )
-                }
-                .disabled(
-                    !historiaV065
-                        .moznaPonowic
-                )
-                .keyboardShortcut(
-                    "z",
-                    modifiers:
-                        [
-                            .command,
-                            .shift
-                        ]
-                )
-                .help(
-                    historiaV065
-                        .nazwaPonowienia
-                        .map {
-                            "Ponów: \($0)"
-                        }
-                    ?? "Brak operacji do ponowienia"
-                )
-            }
-
-            if aktywnyTrybProjektowyV074 == .plan {
-                ToolbarItem(
-                    placement:
-                        .primaryAction
-                ) {
-                    Button {
-                        rozpocznijDodawanieModuluZPlanuV077()
-                    } label: {
-                        Label(
-                            "Dodaj moduł",
-                            systemImage:
-                                "plus.square.on.square"
-                        )
-                    }
-                    .disabled(
-                        room
-                            .geometry
-                            .walls
-                            .isEmpty
-                    )
-                    .keyboardShortcut(
-                        "n",
-                        modifiers: .command
-                    )
-                    .help(
-                        "Dodaj mebel do aktywnej ściany w Planie 2D"
-                    )
-                }
-            }
-
-            ToolbarItem(
-                placement:
-                    .primaryAction
-            ) {
-                Menu {
-                    Button {
-                        ustawTrybWielokrotnegoZaznaczaniaV066(
-                            !trybWielokrotnegoZaznaczaniaV066
-                        )
-                    } label: {
-                        Label(
-                            trybWielokrotnegoZaznaczaniaV066
-                                ? "Zakończ wybór wielu"
-                                : "Wybierz wiele modułów",
-                            systemImage:
-                                trybWielokrotnegoZaznaczaniaV066
-                                ? "checkmark.circle.fill"
-                                : "checkmark.circle"
-                        )
-                    }
-
-                    Button {
-                        zaznaczWszystkieNaAktywnejScianieV066()
-                    } label: {
-                        Label(
-                            "Zaznacz całą ścianę",
-                            systemImage:
-                                "checkmark.circle"
-                        )
-                    }
-                    .disabled(
-                        mebleNaAktywnejScianieV066
-                            .isEmpty
-                    )
-
-                    Divider()
-
-                    Button {
-                        duplikujAktywneZaznaczenieV067()
-                    } label: {
-                        Label(
-                            "Duplikuj",
-                            systemImage:
-                                "plus.square.on.square"
-                        )
-                    }
-                    .disabled(
-                        aktywnieZaznaczoneIDsV066
-                            .isEmpty
-                        || mebleViewModel
-                            .isSaving
-                        || (
-                            aktywnieZaznaczoneIDsV066
-                                .count > 1
-                            && !selectionSummaryV066
-                                .maWspolnaSciane
-                        )
-                    )
-
-                    Button(
-                        role: .destructive
-                    ) {
-                        poprosOUsuniecieZaznaczonegoV065()
-                    } label: {
-                        Label(
-                            "Usuń",
-                            systemImage:
-                                "trash"
-                        )
-                    }
-                    .disabled(
-                        aktywnieZaznaczoneIDsV066
-                            .isEmpty
-                        || mebleViewModel
-                            .isSaving
-                    )
-
-                } label: {
-                    Label(
-                        "Edycja",
-                        systemImage:
-                            "ellipsis.circle"
-                    )
-                }
-                .help(
-                    "Zaznaczanie, duplikowanie i usuwanie modułów"
-                )
-            }
-
-            ToolbarItem(
-                placement:
-                    .primaryAction
-            ) {
                 Button {
                     pokazInspektorV074
                         .toggle()
@@ -585,145 +804,298 @@ struct WorkspaceProjektowyViewV063: View {
                         ? "Ukryj panel właściwości"
                         : "Pokaż panel właściwości"
                 )
-            }
 
-            ToolbarItem(
-                placement:
-                    .primaryAction
-            ) {
                 Menu {
-                    if sciankaRepo.sciankiDzielace.isEmpty {
-                        Button {
-                            activeSheetV063 = .sciankaPodziałowa(nil)
-                        } label: {
-                            Label("Dodaj ściankę dzielącą", systemImage: "door.sliding.left.hand.open")
-                        }
-                    } else {
-                        ForEach(sciankaRepo.sciankiDzielace) { scianka in
-                            Button {
-                                activeSheetV063 = .sciankaPodziałowa(scianka)
-                            } label: {
-                                Label(scianka.nazwa, systemImage: "door.sliding.left.hand.open")
-                            }
-                        }
-                        Divider()
-                        Button {
-                            activeSheetV063 = .sciankaPodziałowa(nil)
-                        } label: {
-                            Label("Dodaj nową ściankę", systemImage: "plus")
-                        }
-                    }
-                } label: {
-                    Label("Ścianki dzielące", systemImage: "door.sliding.left.hand.open")
-                }
-                .help("Zarządzaj ściankami dzielącymi (drzwi przesuwne Bonari)")
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    activeSheetV063 = .wykonczeniaKuchni
+                    workspaceMoreMenuV084
                 } label: {
                     Label(
-                        "Wykończenia",
-                        systemImage: "rectangle.portrait.topleft.inset.filled"
-                    )
-                    .symbolVariant(wykonczeniaRepo.maPozycje ? .fill : .none)
-                }
-                .help("Blaty, fartuch, listwy i wieńce wykończeniowe")
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    pokazKreatorElewacjiV090 = true
-                } label: {
-                    Label(
-                        "Kreator rysunkowy",
-                        systemImage: "pencil.and.ruler"
+                        "Więcej",
+                        systemImage:
+                            "ellipsis.circle"
                     )
                 }
-                .help("Rysunkowy kreator modułu (beta): elewacja, strefy, systemy szuflad")
+                .help("Pozostałe narzędzia projektu")
             }
+        }
+    }
 
-            ToolbarItem(
-                placement:
-                    .primaryAction
+    @ViewBuilder
+    private var workspaceMoreMenuV084:
+        some View
+    {
+        Button {
+            cofnijOstatniaOperacjeV084()
+        } label: {
+            Label(
+                "Cofnij",
+                systemImage: "arrow.uturn.backward"
+            )
+        }
+        .disabled(!historiaV065.moznaCofnac)
+        .keyboardShortcut("z", modifiers: .command)
+
+        Button {
+            ponowOstatniaOperacjeV084()
+        } label: {
+            Label(
+                "Ponów",
+                systemImage: "arrow.uturn.forward"
+            )
+        }
+        .disabled(!historiaV065.moznaPonowic)
+        .keyboardShortcut("z", modifiers: [.command, .shift])
+
+        Divider()
+
+        Button {
+            ustawTrybWielokrotnegoZaznaczaniaV066(
+                !trybWielokrotnegoZaznaczaniaV066
+            )
+        } label: {
+            Label(
+                trybWielokrotnegoZaznaczaniaV066
+                    ? "Zakończ wybór wielu"
+                    : "Wybierz wiele modułów",
+                systemImage:
+                    trybWielokrotnegoZaznaczaniaV066
+                    ? "checkmark.circle.fill"
+                    : "checkmark.circle"
+            )
+        }
+
+        Button {
+            zaznaczWszystkieNaAktywnejScianieV066()
+        } label: {
+            Label(
+                "Zaznacz całą ścianę",
+                systemImage: "checkmark.circle"
+            )
+        }
+        .disabled(mebleNaAktywnejScianieV066.isEmpty)
+
+        Button {
+            duplikujAktywneZaznaczenieV067()
+        } label: {
+            Label(
+                "Duplikuj zaznaczone",
+                systemImage: "plus.square.on.square"
+            )
+        }
+        .disabled(
+            aktywnieZaznaczoneIDsV066.isEmpty
+            || mebleViewModel.isSaving
+            || (
+                aktywnieZaznaczoneIDsV066.count > 1
+                && !selectionSummaryV066.maWspolnaSciane
+            )
+        )
+
+        Button(role: .destructive) {
+            poprosOUsuniecieZaznaczonegoV065()
+        } label: {
+            Label(
+                "Usuń zaznaczone",
+                systemImage: "trash"
+            )
+        }
+        .disabled(
+            aktywnieZaznaczoneIDsV066.isEmpty
+            || mebleViewModel.isSaving
+        )
+
+        Divider()
+
+        Button {
+            activePresentationV084 = .wykonczeniaKuchni
+        } label: {
+            Label(
+                "Wykończenia kuchni",
+                systemImage: "rectangle.portrait.topleft.inset.filled"
+            )
+            .symbolVariant(
+                wykonczeniaRepo.maPozycje
+                ? .fill
+                : .none
+            )
+        }
+
+        Menu {
+            workspacePartitionMenuV084
+        } label: {
+            Label(
+                "Ścianki dzielące",
+                systemImage: "door.sliding.left.hand.open"
+            )
+        }
+
+        Button {
+            activePresentationV084 = .layoutPrzeglad
+        } label: {
+            Label(
+                "Podgląd układu",
+                systemImage: "rectangle.3.group"
+            )
+        }
+
+        Divider()
+
+        Button {
+            activePresentationV084 = .elevationCreator
+        } label: {
+            Label(
+                "Kreator rysunkowy",
+                systemImage: "pencil.and.ruler"
+            )
+        }
+
+        Button {
+            activePresentationV084 = .dwgImport
+        } label: {
+            Label(
+                "Import DWG architekta",
+                systemImage: "square.and.arrow.down.on.square"
+            )
+        }
+
+        if let url = dxfExportURL {
+            ShareLink(
+                item: url,
+                subject: Text("\(room.name) — rzut 2D"),
+                message: Text(
+                    "Rzut 2D pomieszczenia z meblami. Format DXF — kompatybilny z AutoCAD, ArchiCAD, Revit."
+                )
             ) {
+                Label(
+                    "Udostępnij DXF",
+                    systemImage: "arrow.up.doc"
+                )
+            }
+        } else {
+            Button {
+                przygotujEksportDXF()
+            } label: {
+                Label(
+                    "Eksportuj DXF",
+                    systemImage: "arrow.up.doc"
+                )
+            }
+            .disabled(
+                mebleViewModel
+                    .assemblies
+                    .filter {
+                        $0.placement?.wallID != nil
+                    }
+                    .isEmpty
+            )
+        }
+
+        Divider()
+
+        Picker(
+            "Zakres wymiarów",
+            selection: poziomWymiarowaniaBinding
+        ) {
+            ForEach(PoziomWymiarowania2D.allCases) {
+                item in
+
+                Label(
+                    item.title,
+                    systemImage: item.systemImage
+                )
+                .tag(item)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var workspacePartitionMenuV084:
+        some View
+    {
+        if let candidate =
+            activeSlidingPartitionCandidateV092 {
+            Button {
+                utworzPrzegrodePrzesuwnaZCanvasV092(
+                    candidate:
+                        candidate
+                )
+            } label: {
+                Label(
+                    "Dodaj przegrodę z zaznaczonego modułu",
+                    systemImage:
+                        "door.sliding.left.hand.open"
+                )
+            }
+            .disabled(mebleViewModel.isSaving)
+
+            Divider()
+        }
+
+        if sciankaRepo.sciankiDzielace.isEmpty {
+            Button {
+                activePresentationV084 = .sciankaPodziałowa(nil)
+            } label: {
+                Label(
+                    "Dodaj ściankę dzielącą",
+                    systemImage: "plus"
+                )
+            }
+        } else {
+            ForEach(sciankaRepo.sciankiDzielace) {
+                scianka in
+
                 Button {
-                    activeSheetV063 = .layoutPrzeglad
+                    activePresentationV084 = .sciankaPodziałowa(scianka)
                 } label: {
                     Label(
-                        "Podgląd układu",
-                        systemImage: "rectangle.3.group"
+                        scianka.nazwa,
+                        systemImage: "door.sliding.left.hand.open"
                     )
                 }
-                .help("Podgląd układu L/U garderoba — rzut z góry dla klienta")
             }
 
-            ToolbarItem(
-                placement:
-                    .primaryAction
-            ) {
-                if let url = dxfExportURL {
-                    ShareLink(
-                        item: url,
-                        subject: Text(
-                            "\(room.name) — rzut 2D"
-                        ),
-                        message: Text(
-                            "Rzut 2D pomieszczenia z meblami. Format DXF — kompatybilny z AutoCAD, ArchiCAD, Revit."
-                        )
-                    ) {
-                        Label(
-                            "Udostępnij DXF",
-                            systemImage:
-                                "arrow.up.doc"
-                        )
-                    }
-                    .help("Udostępnij plik DXF dla architekta")
-                } else {
-                    Button {
-                        przygotujEksportDXF()
-                    } label: {
-                        Label(
-                            "Eksportuj DXF",
-                            systemImage:
-                                "arrow.up.doc"
-                        )
-                    }
-                    .disabled(
+            Divider()
+
+            Button {
+                activePresentationV084 = .sciankaPodziałowa(nil)
+            } label: {
+                Label(
+                    "Dodaj ściankę dzielącą",
+                    systemImage: "plus"
+                )
+            }
+        }
+    }
+
+    private func cofnijOstatniaOperacjeV084() {
+        Task {
+            let result =
+                await historiaV065.cofnij(
+                    viewModel:
                         mebleViewModel
-                            .assemblies
-                            .filter {
-                                $0.placement?.wallID != nil
-                            }
-                            .isEmpty
-                    )
-                    .help(
-                        "Generuj rzut 2D (DXF) z meblami dla architekta"
-                    )
-                }
-            }
+                )
 
-            ToolbarItem(
-                placement:
-                    .primaryAction
-            ) {
-                KontrolkaPoziomuWymiarowania2D(
-                    poziom:
-                        poziomWymiarowaniaBinding
+            if result.powodzenie {
+                zastosujZaznaczeniePoHistoriiV066(
+                    result
                 )
-                .opacity(
-                    aktywnyTrybProjektowyV074
-                        == .widok3D
-                    ? 0
-                    : 1
-                )
-                .disabled(
-                    aktywnyTrybProjektowyV074
-                        == .widok3D
-                )
-                }
             }
+        }
+    }
+
+    private func ponowOstatniaOperacjeV084() {
+        Task {
+            let result =
+                await historiaV065.ponow(
+                    viewModel:
+                        mebleViewModel
+                )
+
+            if result.powodzenie {
+                zastosujZaznaczeniePoHistoriiV066(
+                    result
+                )
+            }
+        }
     }
 
     private var availableModuleTemplatesV063:
@@ -736,18 +1108,27 @@ struct WorkspaceProjektowyViewV063: View {
     }
 
     @ViewBuilder
-    private func activeSheetViewV063(
-        _ sheet:
-            WorkspaceProjektowySheetV063
+    private func activePresentationViewV084(
+        _ presentation:
+            WorkspacePresentationV084
     ) -> some View {
-        switch sheet {
-        case .furnitureLibrary(let wallID):
+        switch presentation {
+        case .furnitureLibrary(
+            let wallID,
+            let initialGroup,
+            let initialCategory
+        ):
             if let wall =
                 room.geometry.wall(id: wallID)
             {
                 BibliotekaModulowMeblowychView(
                     templates:
                         availableModuleTemplatesV063,
+                    initialGroup:
+                        initialGroup
+                        ?? .kitchen,
+                    initialCategory:
+                        initialCategory,
                     suggestedPlacement: {
                         template in
 
@@ -818,12 +1199,12 @@ struct WorkspaceProjektowyViewV063: View {
             NavigationStack {
                 GarderobaLayoutPrzeglad(
                     room: room,
-                    assemblies: mebleViewModel.storedAssemblies
+                        assemblies: mebleViewModel.storedAssemblies
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Zamknij") {
-                            activeSheetV063 = nil
+                            activePresentationV084 = nil
                         }
                     }
                 }
@@ -832,20 +1213,40 @@ struct WorkspaceProjektowyViewV063: View {
         case .wykonczeniaKuchni:
             WykonczeniaKuchenneEditorV082(
                 repo: wykonczeniaRepo,
-                bazowaDlugoscCiaguMM: bazowaDlugoscCiaguV082
+                bazowaDlugoscCiaguMM: bazowaDlugoscCiaguV082,
+                ciagiDolneV087:
+                    ciagiDolneWykonczenV087
             )
+
+        case .dwgImport:
+            DWGImportKontenerV001(
+                mebleViewModel: mebleViewModel,
+                room: room,
+                walls: room.geometry.walls
+            )
+
+        case .elevationCreator:
+            ModulEdytorElewacjiView()
         }
     }
 
     /// Suma długości modułów stojących na podłodze (ciąg dolny) — używana
     /// do automatycznego przeliczania długości fartucha i listew.
     private var bazowaDlugoscCiaguV082: Double {
-        mebleViewModel.assemblies
-            .filter { assembly in
-                guard let p = assembly.placement else { return false }
-                return p.bottomOffset <= 150
+        ciagiDolneWykonczenV087
+            .reduce(0.0) {
+                $0 + $1.dlugoscMM
             }
-            .reduce(0.0) { $0 + $1.size.width.rawValue }
+    }
+
+    private var ciagiDolneWykonczenV087:
+        [KitchenRunFinishingSegmentV087]
+    {
+        mebleViewModel
+            .kitchenBaseFinishingSegmentsV087(
+                room:
+                    room
+            )
     }
 
     @ViewBuilder
@@ -883,8 +1284,50 @@ struct WorkspaceProjektowyViewV063: View {
                 onMoveFurniture: { movement in
                     wykonajPrzesuniecieV065(movement)
                 },
+                slidingPartitionDraftV092:
+                    manualSlidingPartitionCandidateV092,
+                onChangeSlidingPartitionDraftEndV092: {
+                    point in
+
+                    zaktualizujKoniecPrzegrodyV092(
+                        point
+                    )
+                },
                 renderRevision: mebleViewModel.renderRevision
             )
+            .overlay(alignment: .top) {
+                if let candidate =
+                    activeSlidingPartitionCandidateV092 {
+                    SlidingPartitionCanvasActionV092(
+                        candidate:
+                            candidate,
+                        isManualEditing:
+                            manualSlidingPartitionCandidateV092
+                            != nil,
+                        isSaving:
+                            mebleViewModel.isSaving
+                    ) {
+                        rozpocznijReczneUstawianiePrzegrodyV092(
+                            candidate
+                        )
+                    } cancelManualAction: {
+                        manualSlidingPartitionCandidateV092 =
+                            nil
+                    } commitAction: {
+                        utworzPrzegrodePrzesuwnaZCanvasV092(
+                            candidate:
+                                candidate
+                        )
+                    }
+                    .padding(.top, 12)
+                    .padding(.horizontal, 16)
+                }
+            }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+            .layoutPriority(1)
 
         case .elewacja:
             if let wall = selectedWall ?? room.geometry.walls.first {
@@ -919,13 +1362,35 @@ struct WorkspaceProjektowyViewV063: View {
                         poprosOUsuniecieModuluV065(id: furnitureID)
                     }
                 )
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .layoutPriority(1)
             } else {
                 ContentUnavailableView(
                     "Brak ściany",
                     systemImage: "rectangle.slash",
                     description: Text("Dodaj ścianę, aby otworzyć elewację.")
                 )
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
             }
+
+        case .elewacjaWyspy:
+            WidokElewacjiWyspyV083(
+                storedAssemblies:
+                    mebleViewModel.storedAssemblies,
+                selectedFurnitureID:
+                    $selectedFurnitureID
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+            .layoutPriority(1)
 
         case .widok3D:
             Furniture3DSceneViewV017(
@@ -950,7 +1415,7 @@ struct WorkspaceProjektowyViewV063: View {
                     .foregroundStyle(.secondary)
                 }
                 .padding(10)
-                .background(
+                .stolarniaMaterial(
                     .ultraThinMaterial,
                     in: RoundedRectangle(
                         cornerRadius: 12,
@@ -969,13 +1434,23 @@ struct WorkspaceProjektowyViewV063: View {
                 }
                 .padding()
             }
-            .safeAreaInset(edge: .bottom) {
+            .overlay(alignment: .topTrailing) {
+                Furniture3DMaterialLegendV017(
+                    materialy:
+                        globalneMaterialyRepository
+                            .ustawienia
+                )
+                .padding()
+            }
+            .overlay(alignment: .bottom) {
                 Furniture3DControlsV017(
                     presentationState: $presentation3D,
                     isEnabled: !mebleViewModel.assemblies.isEmpty
                 )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity)
                 .background {
                     Rectangle()
                         .fill(.ultraThinMaterial)
@@ -998,7 +1473,131 @@ struct WorkspaceProjektowyViewV063: View {
                         .frame(height: 1)
                 }
             }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+            .layoutPriority(1)
+
+        case .garderobyDrzwi:
+            GarderobyDrzwiWorkspaceV086(
+                room: room,
+                assemblies:
+                    mebleViewModel
+                        .storedAssemblies,
+                selectedFurnitureID:
+                    $selectedFurnitureID,
+                onAddSlidingWardrobe: {
+                    rozpocznijDodawanieModulowPodPrzesuwneV092()
+                },
+                onAddSlidingSystem: {
+                    run,
+                    doorFill in
+
+                    Task {
+                        guard let wall =
+                            room.geometry.wall(
+                                id:
+                                    run.wallID
+                            )
+                        else {
+                            return
+                        }
+
+                        let didCreate =
+                            await mebleViewModel
+                            .createSlidingWardrobeSystemV087(
+                                for:
+                                    run,
+                                wall:
+                                    wall,
+                                room:
+                                    room,
+                                doorFill:
+                                    doorFill
+                            )
+
+                        if didCreate {
+                            await MainActor.run {
+                                selectedWallID =
+                                    run.wallID
+                            }
+                        }
+                    }
+                }
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+            .layoutPriority(1)
         }
+    }
+
+    private func utworzPrzegrodePrzesuwnaZCanvasV092(
+        candidate:
+            SlidingRoomPartitionCandidateV092
+    ) {
+        guard !mebleViewModel.isSaving else {
+            return
+        }
+
+        Task {
+            let didCreate =
+                await mebleViewModel
+                .createSlidingRoomPartitionV092(
+                    candidate:
+                        candidate,
+                    room:
+                        room
+                )
+
+            if didCreate {
+                await MainActor.run {
+                    manualSlidingPartitionCandidateV092 =
+                        nil
+                    if let createdID =
+                        mebleViewModel
+                            .lastCreatedAssemblyID {
+                        selectedFurnitureID =
+                            createdID
+                        zaznaczoneFurnitureIDsV066 =
+                            [createdID]
+                    }
+                    destinationV074 =
+                        .plan
+                }
+            }
+        }
+    }
+
+    private func rozpocznijReczneUstawianiePrzegrodyV092(
+        _ candidate:
+            SlidingRoomPartitionCandidateV092
+    ) {
+        manualSlidingPartitionCandidateV092 =
+            candidate
+    }
+
+    private func zaktualizujKoniecPrzegrodyV092(
+        _ end:
+            Point2MM
+    ) {
+        guard let current =
+            manualSlidingPartitionCandidateV092
+        else {
+            return
+        }
+
+        manualSlidingPartitionCandidateV092 =
+            kandydatPrzegrodyV092(
+                from:
+                    current,
+                end:
+                    ograniczonyPunktPrzegrodyV092(
+                        end
+                    )
+            )
     }
 
     private func wykonajPrzesuniecieV065(
@@ -1080,8 +1679,41 @@ struct WorkspaceProjektowyViewV063: View {
         selectedWallID = wall.id
         selectedFurnitureID = nil
         zaznaczoneFurnitureIDsV066.removeAll()
-        activeSheetV063 =
-            .furnitureLibrary(wall.id)
+        activePresentationV084 =
+            .furnitureLibrary(
+                wallID:
+                    wall.id,
+                initialGroup:
+                    nil,
+                initialCategory:
+                    nil
+            )
+    }
+
+    private func rozpocznijDodawanieModulowPodPrzesuwneV092() {
+        guard
+            let wall =
+                selectedWall
+                ?? room
+                    .geometry
+                    .walls
+                    .first
+        else {
+            return
+        }
+
+        selectedWallID = wall.id
+        selectedFurnitureID = nil
+        zaznaczoneFurnitureIDsV066.removeAll()
+        activePresentationV084 =
+            .furnitureLibrary(
+                wallID:
+                    wall.id,
+                initialGroup:
+                    .wardrobes,
+                initialCategory:
+                    .builtInWardrobe
+            )
     }
 
     private func rozpocznijDodawanieModuluZPlanuV077() {
@@ -1128,23 +1760,59 @@ struct WorkspaceProjektowyViewV063: View {
         }
 
         guard let stored = selectedFurniture,
-              let placement = stored.assembly.placement,
-              let wallID = placement.wallID else {
+              let placement = stored.assembly.placement else {
             return
         }
 
-        let before = mebleViewModel.migawkiPolozenV064(ids: [stored.id])
-        let context = KontekstPrzesunieciaModulu2D(
-            furnitureID: stored.id,
-            wallID: wallID,
-            proponowaneOdsuniecie: Millimeters(
-                max(0, placement.offsetAlongWall.rawValue + dx)
-            ),
-            celZamianyID: nil,
-            proponowaneOdsuniecieOdDolu: Millimeters(
-                max(0, placement.bottomOffset.rawValue + dy)
+        let context: KontekstPrzesunieciaModulu2D
+        if placement.anchoringMode == .freestanding
+            || placement.wallID == nil {
+            context = KontekstPrzesunieciaModulu2D(
+                furnitureID: stored.id,
+                wallID: nil,
+                proponowaneOdsuniecie: Millimeters(
+                    max(
+                        0,
+                        placement.offsetAlongWall.rawValue
+                            + dx
+                    )
+                ),
+                proponowaneOdsuniecieOdSciany: Millimeters(
+                    max(
+                        0,
+                        placement.offsetFromWall.rawValue
+                            + dy
+                    )
+                ),
+                celZamianyID: nil
             )
-        )
+        } else {
+            guard let wallID = placement.wallID else {
+                return
+            }
+
+            context = KontekstPrzesunieciaModulu2D(
+                furnitureID: stored.id,
+                wallID: wallID,
+                proponowaneOdsuniecie: Millimeters(
+                    max(
+                        0,
+                        placement.offsetAlongWall.rawValue
+                            + dx
+                    )
+                ),
+                celZamianyID: nil,
+                proponowaneOdsuniecieOdDolu: Millimeters(
+                    max(
+                        0,
+                        placement.bottomOffset.rawValue
+                            + dy
+                    )
+                )
+            )
+        }
+
+        let before = mebleViewModel.migawkiPolozenV064(ids: [stored.id])
 
         Task {
             let didMove = await mebleViewModel.przesunLubZamienModul(
@@ -1513,6 +2181,126 @@ struct WorkspaceProjektowyViewV063: View {
         mebleViewModel.storedAssembly(id: selectedFurnitureID)
     }
 
+    private var slidingPartitionCandidateV092:
+        SlidingRoomPartitionCandidateV092?
+    {
+        guard aktywnyTrybProjektowyV074 == .plan else {
+            return nil
+        }
+
+        return mebleViewModel
+            .slidingRoomPartitionCandidateV092(
+                from:
+                    selectedFurnitureID,
+                room:
+                    room
+            )
+    }
+
+    private var activeSlidingPartitionCandidateV092:
+        SlidingRoomPartitionCandidateV092?
+    {
+        manualSlidingPartitionCandidateV092
+        ?? slidingPartitionCandidateV092
+    }
+
+    private func kandydatPrzegrodyV092(
+        from base:
+            SlidingRoomPartitionCandidateV092,
+        end:
+            Point2MM
+    ) -> SlidingRoomPartitionCandidateV092 {
+        let dx =
+            end.x.rawValue - base.start.x.rawValue
+        let dy =
+            end.y.rawValue - base.start.y.rawValue
+        let length =
+            max(
+                hypot(dx, dy),
+                1
+            )
+        let id =
+            [
+                base.anchorAssemblyID.description,
+                "manual",
+                Int(base.start.x.rawValue.rounded()).description,
+                Int(base.start.y.rawValue.rounded()).description,
+                Int(end.x.rawValue.rounded()).description,
+                Int(end.y.rawValue.rounded()).description
+            ]
+            .joined(separator: "-")
+
+        return SlidingRoomPartitionCandidateV092(
+            id:
+                id,
+            anchorAssemblyID:
+                base.anchorAssemblyID,
+            anchorName:
+                base.anchorName,
+            start:
+                base.start,
+            end:
+                end,
+            length:
+                Millimeters(length),
+            height:
+                base.height,
+            rotationDegrees:
+                atan2(dy, dx) * 180 / .pi,
+            sideLabel:
+                "ręczny koniec toru"
+        )
+    }
+
+    private func ograniczonyPunktPrzegrodyV092(
+        _ point:
+            Point2MM
+    ) -> Point2MM {
+        let points =
+            room.geometry.boundary.segments.flatMap {
+                Plan2DGeometryAdapter
+                    .sampledPoints(
+                        for:
+                            $0
+                    )
+            }
+        guard !points.isEmpty else {
+            return point
+        }
+
+        let minX =
+            points.map(\.x.rawValue).min() ?? point.x.rawValue
+        let maxX =
+            points.map(\.x.rawValue).max() ?? point.x.rawValue
+        let minY =
+            points.map(\.y.rawValue).min() ?? point.y.rawValue
+        let maxY =
+            points.map(\.y.rawValue).max() ?? point.y.rawValue
+
+        return Point2MM(
+            x:
+                Millimeters(
+                    min(
+                        max(
+                            point.x.rawValue,
+                            minX
+                        ),
+                        maxX
+                    )
+                ),
+            y:
+                Millimeters(
+                    min(
+                        max(
+                            point.y.rawValue,
+                            minY
+                        ),
+                        maxY
+                    )
+                )
+        )
+    }
+
     private var aktywnieZaznaczoneIDsV066:
         Set<FurnitureAssemblyID> {
         if !zaznaczoneFurnitureIDsV066.isEmpty {
@@ -1582,6 +2370,7 @@ struct WorkspaceProjektowyViewV063: View {
         let lista = ListaFormatekProjektuBuilderV070.build(
             projectName: room.name,
             assemblies: mebleViewModel.storedAssemblies,
+            room: room,
             globalneMaterialy: globalneMaterialyRepository.ustawienia
         )
         cachedListaFormatekV074 = lista
@@ -1590,6 +2379,8 @@ struct WorkspaceProjektowyViewV063: View {
             list: lista,
             settings: .standard
         )
+        cachedRozkrojV0103 = rozkroj
+
         cachedReportGotowosciV074 = ProjectReadinessEngineV078.build(
             room: room,
             assemblies: mebleViewModel.storedAssemblies,
@@ -1597,6 +2388,18 @@ struct WorkspaceProjektowyViewV063: View {
             lista: lista,
             raport: rozkroj
         )
+
+        cachedWycenaV0103 = przeliczWycenePomieszczeniaV0103()
+        cachedPodsumowanieWycenyV0103 = cachedWycenaV0103.flatMap { wycena in
+            SilnikWycenyWariantowej
+                .oblicz(
+                    projekt: wycena,
+                    ustawienia: UstawieniaStolarniRepository.aktualne(),
+                    materialy: bazaMaterialowRepository.materialy,
+                    okucia: bazaOkucRepositoryV0103.okucia
+                )
+                .first { $0.wariant == .standard }
+        }
 
         cachedNumberedItemsV074 = FurnitureCanvasNumberingV016.make(
             room: room,
@@ -1615,6 +2418,428 @@ struct WorkspaceProjektowyViewV063: View {
             get: { poziomWymiarowania },
             set: { poziomWymiarowaniaRaw = $0.rawValue }
         )
+    }
+}
+
+private struct SlidingPartitionCanvasActionV092: View {
+    let candidate:
+        SlidingRoomPartitionCandidateV092
+    let isManualEditing:
+        Bool
+    let isSaving:
+        Bool
+    let startManualAction:
+        () -> Void
+    let cancelManualAction:
+        () -> Void
+    let commitAction:
+        () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Label(
+                "Przegroda przesuwna",
+                systemImage:
+                    "door.sliding.left.hand.open"
+            )
+            .font(.subheadline.weight(.semibold))
+
+            Divider()
+                .frame(height: 26)
+
+            VStack(
+                alignment:
+                    .leading,
+                spacing:
+                    2
+            ) {
+                Text(candidate.anchorName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+
+                Text(
+                    isManualEditing
+                    ? "Przeciągnij końcówkę toru, \(candidate.lengthLabel)"
+                    : "\(candidate.lengthLabel), \(candidate.doorCount) skrzydła, \(candidate.sideLabel)"
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if isManualEditing {
+                Button(
+                    "Anuluj",
+                    action:
+                        cancelManualAction
+                )
+                .buttonStyle(.bordered)
+
+                Button(
+                    action:
+                        commitAction
+                ) {
+                    Label(
+                        "Zapisz",
+                        systemImage:
+                            "checkmark"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    isSaving
+                    || candidate.length.rawValue < 600
+                )
+            } else {
+                Button(
+                    action:
+                        startManualAction
+                ) {
+                    Label(
+                        "Ustaw ręcznie",
+                        systemImage:
+                            "point.topleft.down.curvedto.point.bottomright.up"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(isSaving)
+
+                Button(
+                    action:
+                        commitAction
+                ) {
+                    Label(
+                        "Dodaj",
+                        systemImage:
+                            "plus"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSaving)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 720)
+        .stolarniaMaterial(
+            .ultraThinMaterial,
+            in: RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+            .stroke(
+                StolarniaPalette.frostStroke,
+                lineWidth: 1
+            )
+        }
+        .shadow(
+            color:
+                Color.black.opacity(0.12),
+            radius:
+                12,
+            y:
+                6
+        )
+    }
+}
+
+private struct WidokElewacjiWyspyV083: View {
+    let storedAssemblies: [StoredFurnitureAssembly]
+    @Binding var selectedFurnitureID: FurnitureAssemblyID?
+
+    private var islands: [StoredFurnitureAssembly] {
+        storedAssemblies
+            .filter {
+                guard let placement = $0.assembly.placement else {
+                    return false
+                }
+                return placement.anchoringMode == .freestanding
+                    || placement.wallID == nil
+            }
+            .sorted {
+                ($0.assembly.placement?.offsetAlongWall ?? .zero)
+                    <
+                ($1.assembly.placement?.offsetAlongWall ?? .zero)
+            }
+    }
+
+    private var activeIsland: StoredFurnitureAssembly? {
+        if let selectedFurnitureID,
+           let selected = islands.first(where: {
+               $0.id == selectedFurnitureID
+           }) {
+            return selected
+        }
+
+        return islands.first
+    }
+
+    var body: some View {
+        Group {
+            if islands.isEmpty {
+                ContentUnavailableView(
+                    "Brak wyspy",
+                    systemImage: "rectangle.dashed",
+                    description: Text(
+                        "Dodaj moduł wolnostojący z biblioteki, aby zobaczyć jego elewację."
+                    )
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+
+                    if let activeIsland {
+                        GeometryReader { proxy in
+                            elevationCanvas(
+                                for: activeIsland,
+                                size: proxy.size
+                            )
+                        }
+                        .frame(minHeight: 420)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(StolarniaPalette.paper.opacity(0.22))
+            }
+        }
+        .onAppear {
+            ensureIslandSelection()
+        }
+        .onChange(of: islands.map(\.id)) { _, _ in
+            ensureIslandSelection()
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(
+                "Elewacja wyspy",
+                systemImage: "rectangle.center.inset.filled"
+            )
+            .font(.title2.weight(.semibold))
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(islands) { stored in
+                        Button {
+                            selectedFurnitureID = stored.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(stored.assembly.name)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(sizeText(for: stored))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(minWidth: 160, alignment: .leading)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(
+                            stored.id == activeIsland?.id
+                                ? Color.accentColor
+                                : Color.secondary
+                        )
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func elevationCanvas(
+        for stored: StoredFurnitureAssembly,
+        size: CGSize
+    ) -> some View {
+        let assembly = stored.assembly
+        let width = max(assembly.size.width.rawValue, 1)
+        let height = max(assembly.size.height.rawValue, 1)
+        let scale = min(
+            max(size.width - 96, 1) / CGFloat(width),
+            max(size.height - 150, 1) / CGFloat(height)
+        )
+        let drawingSize = CGSize(
+            width: CGFloat(width) * scale,
+            height: CGFloat(height) * scale
+        )
+
+        return ZStack(alignment: .bottom) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color.black.opacity(0.04))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(
+                                StolarniaPalette.frostStroke,
+                                lineWidth: 1
+                            )
+                    }
+
+                ZStack {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    StolarniaPalette.paper,
+                                    StolarniaPalette.paper.opacity(0.72)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay {
+                            Rectangle()
+                                .stroke(
+                                    Color.primary.opacity(0.28),
+                                    lineWidth: 2
+                                )
+                        }
+
+                    VStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.16))
+                            .frame(height: 2)
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.12))
+                            .frame(height: 2)
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.16))
+                            .frame(height: 2)
+                    }
+                    .padding(.horizontal, 10)
+
+                    HStack(spacing: 0) {
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.12))
+                            .frame(width: 2)
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                }
+                .frame(
+                    width: drawingSize.width,
+                    height: drawingSize.height
+                )
+                .shadow(
+                    color: Color.black.opacity(0.14),
+                    radius: 18,
+                    y: 10
+                )
+            }
+            .padding(.bottom, 116)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(assembly.name)
+                    .font(.headline)
+
+                HStack(spacing: 12) {
+                    metric(
+                        "Szerokość",
+                        assembly.size.width
+                    )
+                    metric(
+                        "Wysokość",
+                        assembly.size.height
+                    )
+                    metric(
+                        "Głębokość",
+                        assembly.size.depth
+                    )
+                }
+
+                if let placement = assembly.placement {
+                    HStack(spacing: 12) {
+                        metric("X", placement.offsetAlongWall)
+                        metric("Y", placement.offsetFromWall)
+                    }
+                }
+            }
+            .padding(14)
+            .frame(
+                maxWidth: 680,
+                alignment: .leading
+            )
+            .stolarniaMaterial(
+                .ultraThinMaterial,
+                in: RoundedRectangle(
+                    cornerRadius: 8,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: 8,
+                    style: .continuous
+                )
+                .stroke(
+                    StolarniaPalette.frostStroke,
+                    lineWidth: 1
+                )
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 18)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func metric(
+        _ title: String,
+        _ value: Millimeters
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(MebelWymiarFormatterV0143.millimeters(value))
+                .font(.body.monospacedDigit().weight(.semibold))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Color.secondary.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+    }
+
+    private func sizeText(
+        for stored: StoredFurnitureAssembly
+    ) -> String {
+        let size = stored.assembly.size
+        return "\(Self.integer(size.width)) x \(Self.integer(size.height)) x \(Self.integer(size.depth)) mm"
+    }
+
+    private static func integer(
+        _ value: Millimeters
+    ) -> String {
+        value.rawValue.formatted(
+            .number.precision(.fractionLength(0))
+        )
+    }
+
+    private func ensureIslandSelection() {
+        guard let firstID = islands.first?.id else {
+            return
+        }
+
+        if selectedFurnitureID == nil
+            || !islands.contains(where: {
+                $0.id == selectedFurnitureID
+            }) {
+            selectedFurnitureID = firstID
+        }
     }
 }
 

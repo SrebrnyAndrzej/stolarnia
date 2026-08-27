@@ -76,6 +76,8 @@ struct KonfiguracjaModuluMeblowegoView: View {
     @State private var selectedNormCategory:
         KategoriaNormySzafki
     @State private var frontTopGapMM = 2.0
+    @State private var baseHeightSystemV084:
+        KitchenBaseHeightSystemV018
 
     // v0.68.0: front, kierunek otwierania i okucia korzystają z jednej
     // konfiguracji zapisanej w karcie technicznej modułu.
@@ -86,8 +88,27 @@ struct KonfiguracjaModuluMeblowegoView: View {
         String
     @State private var selectedDrawerProfileIDV068:
         String
+    @State private var drawerFrontTypeV068:
+        TypFrontuSzuflady
+    @State private var drawerLayoutPresetV068:
+        RodzajPresetuUkladuSzuflad
+    @State private var drawerSideInsetTextV068:
+        String
+    @State private var drawerCustomHeightsV068:
+        [Double]
+    @State private var lowerLedRailEnabledV083:
+        Bool
+    @State private var lowerLedRailLengthTextV083:
+        String
+    @State private var lowerLedRailDepthTextV083:
+        String
+    @State private var lowerLedRailThicknessTextV083:
+        String
     @State private var showPresetSavedMessageV068 =
         false
+
+    private static let lowerLedRailMarkerV083 =
+        "AUTO-WIENIEC-LED-V083:"
 
     init(
         template: FurnitureTemplate,
@@ -95,6 +116,7 @@ struct KonfiguracjaModuluMeblowegoView: View {
         suggestedPlacement: SugerowanePolozenieModulu? = nil,
         poczatkowePoleWymiaru:
             PoleWymiaruModulu2D? = nil,
+        poczatkowaSzerokoscMM: Double? = nil,
         onSave: @escaping (KonfiguracjaModuluMeblowegoDane) async -> Bool
     ) {
         self.template = template
@@ -112,6 +134,31 @@ struct KonfiguracjaModuluMeblowegoView: View {
 
         let parameters = storedAssembly?.parameters ?? template.defaultParameters
         let placement = storedAssembly?.assembly.placement
+        // Szerokość wybrana wprost na kaflu biblioteki wygrywa z domyślną
+        // szerokością szablonu. Kafel pokazuje typowe podziałki katalogu, więc
+        // stuknięcie w „800" ma otworzyć konfigurator już na 800 — inaczej
+        // wybór byłby tylko sugestią, którą trzeba powtórzyć w polu.
+        //
+        // Tylko dla nowego modułu: przy edycji zapisanego zespołu obowiązuje
+        // to, co faktycznie stoi na ścianie.
+        let templateWidthMM: Double = {
+            if storedAssembly == nil,
+               let wybrana = poczatkowaSzerokoscMM {
+                return wybrana
+            }
+            return (
+                (try? parameters.millimeters(for: .width))
+                ?? 600
+            )
+            .rawValue
+        }()
+        let templateHeight =
+            (try? parameters.millimeters(for: .height))
+            ?? 720
+        let supportsBaseHeightSystem =
+            Self.supportsBaseHeightSystemV084(
+                for: template
+            )
 
         let detectedNorm =
             NormySzafekCatalog.norma(
@@ -124,6 +171,27 @@ struct KonfiguracjaModuluMeblowegoView: View {
         _selectedNormCategory = State(
             initialValue:
                 detectedNorm.kategoria
+        )
+
+        var initialBaseHeightSystem =
+            KitchenBaseHeightSystemV018()
+        if storedAssembly == nil,
+           supportsBaseHeightSystem {
+            initialBaseHeightSystem.recalculate()
+        } else {
+            initialBaseHeightSystem.carcassHeightMM =
+                templateHeight.rawValue
+            initialBaseHeightSystem
+                .targetWorktopHeightMM =
+                    templateHeight.rawValue
+                    + initialBaseHeightSystem
+                        .effectiveLegHeightMM
+                    + initialBaseHeightSystem
+                        .countertopThicknessMM
+        }
+        _baseHeightSystemV084 = State(
+            initialValue:
+                initialBaseHeightSystem
         )
 
         let initialName =
@@ -172,17 +240,106 @@ struct KonfiguracjaModuluMeblowegoView: View {
                 .filter(\.aktywna)
                 .count
             ?? 0
+        let initialActiveDrawers =
+            savedTechnicalCard?
+                .efektywneSzuflady
+                .filter(\.aktywna)
+                .sorted {
+                    $0.pozycjaDolnaYMM
+                    < $1.pozycjaDolnaYMM
+                }
+            ?? []
+        let initialDrawerFrontType =
+            initialActiveDrawers
+                .first?
+                .typFrontu
+            ?? .zewnetrzny
+        let initialDrawerSideInset =
+            initialDrawerFrontType == .wewnetrzny
+            ? (
+                initialActiveDrawers
+                    .first?
+                    .odsuniecieOdScianBocznychMM
+                ?? 21
+            )
+            : 0
+        let initialLedRail =
+            savedTechnicalCard?
+                .efektywneElementy
+                .first {
+                    $0.uwagi
+                        .hasPrefix(
+                            Self.lowerLedRailMarkerV083
+                        )
+                }
 
         _drawerCount = State(
             initialValue:
                 initialDrawerCount
         )
+        _drawerFrontTypeV068 = State(
+            initialValue:
+                initialDrawerFrontType
+        )
+        _drawerLayoutPresetV068 = State(
+            initialValue:
+                Self.initialDrawerLayoutPresetV068(
+                    drawers:
+                        initialActiveDrawers
+                )
+        )
+        _drawerSideInsetTextV068 = State(
+            initialValue:
+                Self.text(
+                    Millimeters(
+                        initialDrawerSideInset
+                    )
+                )
+        )
+        _drawerCustomHeightsV068 = State(
+            initialValue:
+                initialActiveDrawers
+                    .map(\.wysokoscFrontuMM)
+        )
+        _lowerLedRailEnabledV083 = State(
+            initialValue:
+                initialLedRail != nil
+        )
+        _lowerLedRailLengthTextV083 = State(
+            initialValue:
+                Self.text(
+                    Millimeters(
+                        initialLedRail?
+                            .dlugoscMM
+                        ?? templateWidthMM
+                    )
+                )
+        )
+        _lowerLedRailDepthTextV083 = State(
+            initialValue:
+                Self.text(
+                    Millimeters(
+                        initialLedRail?
+                            .szerokoscMM
+                        ?? 60
+                    )
+                )
+        )
+        _lowerLedRailThicknessTextV083 = State(
+            initialValue:
+                Self.text(
+                    Millimeters(
+                        initialLedRail?
+                            .gruboscMM
+                        ?? 18
+                    )
+                )
+        )
 
         // Oblicz szerokość wcześniej, żeby domyslna() mogło
         // automatycznie wyliczyć poprawną liczbę frontów z reguły szerokości.
         let templateWidthForFronts =
-            (try? parameters.millimeters(for: .width))
-            ?? 600
+            Millimeters(templateWidthMM)
         let initialWidthForFronts: Millimeters
         if storedAssembly == nil,
            let maximumWidth =
@@ -240,9 +397,16 @@ struct KonfiguracjaModuluMeblowegoView: View {
             initialValue: Self.text(initialWidthForFronts)
         )
         _heightText = State(
-            initialValue: Self.text(
-                (try? parameters.millimeters(for: .height)) ?? 720
-            )
+            initialValue:
+                Self.text(
+                    supportsBaseHeightSystem
+                        && storedAssembly == nil
+                    ? Millimeters(
+                        initialBaseHeightSystem
+                            .carcassHeightMM
+                    )
+                    : templateHeight
+                )
         )
         _depthText = State(
             initialValue: Self.text(
@@ -377,6 +541,9 @@ struct KonfiguracjaModuluMeblowegoView: View {
                         poczatkowePoleWymiaru
                         == .wysokosc
                 )
+                .disabled(
+                    supportsBaseHeightSystemV084
+                )
                 PolePomiaroweMM(
                     "Głębokość",
                     text: $depthText,
@@ -412,6 +579,99 @@ struct KonfiguracjaModuluMeblowegoView: View {
                 .foregroundStyle(
                     .secondary
                 )
+
+                if supportsBaseHeightSystemV084 {
+                    Text(
+                        "Wysokość korpusu jest liczona z docelowej wysokości blatu, podstawy i grubości blatu."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(
+                        .secondary
+                    )
+                }
+            }
+
+            if supportsBaseHeightSystemV084 {
+                Section("Wysokość robocza") {
+                    Picker(
+                        "Podstawa",
+                        selection:
+                            $baseHeightSystemV084
+                                .supportKind
+                    ) {
+                        ForEach(
+                            CabinetBaseSupportKindV018
+                                .allCases
+                        ) { supportKind in
+                            Text(supportKind.title)
+                                .tag(supportKind)
+                        }
+                    }
+
+                    TextField(
+                        "Docelowa wysokość blatu [mm]",
+                        value:
+                            $baseHeightSystemV084
+                                .targetWorktopHeightMM,
+                        format:
+                            .number
+                                .precision(
+                                    .fractionLength(0...1)
+                                )
+                    )
+                    .keyboardType(.decimalPad)
+
+                    TextField(
+                        "Wysokość nóżek/cokołu [mm]",
+                        value:
+                            $baseHeightSystemV084
+                                .legHeightMM,
+                        format:
+                            .number
+                                .precision(
+                                    .fractionLength(0...1)
+                                )
+                    )
+                    .keyboardType(.decimalPad)
+                    .disabled(
+                        baseHeightSystemV084
+                            .supportKind
+                        == .floorStanding
+                    )
+
+                    TextField(
+                        "Grubość blatu [mm]",
+                        value:
+                            $baseHeightSystemV084
+                                .countertopThicknessMM,
+                        format:
+                            .number
+                                .precision(
+                                    .fractionLength(0...1)
+                                )
+                    )
+                    .keyboardType(.decimalPad)
+
+                    LabeledContent(
+                        "Wyliczony korpus",
+                        value:
+                            "\(Int(recalculatedBaseHeightSystemV084.carcassHeightMM.rounded())) mm"
+                    )
+
+                    LabeledContent(
+                        "Gotowa wysokość",
+                        value:
+                            "\(Int(recalculatedBaseHeightSystemV084.finishedWorktopHeightMM.rounded())) mm"
+                    )
+
+                    Text(
+                        "Zmiana nóg/cokołu albo blatu skraca lub wydłuża korpus. Moduł zostaje na podłodze."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(
+                        .secondary
+                    )
+                }
             }
 
             if supportsAnyConstructionParameter {
@@ -542,11 +802,103 @@ struct KonfiguracjaModuluMeblowegoView: View {
 
                     if openingTechnology
                         == .shortenedBottomFingerPull,
+                       !isWallCabinetV083,
                        supports(.bottomShortening) {
                         PolePomiaroweMM(
                             "Podcięcie dna",
                             text: $bottomShorteningText
                         )
+                    }
+                }
+            }
+
+            if isWallCabinetV083 {
+                Section("Szafki wiszące") {
+                    Toggle(
+                        "Fronty z podchwytem",
+                        isOn:
+                            Binding(
+                                get: {
+                                    openingTechnology
+                                    == .shortenedBottomFingerPull
+                                },
+                                set: { isEnabled in
+                                    openingTechnology =
+                                        isEnabled
+                                        ? .shortenedBottomFingerPull
+                                        : .handle
+
+                                    if isEnabled,
+                                       (millimeters(bottomShorteningText)?
+                                        .rawValue
+                                        ?? 0) <= 0 {
+                                        bottomShorteningText =
+                                            Self.text(
+                                                Millimeters(30)
+                                            )
+                                    }
+                                }
+                            )
+                    )
+
+                    if openingTechnology == .shortenedBottomFingerPull,
+                       supports(.bottomShortening) {
+                        PolePomiaroweMM(
+                            "Podcięcie pod palce",
+                            text: $bottomShorteningText
+                        )
+
+                        Text(
+                            "Dla wiszących traktujemy to jako podchwyt frontu: dolny wieniec jest cofnięty, żeby pod frontem powstał prześwit na palce."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Toggle(
+                        "Dolny wieniec LED łączący ciąg",
+                        isOn:
+                            $lowerLedRailEnabledV083
+                    )
+
+                        if lowerLedRailEnabledV083 {
+                            PolePomiaroweMM(
+                                "Długość wieńca LED",
+                                text:
+                                    $lowerLedRailLengthTextV083
+                            )
+
+                            Button {
+                                if let width =
+                                    millimeters(widthText) {
+                                    lowerLedRailLengthTextV083 =
+                                        Self.text(width)
+                                }
+                            } label: {
+                                Label(
+                                    "Ustaw długość z szerokości modułu",
+                                    systemImage:
+                                        "arrow.left.and.right"
+                                )
+                            }
+
+                            PolePomiaroweMM(
+                                "Głębokość listwy",
+                            text:
+                                $lowerLedRailDepthTextV083
+                        )
+
+                        PolePomiaroweMM(
+                            "Grubość listwy",
+                            text:
+                                $lowerLedRailThicknessTextV083
+                        )
+
+                        Text(
+                            "Długość może obejmować cały ciąg szafek wiszących. Do karty trafi wieniec/listwa, profil LED, taśma i zasilacz."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -598,6 +950,55 @@ struct KonfiguracjaModuluMeblowegoView: View {
                             )
                             .tag(profile.id)
                         }
+                    }
+
+                    Picker(
+                        "Układ wysokości",
+                        selection:
+                            $drawerLayoutPresetV068
+                    ) {
+                        ForEach(
+                            drawerLayoutOptionsV068
+                        ) { layout in
+                            Text(layout.etykieta)
+                                .tag(layout)
+                        }
+                    }
+
+                    if drawerLayoutPresetV068
+                        == .wysokosciNiestandardowe {
+                        drawerCustomHeightsEditorV068
+                    } else if let heights =
+                        previewDrawerHeightsV068 {
+                        drawerHeightsPreviewV068(heights)
+                    }
+
+                    Picker(
+                        "Typ szuflad",
+                        selection:
+                            $drawerFrontTypeV068
+                    ) {
+                        ForEach(
+                            TypFrontuSzuflady
+                                .allCases
+                        ) { type in
+                            Text(type.nazwa)
+                                .tag(type)
+                        }
+                    }
+
+                    if drawerFrontTypeV068 == .wewnetrzny {
+                        PolePomiaroweMM(
+                            "Odsunięcie od boków",
+                            text:
+                                $drawerSideInsetTextV068
+                        )
+
+                        Text(
+                            "Odsunięcie szuflady za frontem jest liczone z reguły zawiasu. Zero-protrusion 155° dopuszcza układ z małym luzem, zwykły zawias wymaga dystansu albo potwierdzenia karty SKU."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 } else {
                     Stepper(
@@ -690,6 +1091,57 @@ struct KonfiguracjaModuluMeblowegoView: View {
                         .szuflada
                     frontCountV068 =
                         newValue
+                    if drawerLayoutPresetV068
+                        == .wysokosciNiestandardowe {
+                        syncDrawerCustomHeightsCountV068(
+                            newValue
+                        )
+                    }
+                }
+            }
+            .onChange(
+                of: drawerLayoutPresetV068
+            ) { _, newValue in
+                switch newValue {
+                case .jednaWysokaDwieNiskie,
+                     .wysokaNaDoleDwieNiskie:
+                    drawerCount = 3
+                    frontCountV068 = 3
+                    drawerCustomHeightsV068 =
+                        standardoweWysokosciDlaPresetuV068(
+                            newValue
+                        )
+                        ?? drawerCustomHeightsV068
+                case .dwieWysokie:
+                    drawerCount = 2
+                    frontCountV068 = 2
+                    drawerCustomHeightsV068 =
+                        standardoweWysokosciDlaPresetuV068(
+                            newValue
+                        )
+                        ?? drawerCustomHeightsV068
+                case .cargo:
+                    drawerCount = 1
+                    frontCountV068 = 1
+                case .wysokosciNiestandardowe:
+                    syncDrawerCustomHeightsCountV068(
+                        drawerCount
+                    )
+                case .rowne:
+                    break
+                }
+            }
+            .onChange(
+                of: drawerFrontTypeV068
+            ) { _, newValue in
+                if newValue == .wewnetrzny,
+                   (millimeters(drawerSideInsetTextV068)?
+                    .rawValue
+                    ?? 0) <= 0 {
+                    drawerSideInsetTextV068 =
+                        Self.text(
+                            Millimeters(21)
+                        )
                 }
             }
 
@@ -848,9 +1300,15 @@ struct KonfiguracjaModuluMeblowegoView: View {
                 )
             }
 
-            Section("Położenie przy ścianie") {
+            Section(
+                isFreestandingModuleV083
+                    ? "Położenie w pomieszczeniu"
+                    : "Położenie przy ścianie"
+            ) {
                 PolePomiaroweMM(
-                    "Od początku ściany",
+                    isFreestandingModuleV083
+                        ? "X w pomieszczeniu"
+                        : "Od początku ściany",
                     text: $offsetAlongWallText
                 )
                 .disabled(
@@ -868,7 +1326,9 @@ struct KonfiguracjaModuluMeblowegoView: View {
                 }
 
                 PolePomiaroweMM(
-                    "Odsunięcie od ściany",
+                    isFreestandingModuleV083
+                        ? "Y w pomieszczeniu"
+                        : "Odsunięcie od ściany",
                     text: $offsetFromWallText
                 )
                 PolePomiaroweMM(
@@ -901,16 +1361,32 @@ struct KonfiguracjaModuluMeblowegoView: View {
                     save()
                 }
                 .disabled(isSaving)
+                .keyboardShortcut("s", modifiers: [.command])
             }
         }
-        .sheet(
+        // Karta techniczna jest **wciśnięta w ten sam stos**, nie postawiona
+        // jako kolejne okno. Konfigurator jest tu celem `NavigationLink`
+        // z biblioteki, więc karta wchodzi jako trzeci ekran tej samej ścieżki
+        // i wraca się z niej strzałką wstecz.
+        //
+        // Wcześniej był to `sheet` nad sheetem biblioteki, a karta stawiała
+        // z siebie jeszcze jeden (szuflady, System 32, edycja parametrów) —
+        // cztery poziomy do zamykania po kolei. Na ścieżce z elewacji zrobiła
+        // to już `KartaModuluV097`; tu było to samo do zrobienia.
+        .navigationDestination(
             item: $technicalCard
         ) { card in
             KartaTechnicznaSzafkiView(
-                card: card
+                card: card,
+                osadzona: true
             )
         }
         .interactiveDismissDisabled(isSaving)
+        .onChange(
+            of: baseHeightSystemV084
+        ) { _, _ in
+            applyBaseHeightSystemV084()
+        }
     }
 
     private var supportedParameterKeys:
@@ -943,10 +1419,93 @@ struct KonfiguracjaModuluMeblowegoView: View {
         }
     }
 
+    private var supportsBaseHeightSystemV084:
+        Bool
+    {
+        Self.supportsBaseHeightSystemV084(
+            for: template
+        )
+    }
+
+    private var recalculatedBaseHeightSystemV084:
+        KitchenBaseHeightSystemV018
+    {
+        baseHeightSystemV084
+            .recalculated()
+    }
+
+    private var isWallCabinetV083:
+        Bool
+    {
+        template.builderType == .wallCabinet
+        || template.category == .kitchenWallCabinet
+        || StandardKitchenTemplatesV0143
+            .anchoringMode(for: template)
+            == .wallMounted
+    }
+
+    private var isFreestandingModuleV083:
+        Bool
+    {
+        StandardKitchenTemplatesV0143
+            .anchoringMode(for: template)
+            == .freestanding
+        || StandardFurnitureModuleCatalogV077
+            .anchoringMode(for: template)
+            == .freestanding
+    }
+
     private func supports(
         _ key: FurnitureParameterKey
     ) -> Bool {
         supportedParameterKeys.contains(key)
+    }
+
+    private static func supportsBaseHeightSystemV084(
+        for template: FurnitureTemplate
+    ) -> Bool {
+        if template.category == .kitchenBaseCabinet {
+            return true
+        }
+
+        switch StandardFurnitureModuleCatalogV077
+            .kind(for: template) {
+        case .kitchenIsland,
+             .kitchenDrawerBase,
+             .sinkBase,
+             .cornerBase,
+             .bathroomVanity:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func applyBaseHeightSystemV084() {
+        guard supportsBaseHeightSystemV084 else {
+            return
+        }
+
+        let recalculated =
+            baseHeightSystemV084
+                .recalculated()
+
+        if recalculated != baseHeightSystemV084 {
+            baseHeightSystemV084 =
+                recalculated
+        }
+
+        heightText =
+            Self.text(
+                Millimeters(
+                    recalculated
+                        .carcassHeightMM
+                )
+            )
+        bottomOffsetText =
+            Self.text(
+                Millimeters.zero
+            )
     }
 
     private func backTypeLabel(
@@ -982,7 +1541,7 @@ struct KonfiguracjaModuluMeblowegoView: View {
         case .pushToOpen:
             return "Push to open"
         case .shortenedBottomFingerPull:
-            return "Podchwyt w dnie"
+            return "Podchwyt / cofnięty dolny wieniec"
         case .gola:
             return "Gola"
         case .routedFront:
@@ -1025,6 +1584,240 @@ struct KonfiguracjaModuluMeblowegoView: View {
                     .prowadnica
                 ]
             )
+    }
+
+    private var drawerLayoutOptionsV068:
+        [RodzajPresetuUkladuSzuflad]
+    {
+        [
+            .rowne,
+            .jednaWysokaDwieNiskie,
+            .wysokaNaDoleDwieNiskie,
+            .dwieWysokie,
+            .wysokosciNiestandardowe,
+            .cargo
+        ]
+    }
+
+    private var previewDrawerHeightsV068:
+        [Double]?
+    {
+        standardoweWysokosciDlaPresetuV068(
+            drawerLayoutPresetV068
+        )
+    }
+
+    private func drawerHeightsPreviewV068(
+        _ heights: [Double]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(
+                Array(heights.enumerated()),
+                id: \.offset
+            ) { pair in
+                HStack {
+                    Text("Szuflada \(pair.offset + 1)")
+                    Spacer()
+                    Text("\(Int(pair.element.rounded())) mm")
+                        .font(.body.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var drawerCustomHeightsEditorV068:
+        some View
+    {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(
+                Array(drawerCustomHeightsV068.indices),
+                id: \.self
+            ) { index in
+                HStack(spacing: 10) {
+                    Picker(
+                        "Szuflada \(index + 1)",
+                        selection: Binding(
+                            get: {
+                                najblizszyStandardSzufladyV068(
+                                    drawerCustomHeightsV068[
+                                        index
+                                    ]
+                                )
+                            },
+                            set: { standard in
+                                drawerCustomHeightsV068[
+                                    index
+                                ] =
+                                    standard
+                                    .wysokoscFrontuMM
+                            }
+                        )
+                    ) {
+                        ForEach(
+                            StandardWysokoscSzuflady
+                                .allCases
+                        ) { standard in
+                            Text(standard.opis)
+                                .tag(standard)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    TextField(
+                        "mm",
+                        value: Binding(
+                            get: {
+                                drawerCustomHeightsV068[
+                                    index
+                                ]
+                            },
+                            set: { value in
+                                drawerCustomHeightsV068[
+                                    index
+                                ] =
+                                    min(
+                                        max(
+                                            value,
+                                            60
+                                        ),
+                                        600
+                                    )
+                            }
+                        ),
+                        format: .number
+                    )
+                    #if os(iOS)
+                    .keyboardType(.decimalPad)
+                    #endif
+                    .multilineTextAlignment(.trailing)
+                    .font(.body.monospacedDigit())
+                    .frame(maxWidth: 96)
+
+                    Text("mm")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
+                Button {
+                    drawerCustomHeightsV068.append(
+                        StandardWysokoscSzuflady
+                            .niska
+                            .wysokoscFrontuMM
+                    )
+                    drawerCount =
+                        drawerCustomHeightsV068.count
+                    frontCountV068 =
+                        drawerCustomHeightsV068.count
+                } label: {
+                    Label(
+                        "Dodaj szufladę",
+                        systemImage: "plus.circle"
+                    )
+                }
+                .disabled(drawerCustomHeightsV068.count >= 10)
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    if drawerCustomHeightsV068.count > 1 {
+                        drawerCustomHeightsV068.removeLast()
+                        drawerCount =
+                            drawerCustomHeightsV068.count
+                        frontCountV068 =
+                            drawerCustomHeightsV068.count
+                    }
+                } label: {
+                    Label(
+                        "Usuń ostatnią",
+                        systemImage: "minus.circle"
+                    )
+                }
+                .disabled(drawerCustomHeightsV068.count <= 1)
+            }
+            .font(.caption)
+
+            LabeledContent(
+                "Suma wysokości",
+                value:
+                    "\(Int(drawerCustomHeightsV068.reduce(0, +).rounded())) mm"
+            )
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func standardoweWysokosciDlaPresetuV068(
+        _ preset: RodzajPresetuUkladuSzuflad
+    ) -> [Double]? {
+        let niska =
+            StandardWysokoscSzuflady
+                .niska
+                .wysokoscFrontuMM
+        let wysoka =
+            StandardWysokoscSzuflady
+                .wysoka
+                .wysokoscFrontuMM
+
+        switch preset {
+        case .jednaWysokaDwieNiskie:
+            return [niska, niska, wysoka]
+        case .wysokaNaDoleDwieNiskie:
+            return [wysoka, niska, niska]
+        case .dwieWysokie:
+            return [wysoka, wysoka]
+        case .rowne,
+             .wysokosciNiestandardowe,
+             .cargo:
+            return nil
+        }
+    }
+
+    private func syncDrawerCustomHeightsCountV068(
+        _ count: Int
+    ) {
+        let safeCount = max(count, 1)
+
+        if drawerCustomHeightsV068.isEmpty {
+            drawerCustomHeightsV068 =
+                Array(
+                    repeating:
+                        StandardWysokoscSzuflady
+                        .srednia
+                        .wysokoscFrontuMM,
+                    count: safeCount
+                )
+            return
+        }
+
+        while drawerCustomHeightsV068.count < safeCount {
+            drawerCustomHeightsV068.append(
+                drawerCustomHeightsV068.last
+                ?? StandardWysokoscSzuflady
+                    .srednia
+                    .wysokoscFrontuMM
+            )
+        }
+
+        if drawerCustomHeightsV068.count > safeCount {
+            drawerCustomHeightsV068.removeLast(
+                drawerCustomHeightsV068.count
+                - safeCount
+            )
+        }
+    }
+
+    private func najblizszyStandardSzufladyV068(
+        _ height: Double
+    ) -> StandardWysokoscSzuflady {
+        StandardWysokoscSzuflady
+            .allCases
+            .min {
+                abs($0.wysokoscFrontuMM - height)
+                < abs($1.wysokoscFrontuMM - height)
+            }
+        ?? .srednia
     }
 
     private func profileLabelV068(
@@ -1311,24 +2104,56 @@ struct KonfiguracjaModuluMeblowegoView: View {
             width.formatted(
                 .number.grouping(.never)
             )
-        heightText =
-            height.formatted(
-                .number.grouping(.never)
-            )
         depthText =
             depth.formatted(
                 .number.grouping(.never)
             )
 
-        if let pedestal =
-            norm.wysokoscCokoluMM {
-            bottomOffsetText =
-                pedestal.minimum
-                    .formatted(
-                        .number.grouping(
-                            .never
-                        )
+        if supportsBaseHeightSystemV084 {
+            var system =
+                baseHeightSystemV084
+
+            if let pedestal =
+                norm.wysokoscCokoluMM {
+                system.legHeightMM =
+                    pedestal.minimum
+            }
+
+            if let worktop =
+                norm.gruboscBlatuMM {
+                system.countertopThicknessMM =
+                    worktop.minimum
+            }
+
+            system.recalculate()
+            baseHeightSystemV084 =
+                system
+            heightText =
+                Self.text(
+                    Millimeters(
+                        system.carcassHeightMM
                     )
+                )
+            bottomOffsetText =
+                Self.text(
+                    Millimeters.zero
+                )
+        } else {
+            heightText =
+                height.formatted(
+                    .number.grouping(.never)
+                )
+
+            if let pedestal =
+                norm.wysokoscCokoluMM {
+                bottomOffsetText =
+                    pedestal.minimum
+                        .formatted(
+                            .number.grouping(
+                                .never
+                            )
+                        )
+            }
         }
     }
 
@@ -1503,7 +2328,58 @@ struct KonfiguracjaModuluMeblowegoView: View {
         card.uwagi =
             normSummaryText
 
+        synchronizujDolnyWieniecLEDV083(
+            w: &card
+        )
+
+        uzupelnijWierceniaProdukcyjneV0101(
+            w: &card,
+            width: width,
+            height: height,
+            depth: depth
+        )
+
         return card
+    }
+
+    /// Dokłada wiercenia produkcyjne do karty odtworzonej z zapisu.
+    ///
+    /// Karta modułu jest renderowana tym samym arkuszem `ArkuszTechnicznyA4V028`
+    /// niezależnie od tego, czy otworzy się ją z elewacji, czy stąd — ale
+    /// **przygotowanie danych różniło się między tymi drogami**.
+    /// `KartyTechniczneModulowV028` (wejście z elewacji) i kreator mebla wołają
+    /// `applyProductionDrillings`, a ta ścieżka nie wołała jej wcale.
+    ///
+    /// Skutek był taki, że karta zapisana kiedyś, a otwarta z biblioteki po
+    /// zmianie wymiarów, pokazywała osie prowadnic i puszki zawiasów z poprzedniej
+    /// geometrii albo nie pokazywała ich w ogóle. To jest rysunek, z którego
+    /// wierci się bok korpusu.
+    ///
+    /// Merge, nie nadpisanie: `applyProductionDrillings` scala punkty świeżo
+    /// wyliczone z zapisanymi, więc ręczne korekty w karcie nie znikają.
+    private func uzupelnijWierceniaProdukcyjneV0101(
+        w card: inout KartaTechnicznaSzafki,
+        width: Millimeters,
+        height: Millimeters,
+        depth: Millimeters
+    ) {
+        let swieza =
+            KartaTechnicznaSzafkiBuilder
+                .build(
+                    template: template,
+                    moduleName: card.nazwa,
+                    width: width,
+                    height: height,
+                    depth: depth,
+                    shelfCount: shelfCount,
+                    existingID: card.draftID
+                )
+
+        KartaTechnicznaSzafkiBuilder
+            .applyProductionDrillings(
+                to: &card,
+                generated: swieza
+            )
     }
 
     private func zapisanaKartaTechniczna(
@@ -1529,6 +2405,182 @@ struct KonfiguracjaModuluMeblowegoView: View {
         return KartaTechnicznaSzafkiStore
             .card(
                 for: moduleTechnicalID
+            )
+    }
+
+    private func synchronizujDolnyWieniecLEDV083(
+        w card:
+            inout KartaTechnicznaSzafki
+    ) {
+        let marker =
+            Self.lowerLedRailMarkerV083
+
+        card.efektywneElementy
+            .removeAll {
+                $0.uwagi
+                    .hasPrefix(marker)
+            }
+
+        card.efektywneAkcesoria
+            .removeAll {
+                $0.uwagi
+                    .hasPrefix(marker)
+            }
+
+        guard lowerLedRailEnabledV083 else {
+            return
+        }
+
+        let lengthMM =
+            max(
+                millimeters(lowerLedRailLengthTextV083)?
+                    .rawValue
+                ?? card.szerokoscMM,
+                1
+            )
+        let depthMM =
+            max(
+                millimeters(lowerLedRailDepthTextV083)?
+                    .rawValue
+                ?? 60,
+                1
+            )
+        let thicknessMM =
+            max(
+                millimeters(lowerLedRailThicknessTextV083)?
+                    .rawValue
+                ?? 18,
+                1
+            )
+
+        card.efektywneElementy
+            .append(
+                ElementTechnicznySzafki(
+                    etykieta:
+                        "\(card.numerSzafki)_LED_WD",
+                    typ:
+                        .wieniecDolny,
+                    nazwa:
+                        "Dolny wieniec LED łączący ciąg",
+                    dlugoscMM:
+                        lengthMM,
+                    szerokoscMM:
+                        depthMM,
+                    gruboscMM:
+                        thicknessMM,
+                    ilosc: 1,
+                    material:
+                        card.materialKorpusu,
+                    kierunek:
+                        .poziomy,
+                    uwagi:
+                        "\(marker) długość \(lengthMM.formatted()) mm; głębokość \(depthMM.formatted()) mm; frez/kanał LED do potwierdzenia z profilem."
+                )
+            )
+
+        dodajAkcesoriumLEDV083(
+            profilID: "led.profile.generic",
+            ilosc:
+                max(
+                    Int(
+                        ceil(lengthMM / 1000)
+                    ),
+                    1
+                ),
+            target:
+                "\(card.numerSzafki)_LED_WD",
+            lengthMM:
+                lengthMM,
+            do: &card
+        )
+
+        dodajAkcesoriumLEDV083(
+            profilID: "tasma.led.neutral",
+            ilosc:
+                max(
+                    Int(
+                        ceil(lengthMM / 1000)
+                    ),
+                    1
+                ),
+            target:
+                "\(card.numerSzafki)_LED_WD",
+            lengthMM:
+                lengthMM,
+            do: &card
+        )
+
+        dodajAkcesoriumLEDV083(
+            profilID: "zasilacz.led.30w",
+            ilosc:
+                max(
+                    Int(
+                        ceil(lengthMM / 2500)
+                    ),
+                    1
+                ),
+            target:
+                "\(card.numerSzafki)_LED_WD",
+            lengthMM:
+                lengthMM,
+            do: &card
+        )
+    }
+
+    private func dodajAkcesoriumLEDV083(
+        profilID: String,
+        ilosc: Int,
+        target: String,
+        lengthMM: Double,
+        do card:
+            inout KartaTechnicznaSzafki
+    ) {
+        guard let profile =
+            KatalogRegulAkcesoriow
+                .profil(id: profilID)
+        else {
+            return
+        }
+
+        let marketPrice =
+            profile.cenaRynkowa
+
+        card.efektywneAkcesoria
+            .append(
+                InstancjaAkcesoriumSzafki(
+                    profilID:
+                        profile.id,
+                    producent:
+                        profile.producent,
+                    rodzina:
+                        profile.rodzina,
+                    model:
+                        profile.model,
+                    kategoria:
+                        profile.kategoria,
+                    ilosc:
+                        max(ilosc, 1),
+                    docelowaEtykietaElementu:
+                        target,
+                    cenaJednostkowaNettoPLN:
+                        marketPrice?
+                            .cenaSredniaNettoPLN,
+                    cenaJednostkowaBruttoPLN:
+                        marketPrice?
+                            .cenaSredniaBruttoPLN,
+                    jednostkaCeny:
+                        marketPrice?
+                            .jednostka
+                            .skrot,
+                    dataCeny:
+                        marketPrice?
+                            .dataResearchu,
+                    liczbaProbekCeny:
+                        marketPrice?
+                            .liczbaProbek,
+                    uwagi:
+                        "\(Self.lowerLedRailMarkerV083) \(lengthMM.formatted()) mm; \(profile.rodzina) \(profile.model)"
+                )
             )
     }
 
@@ -1772,6 +2824,47 @@ struct KonfiguracjaModuluMeblowegoView: View {
         }
     }
 
+    private func standardoweWysokosciSzufladV068()
+        -> [Double]?
+    {
+        let niska =
+            StandardWysokoscSzuflady
+                .niska
+                .wysokoscFrontuMM
+        let wysoka =
+            StandardWysokoscSzuflady
+                .wysoka
+                .wysokoscFrontuMM
+
+        switch drawerLayoutPresetV068 {
+        case .jednaWysokaDwieNiskie:
+            return [
+                niska,
+                niska,
+                wysoka
+            ]
+        case .wysokaNaDoleDwieNiskie:
+            return [
+                wysoka,
+                niska,
+                niska
+            ]
+        case .dwieWysokie:
+            return [
+                wysoka,
+                wysoka
+            ]
+        case .wysokosciNiestandardowe:
+            return drawerCustomHeightsV068
+                .isEmpty
+                ? nil
+                : drawerCustomHeightsV068
+        case .rowne,
+             .cargo:
+            return nil
+        }
+    }
+
     private func synchronizujSzuflady(
         w card:
             inout KartaTechnicznaSzafki
@@ -1791,22 +2884,43 @@ struct KonfiguracjaModuluMeblowegoView: View {
 
         let gap = 3.0
         let verticalMargins = 6.0
+        let presetHeights =
+            standardoweWysokosciSzufladV068()
+        let effectiveDrawerCount =
+            presetHeights?
+                .count
+            ?? drawerCount
         let availableForFronts =
             geometry.wysokoscMM
             - verticalMargins
             - gap
                 * Double(
                     max(
-                        drawerCount - 1,
+                        effectiveDrawerCount - 1,
                         0
                     )
                 )
-        let frontHeight =
-            availableForFronts
-            / Double(drawerCount)
+        let frontHeight: Double
+        if let presetHeights {
+            let requiredFrontHeight =
+                presetHeights
+                    .reduce(0, +)
+            guard requiredFrontHeight <= availableForFronts else {
+                return "Standardowy układ szuflad wymaga \(requiredFrontHeight.formatted()) mm frontów, a dostępne jest \(availableForFronts.formatted()) mm."
+            }
+
+            frontHeight =
+                presetHeights
+                    .min()
+                ?? 140
+        } else {
+            frontHeight =
+                availableForFronts
+                / Double(effectiveDrawerCount)
+        }
 
         guard frontHeight >= 60 else {
-            return "W korpusie o tej wysokości nie mieści się \(drawerCount) szuflad z minimalnym frontem 60 mm."
+            return "W korpusie o tej wysokości nie mieści się \(effectiveDrawerCount) szuflad z minimalnym frontem 60 mm."
         }
 
         guard let profile =
@@ -1889,7 +3003,7 @@ struct KonfiguracjaModuluMeblowegoView: View {
         let parameters =
             ParametryAutomatycznegoUkladuSzuflad(
                 liczba:
-                    drawerCount,
+                    effectiveDrawerCount,
                 wysokoscFrontuMM:
                     frontHeight,
                 wysokoscSkrzynkiMM:
@@ -1903,20 +3017,52 @@ struct KonfiguracjaModuluMeblowegoView: View {
                 marginesGornyMM:
                     3,
                 typFrontu:
-                    existing?
-                        .typFrontu
-                    ?? .zewnetrzny,
+                    drawerFrontTypeV068,
                 profilID:
-                    profile.id
+                    profile.id,
+                odsuniecieOdScianBocznychMM:
+                    drawerFrontTypeV068 == .wewnetrzny
+                    ? max(
+                        millimeters(drawerSideInsetTextV068)?
+                            .rawValue
+                        ?? 21,
+                        0
+                    )
+                    : 0
             )
 
-        let drawers =
-            SzufladyModuluEngine
-                .generuj(
-                    parametry:
-                        parameters,
-                    dla: card
-                )
+        let drawers:
+            [SzufladaModulu]
+        if drawerLayoutPresetV068 == .cargo {
+            drawers =
+                SzufladyModuluEngine
+                    .generujZPresetu(
+                        preset: .cargo,
+                        parametryBazowe:
+                            parameters,
+                        dla: card
+                    )
+        } else if let presetHeights {
+            drawers =
+                SzufladyModuluEngine
+                    .generujZPresetu(
+                        preset:
+                            .wysokosciNiestandardowe(
+                                presetHeights
+                            ),
+                        parametryBazowe:
+                            parameters,
+                        dla: card
+                    )
+        } else {
+            drawers =
+                SzufladyModuluEngine
+                    .generuj(
+                        parametry:
+                            parameters,
+                        dla: card
+                    )
+        }
 
         SzufladyModuluEngine
             .zastosuj(
@@ -2152,12 +3298,71 @@ struct KonfiguracjaModuluMeblowegoView: View {
             return
         }
 
+        if lowerLedRailEnabledV083 {
+            guard let ledLength =
+                    millimeters(
+                        lowerLedRailLengthTextV083
+                    ),
+                  ledLength > .zero,
+                  let ledDepth =
+                    millimeters(
+                        lowerLedRailDepthTextV083
+                    ),
+                  ledDepth > .zero,
+                  let ledThickness =
+                    millimeters(
+                        lowerLedRailThicknessTextV083
+                    ),
+                  ledThickness > .zero else {
+                validationMessage =
+                    "Sprawdź długość, głębokość i grubość dolnego wieńca LED."
+                return
+            }
+        }
+
         if storedAssembly == nil,
            let maximumWidth = suggestedPlacement?.maximumWidth,
            width > maximumWidth {
             validationMessage = "Dostępne miejsce ma maksymalnie \(Self.formatted(maximumWidth))."
             return
         }
+
+        let resolvedBaseHeightSystemV084:
+            KitchenBaseHeightSystemV018?
+        if supportsBaseHeightSystemV084 {
+            let recalculated =
+                baseHeightSystemV084
+                    .recalculated()
+
+            guard recalculated
+                .carcassHeightMM
+                > 0
+            else {
+                validationMessage =
+                    "Wysokość robocza musi dawać dodatnią wysokość korpusu."
+                return
+            }
+
+            resolvedBaseHeightSystemV084 =
+                recalculated
+        } else {
+            resolvedBaseHeightSystemV084 =
+                nil
+        }
+
+        let effectiveHeight =
+            resolvedBaseHeightSystemV084
+                .map {
+                    Millimeters(
+                        $0.carcassHeightMM
+                    )
+                }
+            ?? height
+
+        let effectiveBottomOffset =
+            resolvedBaseHeightSystemV084 == nil
+            ? bottomOffset
+            : Millimeters.zero
 
         let resolvedOffsetAlongWall: Millimeters
         if storedAssembly == nil,
@@ -2176,7 +3381,7 @@ struct KonfiguracjaModuluMeblowegoView: View {
         var currentCard =
             makeTechnicalCard(
                 width: width,
-                height: height,
+                height: effectiveHeight,
                 depth: depth
             )
 
@@ -2203,7 +3408,7 @@ struct KonfiguracjaModuluMeblowegoView: View {
         let data = KonfiguracjaModuluMeblowegoDane(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             width: width,
-            height: height,
+            height: effectiveHeight,
             depth: depth,
             shelfCount:
                 currentCard.liczbaPolek
@@ -2243,7 +3448,7 @@ struct KonfiguracjaModuluMeblowegoView: View {
                 currentCard.draftID,
             offsetAlongWall: resolvedOffsetAlongWall,
             offsetFromWall: offsetFromWall,
-            bottomOffset: bottomOffset
+            bottomOffset: effectiveBottomOffset
         )
 
         let savedCardDraftID =
@@ -2320,6 +3525,87 @@ struct KonfiguracjaModuluMeblowegoView: View {
 
     private static func formatted(_ value: Millimeters) -> String {
         "\(text(value)) mm"
+    }
+
+    private static func initialDrawerLayoutPresetV068(
+        drawers:
+            [SzufladaModulu]
+    ) -> RodzajPresetuUkladuSzuflad {
+        guard !drawers.isEmpty else {
+            return .rowne
+        }
+
+        if drawers.count == 1,
+           drawers.first?.efektywnyWariant == .cargo {
+            return .cargo
+        }
+
+        let heights =
+            drawers.map {
+                $0.wysokoscFrontuMM
+            }
+
+        if Set(
+            heights.map {
+                Int($0.rounded())
+            }
+        )
+        .count == 1 {
+            return .rowne
+        }
+
+        guard heights.count == 3 else {
+            return .wysokosciNiestandardowe
+        }
+
+        let low =
+            StandardWysokoscSzuflady
+                .niska
+                .wysokoscFrontuMM
+        let high =
+            StandardWysokoscSzuflady
+                .wysoka
+                .wysokoscFrontuMM
+
+        if isClose(
+            heights[0],
+            high
+        ),
+           isClose(
+            heights[1],
+            low
+           ),
+           isClose(
+            heights[2],
+            low
+           ) {
+            return .wysokaNaDoleDwieNiskie
+        }
+
+        if isClose(
+            heights[0],
+            low
+        ),
+           isClose(
+            heights[1],
+            low
+           ),
+           isClose(
+            heights[2],
+            high
+           ) {
+            return .jednaWysokaDwieNiskie
+        }
+
+        return .wysokosciNiestandardowe
+    }
+
+    private static func isClose(
+        _ lhs: Double,
+        _ rhs: Double,
+        tolerance: Double = 12
+    ) -> Bool {
+        abs(lhs - rhs) <= tolerance
     }
 
     private static func defaultBottomOffset(

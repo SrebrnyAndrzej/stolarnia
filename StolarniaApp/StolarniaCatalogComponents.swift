@@ -66,8 +66,7 @@ struct StolarniaFilterShelf<Content: View>: View {
     private let content: Content
 
     init(
-        @ViewBuilder content:
-            () -> Content
+            @ViewBuilder content: () -> Content
     ) {
         self.content = content()
     }
@@ -90,7 +89,7 @@ struct StolarniaFilterShelf<Content: View>: View {
             )
             .padding(.vertical, 10)
         }
-        .background(.thinMaterial)
+        .stolarniaMaterial(.thinMaterial)
         .overlay(alignment: .bottom) {
             Divider()
                 .opacity(0.55)
@@ -201,6 +200,118 @@ struct StolarniaResultCount: View {
     }
 }
 
+struct StolarniaCatalogContextBar: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let count: Int
+    var noun: String = "pozycji"
+    var showsClearAction = false
+    var clearAction: (() -> Void)?
+
+    var body: some View {
+        HStack(
+            alignment: .center,
+            spacing: 12
+        ) {
+            Label(
+                title,
+                systemImage: systemImage
+            )
+            .font(.headline)
+            .lineLimit(1)
+
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+
+            Spacer(minLength: 10)
+
+            if showsClearAction,
+               let clearAction {
+                Button(action: clearAction) {
+                    Image(
+                        systemName:
+                            "xmark.circle.fill"
+                    )
+                    .font(.title3)
+                    .accessibilityLabel(
+                        "Wyczyść filtr"
+                    )
+                }
+                .stolarniaPressable(skala: 0.985)
+                .foregroundStyle(.secondary)
+            }
+
+            StolarniaResultCount(
+                count: count,
+                noun: noun
+            )
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 46)
+        .background(
+            Color(
+                uiColor:
+                    .secondarySystemGroupedBackground
+            )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(
+                    Color.secondary.opacity(0.16),
+                    lineWidth: 1
+                )
+        }
+        .clipShape(
+            RoundedRectangle(cornerRadius: 8)
+        )
+        .padding(.horizontal, StolarniaLayout.pagePadding)
+        .padding(.vertical, 10)
+        .background(
+            Color(
+                uiColor:
+                    .systemGroupedBackground
+            )
+        )
+        .overlay(alignment: .bottom) {
+            Divider()
+                .opacity(0.45)
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+struct StolarniaCatalogSectionHeader: View {
+    let title: String
+    let systemImage: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(
+            alignment: .firstTextBaseline,
+            spacing: 8
+        ) {
+            Label(
+                title,
+                systemImage: systemImage
+            )
+            .font(.subheadline.weight(.semibold))
+
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 enum StolarniaBadgeTone:
     Hashable
 {
@@ -294,8 +405,7 @@ struct StolarniaCatalogRow<
         trailingPrimary: String,
         trailingSecondary: String? = nil,
         isEnabled: Bool = true,
-        @ViewBuilder leading:
-            () -> Leading
+        @ViewBuilder leading: () -> Leading
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -478,7 +588,7 @@ struct StolarniaToast: View {
         .foregroundStyle(
             tone.foreground
         )
-        .background(
+        .stolarniaMaterial(
             .regularMaterial,
             in: Capsule()
         )

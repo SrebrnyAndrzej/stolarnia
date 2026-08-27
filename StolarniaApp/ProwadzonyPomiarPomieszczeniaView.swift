@@ -190,7 +190,7 @@ struct ProwadzonyPomiarPomieszczeniaView: View {
             }
             .padding(16)
         }
-        .background(.ultraThinMaterial)
+        .stolarniaMaterial(.ultraThinMaterial)
     }
 
     private func activeWallCard(session current: RoomSurveySession) -> some View {
@@ -519,7 +519,7 @@ struct ProwadzonyPomiarPomieszczeniaView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.ultraThinMaterial, in: Capsule())
+        .stolarniaMaterial(.ultraThinMaterial, in: Capsule())
         .overlay {
             Capsule()
                 .stroke(StolarniaPalette.frostStroke, lineWidth: 1)

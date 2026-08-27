@@ -378,6 +378,7 @@ struct EdytorMaterialuView:
                     .buttonStyle(
                         .borderedProminent
                     )
+                    .keyboardShortcut("s", modifiers: [.command])
                     .disabled(
                         draft.kod
                             .trimmingCharacters(

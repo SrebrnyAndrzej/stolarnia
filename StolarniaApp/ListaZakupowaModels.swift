@@ -57,6 +57,7 @@ enum ListaZakupowaBuilder {
                 .blaty,
                 .okucia,
                 .akcesoria,
+                .oswietlenie,
                 .pozostale
             ]
 

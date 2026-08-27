@@ -99,13 +99,15 @@ struct NowePomieszczenieView: View {
                         }
                     }
                     .disabled(!isFormValid || isSaving)
+                    .keyboardShortcut(.return, modifiers: [.command])
+                    .help("Utwórz pomieszczenie (⌘Return)")
                 }
             }
             .overlay {
                 if isSaving {
                     ProgressView("Zapisywanie…")
                         .padding()
-                        .background(
+                        .stolarniaMaterial(
                             .regularMaterial,
                             in: RoundedRectangle(cornerRadius: 12)
                         )

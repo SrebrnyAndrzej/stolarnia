@@ -62,7 +62,7 @@ struct GlobalneMaterialyProjektuView: View {
                 materialSummaryBar
                     .padding(.horizontal)
                     .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
+                    .stolarniaMaterial(.ultraThinMaterial)
 
                 Divider()
 

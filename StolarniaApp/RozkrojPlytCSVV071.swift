@@ -87,7 +87,9 @@ enum RozkrojPlytCSVV071 {
         rows.append(
             [
                 "Arkusz",
-                "Materiał",
+                "Dekor",
+                "Producent",
+                "Kod dekoru",
                 "Grubość [mm]",
                 "Etykieta",
                 "ID produkcyjne",
@@ -108,7 +110,9 @@ enum RozkrojPlytCSVV071 {
                 rows.append(
                     [
                         String(sheet.numer),
-                        escape(sheet.grupa.material.opis),
+                        escape(sheet.grupa.material.nazwa),
+                        escape(sheet.grupa.material.producent),
+                        escape(sheet.grupa.material.kod),
                         decimal(sheet.grupa.gruboscMM),
                         escape(placement.formatka.etykieta),
                         escape(

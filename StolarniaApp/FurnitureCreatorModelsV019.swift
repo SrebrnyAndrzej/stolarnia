@@ -4,6 +4,7 @@ struct SpaceTowerZoneV019: Identifiable, Codable, Hashable {
     enum Kind: String, Codable, Hashable {
         case lowerDrawers
         case middleDrawers
+        case upperDrawers
         case upperOpen
         case upperShelves
         case upperClosed
@@ -14,6 +15,7 @@ struct SpaceTowerZoneV019: Identifiable, Codable, Hashable {
     var heightMM: Double
     var drawerCount: Int
     var shelfCount: Int
+    var drawerFrontHeightsMM: [Double]? = nil
 }
 
 struct FurnitureTechnicalMetadataV019:
@@ -103,6 +105,34 @@ extension FurnitureCreatorDraftV018 {
             upperKind = .upperShelves
         case .closed:
             upperKind = .upperClosed
+        }
+
+        let compartments =
+            spaceTower
+                .resolvedCompartmentsV083(
+                    totalHeightMM: heightMM
+                )
+
+        if !compartments.isEmpty {
+            return compartments.map {
+                compartment in
+                SpaceTowerZoneV019(
+                    kind:
+                        compartment
+                            .zoneKindV019,
+                    heightMM:
+                        compartment
+                            .heightMM,
+                    drawerCount:
+                        compartment
+                            .drawerHeightsMM
+                            .count,
+                    shelfCount: 0,
+                    drawerFrontHeightsMM:
+                        compartment
+                            .drawerHeightsMM
+                )
+            }
         }
 
         return [

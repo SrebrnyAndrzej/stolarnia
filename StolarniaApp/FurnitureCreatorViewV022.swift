@@ -79,26 +79,17 @@ struct FurnitureCreatorViewV022: View {
                 "Kreator mebla"
             )
         } detail: {
-            VStack(spacing: 0) {
-                if step == .ksztalt {
-                    KsztaltMeblaCanvasV080(ksztalt: $ksztaltMebla)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    HStack(spacing: 0) {
-                        technicalPreview
-                            .frame(minWidth: 360)
+            ZStack(alignment: .bottom) {
+                creatorWorkArea
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity
+                    )
+                    .layoutPriority(1)
 
-                        Divider()
-
-                        Form {
-                            editor
-                        }
-                        .frame(minWidth: 420)
-                    }
-                }
-
-                Divider()
                 validationBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
             }
             .navigationTitle(draft.name)
             .toolbar {
@@ -124,12 +115,24 @@ struct FurnitureCreatorViewV022: View {
                                     from: draft
                                 )
 
-                        technicalCard =
+                        if var saved =
                             KartaTechnicznaSzafkiStore
                                 .card(
                                     for: draft.id
+                                ) {
+                            KartaTechnicznaSzafkiBuilder
+                                .applyProductionDrillings(
+                                    to:
+                                        &saved,
+                                    generated:
+                                        card
                                 )
-                            ?? card
+                            technicalCard =
+                                saved
+                        } else {
+                            technicalCard =
+                                card
+                        }
                     } label: {
                         Label(
                             "Karta techniczna",
@@ -276,6 +279,35 @@ struct FurnitureCreatorViewV022: View {
     }
 
     @ViewBuilder
+    private var creatorWorkArea: some View {
+        if step == .ksztalt {
+            KsztaltMeblaCanvasV080(ksztalt: $ksztaltMebla)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .layoutPriority(1)
+        } else {
+            HStack(spacing: 0) {
+                technicalPreview
+                    .frame(minWidth: 360)
+                    .layoutPriority(1)
+
+                Divider()
+
+                Form {
+                    editor
+                }
+                .frame(minWidth: 420)
+            }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+        }
+    }
+
+    @ViewBuilder
     private var editor: some View {
         switch step {
         case .type:
@@ -346,6 +378,9 @@ struct FurnitureCreatorViewV022: View {
                 ForEach(
                     FurnitureConstructionKindV021
                         .allCases
+                        .filter {
+                            $0 != .slidingWardrobe
+                        }
                 ) {
                     Text($0.title)
                         .tag($0)
@@ -481,135 +516,177 @@ struct FurnitureCreatorViewV022: View {
     private var spaceTowerSection:
         some View
     {
-        Section(
-            "SPACE TOWER — 3 strefy pionowe"
+        let compartments =
+            draft.spaceTower
+                .resolvedCompartmentsV083(
+                    totalHeightMM:
+                        draft.heightMM
+                )
+
+        return Section(
+            "SPACE TOWER — komory i szuflady"
         ) {
             Text(
-                "Strefy są ustawiane jedna nad drugą: dolna, środkowa i górna."
+                "Komory są ustawiane jedna nad drugą. Każda komora może mieć własną wysokość i osobny schemat szuflad niskich/wysokich."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Stepper(
-                "Szuflady łącznie: \(draft.spaceTower.totalDrawerCount)",
-                value:
-                    $draft.spaceTower
-                        .totalDrawerCount,
-                in: 5...7
-            )
-            .onChange(
-                of: draft.spaceTower
-                    .totalDrawerCount
-            ) {
-                draft.spaceTower
-                    .normalize(
-                        totalHeightMM:
-                            draft.heightMM
-                    )
-            }
-
-            Stepper(
-                "Szuflady dolne: \(draft.spaceTower.lowerZoneDrawerCount)",
-                value:
-                    $draft.spaceTower
-                        .lowerZoneDrawerCount,
-                in: 2...5
-            )
-            .onChange(
-                of: draft.spaceTower
-                    .lowerZoneDrawerCount
-            ) {
-                draft.spaceTower
-                    .normalize(
-                        totalHeightMM:
-                            draft.heightMM
-                    )
-            }
-
-            LabeledContent(
-                "Szuflady środkowe",
-                value:
-                    "\(draft.spaceTower.middleZoneDrawerCount)"
-            )
-
             Picker(
-                "Górna strefa",
+                "Liczba komór / frontów",
                 selection:
-                    $draft.spaceTower
-                        .upperZone
+                    spaceTowerCompartmentCountBinding
             ) {
-                ForEach(
-                    SpaceTowerUpperZoneV018
-                        .allCases
+                Text("2 komory")
+                    .tag(2)
+                Text("3 komory")
+                    .tag(3)
+            }
+            .pickerStyle(.segmented)
+
+            ForEach(
+                Array(compartments.enumerated()),
+                id: \.element.id
+            ) { index, compartment in
+                VStack(
+                    alignment: .leading,
+                    spacing: 10
                 ) {
-                    Text($0.title)
-                        .tag($0)
+                    HStack {
+                        Text(
+                            "Komora \(compartment.kind.title.lowercased())"
+                        )
+                        .font(.headline)
+
+                        Spacer()
+
+                        Text(compartment.drawerSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    zoneHeightField(
+                        "Wysokość komory [mm]",
+                        value:
+                            spaceTowerCompartmentHeightBinding(
+                                index
+                            )
+                    )
+
+                    ForEach(
+                        Array(
+                            compartment
+                                .drawerHeightsMM
+                                .enumerated()
+                        ),
+                        id: \.offset
+                    ) { drawerIndex, height in
+                        HStack {
+                            Picker(
+                                "Szuflada \(drawerIndex + 1)",
+                                selection:
+                                    spaceTowerDrawerKindBinding(
+                                        compartmentIndex:
+                                            index,
+                                        drawerIndex:
+                                            drawerIndex,
+                                        currentHeightMM:
+                                            height
+                                    )
+                            ) {
+                                ForEach(
+                                    SpaceTowerDrawerHeightKindV083
+                                        .allCases
+                                ) { kind in
+                                    Text(
+                                        "\(kind.title) \(Int(kind.heightMM))"
+                                    )
+                                    .tag(kind)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Button {
+                                draft.spaceTower
+                                    .removeDrawerV083(
+                                        compartmentIndex:
+                                            index,
+                                        drawerIndex:
+                                            drawerIndex,
+                                        totalHeightMM:
+                                            draft.heightMM
+                                    )
+                            } label: {
+                                Image(
+                                    systemName:
+                                        "minus.circle"
+                                )
+                            }
+                            .disabled(
+                                compartment
+                                    .drawerHeightsMM
+                                    .count <= 1
+                            )
+                        }
+                    }
+
+                    HStack {
+                        Button {
+                            draft.spaceTower
+                                .addDrawerV083(
+                                    compartmentIndex:
+                                        index,
+                                    kind: .low,
+                                    totalHeightMM:
+                                        draft.heightMM
+                                )
+                        } label: {
+                            Label(
+                                "Dodaj niską",
+                                systemImage: "plus"
+                            )
+                        }
+
+                        Button {
+                            draft.spaceTower
+                                .addDrawerV083(
+                                    compartmentIndex:
+                                        index,
+                                    kind: .high,
+                                    totalHeightMM:
+                                        draft.heightMM
+                                )
+                        } label: {
+                            Label(
+                                "Dodaj wysoką",
+                                systemImage: "plus"
+                            )
+                        }
+                    }
+                    .font(.caption)
+                    .disabled(
+                        compartment
+                            .drawerHeightsMM
+                            .count >= 4
+                    )
                 }
+                .padding(.vertical, 6)
             }
-
-            if draft.spaceTower
-                .upperZone == .shelves {
-                Stepper(
-                    "Półki górne: \(draft.spaceTower.upperShelfCount)",
-                    value:
-                        $draft.spaceTower
-                            .upperShelfCount,
-                    in: 1...5
-                )
-            }
-
-            Divider()
-
-            zoneHeightField(
-                "Wysokość strefy dolnej [mm]",
-                value:
-                    zoneBinding(
-                        \.lowerZoneHeightMM
-                    )
-            )
-
-            zoneHeightField(
-                "Wysokość strefy środkowej [mm]",
-                value:
-                    zoneBinding(
-                        \.middleZoneHeightMM
-                    )
-            )
-
-            zoneHeightField(
-                "Wysokość strefy górnej [mm]",
-                value:
-                    zoneBinding(
-                        \.upperZoneHeightMM
-                    )
-            )
 
             LabeledContent(
-                "Suma stref",
+                "Suma komór",
                 value:
                     "\(Int(draft.spaceTower.zoneHeightSumMM.rounded())) mm"
             )
 
             Button(
-                "Dopasuj strefy do korpusu"
+                "Dopasuj komory do korpusu"
             ) {
                 draft.spaceTower
-                    .normalizeZoneHeights(
+                    .normalizeCompartmentsV083(
                         totalHeightMM:
                             draft.heightMM
                     )
-            }
-
-            Picker(
-                "Liczba frontów",
-                selection:
-                    $draft.spaceTower
-                        .frontCount
-            ) {
-                Text("2 fronty")
-                    .tag(2)
-                Text("3 fronty")
-                    .tag(3)
             }
         }
     }
@@ -1113,7 +1190,7 @@ struct FurnitureCreatorViewV022: View {
         ) {
             if !isWardrobeLike {
                 Text(
-                    "Edytor komór jest dostępny dla szafy uchylnej, przesuwnej i garderoby."
+                    "Edytor komór jest dostępny dla szafy uchylnej i garderoby."
                 )
                 .foregroundStyle(.secondary)
             } else {
@@ -1432,7 +1509,7 @@ struct FurnitureCreatorViewV022: View {
                 LabeledContent(
                     "SPACE TOWER",
                     value:
-                        "\(draft.spaceTower.totalDrawerCount) szuflad / \(draft.spaceTower.frontCount) fronty"
+                        spaceTowerSummaryText
                 )
             }
 
@@ -1446,6 +1523,21 @@ struct FurnitureCreatorViewV022: View {
                 )
             }
         }
+    }
+
+    private var spaceTowerSummaryText: String {
+        let compartments =
+            draft.spaceTower
+                .resolvedCompartmentsV083(
+                    totalHeightMM:
+                        draft.heightMM
+                )
+        let drawerCount =
+            compartments.reduce(0) {
+                $0 + $1.drawerHeightsMM.count
+            }
+
+        return "\(compartments.count) komory / \(drawerCount) szuflad"
     }
 
     private var technicalPreview:
@@ -1557,141 +1649,140 @@ struct FurnitureCreatorViewV022: View {
     private func spaceTowerPreview(
         in rect: CGRect
     ) -> some View {
+        let compartments =
+            draft.spaceTower
+                .resolvedCompartmentsV083(
+                    totalHeightMM:
+                        draft.heightMM
+                )
         let usable =
             max(
-                draft.spaceTower
-                    .zoneHeightSumMM,
+                compartments.reduce(0) {
+                    $0 + $1.heightMM
+                },
                 1
             )
 
-        let upperHeight =
-            rect.height
-            * CGFloat(
-                (draft.spaceTower
-                    .upperZoneHeightMM
-                    ?? 0)
-                / usable
-            )
-
-        let middleHeight =
-            rect.height
-            * CGFloat(
-                (draft.spaceTower
-                    .middleZoneHeightMM
-                    ?? 0)
-                / usable
-            )
-
-        let upperBottom =
-            rect.minY + upperHeight
-
-        let middleBottom =
-            upperBottom + middleHeight
-
-        Path { path in
-            path.move(
-                to: CGPoint(
-                    x: rect.minX,
-                    y: upperBottom
+        ForEach(
+            Array(compartments.enumerated()),
+            id: \.element.id
+        ) { index, compartment in
+            let precedingHeight =
+                compartments
+                    .prefix(index)
+                    .reduce(0) {
+                        $0 + $1.heightMM
+                    }
+            let compartmentMaxY =
+                rect.maxY
+                - rect.height
+                * CGFloat(
+                    precedingHeight / usable
                 )
-            )
-            path.addLine(
-                to: CGPoint(
-                    x: rect.maxX,
-                    y: upperBottom
+            let compartmentHeight =
+                rect.height
+                * CGFloat(
+                    compartment.heightMM
+                    / usable
                 )
-            )
+            let compartmentMinY =
+                compartmentMaxY
+                - compartmentHeight
 
-            path.move(
-                to: CGPoint(
-                    x: rect.minX,
-                    y: middleBottom
+            if index > 0 {
+                Path { path in
+                    path.move(
+                        to: CGPoint(
+                            x: rect.minX,
+                            y: compartmentMaxY
+                        )
+                    )
+                    path.addLine(
+                        to: CGPoint(
+                            x: rect.maxX,
+                            y: compartmentMaxY
+                        )
+                    )
+                }
+                .stroke(
+                    .blue,
+                    style: StrokeStyle(
+                        lineWidth: 2,
+                        dash: [6, 4]
+                    )
                 )
-            )
-            path.addLine(
-                to: CGPoint(
-                    x: rect.maxX,
-                    y: middleBottom
-                )
-            )
-        }
-        .stroke(
-            .blue,
-            style: StrokeStyle(
-                lineWidth: 2,
-                dash: [6, 4]
-            )
-        )
+            }
 
-        drawerLines(
-            count:
-                draft.spaceTower
-                    .middleZoneDrawerCount,
-            minY: upperBottom,
-            maxY: middleBottom,
-            rect: rect
-        )
-
-        drawerLines(
-            count:
-                draft.spaceTower
-                    .lowerZoneDrawerCount,
-            minY: middleBottom,
-            maxY: rect.maxY,
-            rect: rect
-        )
-
-        if draft.spaceTower
-            .upperZone == .shelves {
-            drawerLines(
-                count:
-                    draft.spaceTower
-                        .upperShelfCount + 1,
-                minY: rect.minY,
-                maxY: upperBottom,
+            spaceTowerDrawerLines(
+                drawerHeights:
+                    compartment.drawerHeightsMM,
+                minY: compartmentMinY,
+                maxY: compartmentMaxY,
                 rect: rect
             )
+
+            Text(
+                "\(compartment.kind.title) \(Int(compartment.heightMM.rounded())) mm"
+            )
+            .font(.caption2)
+            .position(
+                x: rect.maxX + 42,
+                y:
+                    compartmentMinY
+                    + compartmentHeight / 2
+            )
         }
-
-        Text(
-            "\(Int(draft.spaceTower.upperZoneHeightMM ?? 0)) mm"
-        )
-        .font(.caption2)
-        .position(
-            x: rect.maxX + 34,
-            y:
-                rect.minY
-                + upperHeight / 2
-        )
-
-        Text(
-            "\(Int(draft.spaceTower.middleZoneHeightMM ?? 0)) mm"
-        )
-        .font(.caption2)
-        .position(
-            x: rect.maxX + 34,
-            y:
-                upperBottom
-                + middleHeight / 2
-        )
-
-        Text(
-            "\(Int(draft.spaceTower.lowerZoneHeightMM ?? 0)) mm"
-        )
-        .font(.caption2)
-        .position(
-            x: rect.maxX + 34,
-            y:
-                middleBottom
-                + (
-                    rect.maxY
-                    - middleBottom
-                ) / 2
-        )
 
         frontSymbols(
             in: rect
         )
+    }
+
+    @ViewBuilder
+    private func spaceTowerDrawerLines(
+        drawerHeights: [Double],
+        minY: CGFloat,
+        maxY: CGFloat,
+        rect: CGRect
+    ) -> some View {
+        let total =
+            max(
+                drawerHeights.reduce(0, +),
+                1
+            )
+
+        ForEach(
+            Array(drawerHeights.dropLast().enumerated()),
+            id: \.offset
+        ) { index, _ in
+            let lowerHeight =
+                drawerHeights
+                    .prefix(index + 1)
+                    .reduce(0, +)
+            let y =
+                maxY
+                - (maxY - minY)
+                * CGFloat(lowerHeight / total)
+
+            Path { path in
+                path.move(
+                    to: CGPoint(
+                        x: rect.minX + 8,
+                        y: y
+                    )
+                )
+                path.addLine(
+                    to: CGPoint(
+                        x: rect.maxX - 8,
+                        y: y
+                    )
+                )
+            }
+            .stroke(
+                .secondary,
+                lineWidth: 1
+            )
+        }
     }
 
     @ViewBuilder
@@ -2093,45 +2184,6 @@ struct FurnitureCreatorViewV022: View {
     }
 
     @ViewBuilder
-    private func drawerLines(
-        count: Int,
-        minY: CGFloat,
-        maxY: CGFloat,
-        rect: CGRect
-    ) -> some View {
-        ForEach(
-            1..<max(count, 1),
-            id: \.self
-        ) { index in
-            let y =
-                minY
-                + (
-                    maxY - minY
-                )
-                * CGFloat(index)
-                / CGFloat(count)
-
-            Path { path in
-                path.move(
-                    to: CGPoint(
-                        x: rect.minX,
-                        y: y
-                    )
-                )
-                path.addLine(
-                    to: CGPoint(
-                        x: rect.maxX,
-                        y: y
-                    )
-                )
-            }
-            .stroke(
-                .secondary,
-                lineWidth: 1
-            )
-        }
-    }
-
     private var validationBar:
         some View
     {
@@ -2172,11 +2224,28 @@ struct FurnitureCreatorViewV022: View {
             }
         }
         .frame(
-            maxWidth: .infinity,
+            maxWidth: 760,
             alignment: .leading
         )
-        .padding()
-        .background(.regularMaterial)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .stolarniaMaterial(
+            .regularMaterial,
+            in: RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 8,
+                style: .continuous
+            )
+            .stroke(
+                StolarniaPalette.frostStroke,
+                lineWidth: 1
+            )
+        }
     }
 
     private var isWardrobeLike: Bool {
@@ -2233,26 +2302,81 @@ struct FurnitureCreatorViewV022: View {
         )
     }
 
-    private func zoneBinding(
-        _ keyPath:
-            WritableKeyPath<
-                SpaceTowerDefinitionV018,
-                Double?
-            >
+    private var spaceTowerCompartmentCountBinding:
+        Binding<Int>
+    {
+        Binding(
+            get: {
+                draft.spaceTower
+                    .compartmentCountV083
+            },
+            set: { newValue in
+                draft.spaceTower
+                    .setCompartmentCountV083(
+                        newValue,
+                        totalHeightMM:
+                            draft.heightMM
+                    )
+            }
+        )
+    }
+
+    private func spaceTowerCompartmentHeightBinding(
+        _ index: Int
     ) -> Binding<Double> {
         Binding(
             get: {
-                draft.spaceTower[
-                    keyPath: keyPath
-                ] ?? 0
+                let compartments =
+                    draft.spaceTower
+                        .resolvedCompartmentsV083(
+                            totalHeightMM:
+                                draft.heightMM
+                        )
+
+                guard compartments.indices
+                    .contains(index) else {
+                    return 0
+                }
+
+                return compartments[index]
+                    .heightMM
             },
             set: { newValue in
-                draft.spaceTower[
-                    keyPath: keyPath
-                ] = max(
-                    newValue,
-                    100
-                )
+                draft.spaceTower
+                    .setCompartmentHeightV083(
+                        at: index,
+                        heightMM: newValue,
+                        totalHeightMM:
+                            draft.heightMM
+                    )
+            }
+        )
+    }
+
+    private func spaceTowerDrawerKindBinding(
+        compartmentIndex: Int,
+        drawerIndex: Int,
+        currentHeightMM: Double
+    ) -> Binding<SpaceTowerDrawerHeightKindV083> {
+        Binding(
+            get: {
+                SpaceTowerDrawerHeightKindV083
+                    .nearest(
+                        for:
+                            currentHeightMM
+                    )
+            },
+            set: { newValue in
+                draft.spaceTower
+                    .setDrawerHeightKindV083(
+                        compartmentIndex:
+                            compartmentIndex,
+                        drawerIndex:
+                            drawerIndex,
+                        kind: newValue,
+                        totalHeightMM:
+                            draft.heightMM
+                    )
             }
         )
     }

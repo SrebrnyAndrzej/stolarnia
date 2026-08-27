@@ -47,22 +47,109 @@ struct KartaTechnicznaSzafkiView:
     @State private var showingPDFError =
         false
 
+    /// Toggle wymiarowania wewnętrznego wg PN-ISO 129-1 — łańcuch przyrostowy
+    /// pokazujący wysokości szuflad + odsadzki wieńców.
+    /// Domyślnie wyłączony, bo dla szafek jednofrontowych i tak nie ma podziałów.
+    @State private var pokazujWymiaryWewnetrzne: Bool = false
+
+    /// Sheet edycji parametrów karty — otwierany z toolbara.
+    /// Widok domyślny to arkusz A4 z rysunkiem technicznym; edycja jest osobno,
+    /// żeby maksymalizować powierzchnię rysunkową.
+    @State private var pokazEdycje: Bool = false
+
     @State private var isGeneratingPDF =
         false
 
+    /// Karta wciśnięta w cudzy stos nawigacji, a nie pokazana jako okno.
+    ///
+    /// Wejście z biblioteki układało dotąd okna jedno na drugim: konfigurator
+    /// otwierał kartę jako `sheet`, a karta otwierała z siebie kolejne sheety —
+    /// szuflady, System 32, edycję parametrów. Cztery poziomy, z których każdy
+    /// trzeba było zamykać osobno, żeby wrócić do listy modułów.
+    ///
+    /// Osadzona karta oddaje pasek nawigacji rodzicowi: nie stawia własnego
+    /// `NavigationStack` (dwa zagnieżdżone stosy dają dwa paski tytułu) i nie
+    /// pokazuje `Zamknij`, bo z wciśniętego ekranu wraca się strzałką wstecz.
+    ///
+    /// Domyślnie `false`, bo kreator mebla (`FurnitureCreatorViewV022`) nadal
+    /// pokazuje kartę jako okno i tam własny stos jest potrzebny.
+    let osadzona: Bool
+
     init(
         card:
-            KartaTechnicznaSzafki
+            KartaTechnicznaSzafki,
+        osadzona: Bool = false
     ) {
         _card = State(
             initialValue: card
         )
+        self.osadzona = osadzona
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Szafka") {
+        if osadzona {
+            zawartoscKarty
+        } else {
+            NavigationStack {
+                zawartoscKarty
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var zawartoscKarty: some View {
+        arkuszPelnoekranowy
+                .navigationTitle("Karta techniczna")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { toolbarKartyTechnicznej }
+                .alert(
+                    "Nie udało się wygenerować PDF",
+                    isPresented: $showingPDFError,
+                    presenting: pdfErrorMessage
+                ) { _ in
+                    Button("OK", role: .cancel) { }
+                } message: { message in
+                    Text(message)
+                }
+                .sheet(item: $activeSheet) { sheet in
+                    activeSheetView(sheet: sheet)
+                }
+                .sheet(isPresented: $pokazEdycje) {
+                    NavigationStack {
+                        edycjaFormularz
+                            .navigationTitle("Edycja parametrów")
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Gotowe") {
+                                        pokazEdycje = false
+                                    }
+                                }
+                            }
+                    }
+                }
+    }
+
+    /// Pełnoekranowy arkusz A4 warsztatowy — jedyny widok karty modułu.
+    /// Formularz edycji parametrów otwiera się w osobnym sheet z toolbara.
+    @ViewBuilder
+    private var arkuszPelnoekranowy: some View {
+        ScrollView(.vertical) {
+            ArkuszTechnicznyA4V028(
+                card: card,
+                numerStrony: 1,
+                liczbaStron: 1,
+                format: .a4Pionowy
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(Color(uiColor: .systemGray6))
+    }
+
+    @ViewBuilder
+    private var edycjaFormularz: some View {
+        List {
+            Section("Szafka") {
                     LabeledContent(
                         "Numer",
                         value:
@@ -86,16 +173,6 @@ struct KartaTechnicznaSzafkiView:
                         value:
                             dimensions
                     )
-                }
-
-                Section("Rysunek techniczny") {
-                    drawing
-                        .frame(
-                            minHeight: 360
-                        )
-                        .listRowInsets(
-                            EdgeInsets()
-                        )
                 }
 
 
@@ -388,6 +465,69 @@ struct KartaTechnicznaSzafkiView:
                     }
                 }
 
+                if !linieProwadnicSzufladV084
+                    .isEmpty {
+                    Section(
+                        "Linie prowadnic szuflad"
+                    ) {
+                        ForEach(
+                            linieProwadnicSzufladV084
+                        ) { line in
+                            VStack(
+                                alignment: .leading,
+                                spacing: 5
+                            ) {
+                                HStack {
+                                    Text(
+                                        "\(line.bok) bok • \(line.etykietaSzuflady)"
+                                    )
+                                    .font(.headline)
+
+                                    Spacer()
+
+                                    Text(
+                                        line.statusWeryfikacji
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(
+                                        line.statusWeryfikacji
+                                            .localizedCaseInsensitiveContains(
+                                                "potwierd"
+                                            )
+                                        ? Color.orange
+                                        : Color.secondary
+                                    )
+                                }
+
+                                Text(
+                                    "\(line.systemSkrocony) • L \(formatted(line.nominalnaDlugoscMM)) mm"
+                                )
+                                .font(.subheadline)
+
+                                Text(
+                                    "Y \(formatted(line.yMM)) mm od dna • X \(formatted(line.xStartMM))–\(formatted(line.xEndMM)) mm od frontu boku"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(
+                                    .secondary
+                                )
+
+                                if !line.opis.isEmpty {
+                                    Text(line.opis)
+                                        .font(.caption2)
+                                        .foregroundStyle(
+                                            .secondary
+                                        )
+                                }
+                            }
+                            .padding(
+                                .vertical,
+                                3
+                            )
+                        }
+                    }
+                }
+
                 Section("Okucia i akcesoria") {
                     HStack {
                         Text(
@@ -464,6 +604,31 @@ struct KartaTechnicznaSzafkiView:
                                     .foregroundStyle(
                                         .secondary
                                     )
+                                }
+
+                                if let masa = accessory.masaFrontuKG {
+                                    Text(
+                                        "Masa frontu \(formatted(masa)) kg"
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                if let wspolczynnik = accessory.wspolczynnikMocy {
+                                    Text(
+                                        "Współczynnik mocy \(formatted(wspolczynnik))"
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                if accessory.wymagaPotwierdzeniaSKU == true {
+                                    Label(
+                                        "Potwierdź konkretny SKU w tabeli producenta",
+                                        systemImage: "exclamationmark.triangle"
+                                    )
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
                                 }
                             }
                             .padding(
@@ -769,111 +934,90 @@ struct KartaTechnicznaSzafkiView:
                     )
                 }
             }
-            .navigationTitle(
-                "Karta techniczna"
-            )
-            .sheet(
-                item:
-                    $activeSheet
-            ) {
-                sheet in
+    }
 
-                activeSheetView(sheet)
+    // MARK: - Toolbary
+
+    @ToolbarContentBuilder
+    private var toolbarKartyTechnicznej: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            if !osadzona {
+                Button("Zamknij") { dismiss() }
             }
-            .alert(
-                "Nie udało się utworzyć PDF",
-                isPresented:
-                    $showingPDFError
-            ) {
-                Button("OK") {
-                    pdfErrorMessage = nil
-                }
-            } message: {
-                Text(
-                    pdfErrorMessage
-                    ?? "Nieznany błąd."
+        }
+
+        ToolbarItemGroup(placement: .confirmationAction) {
+            Button {
+                pokazEdycje = true
+            } label: {
+                Label(
+                    "Edytuj parametry",
+                    systemImage: "square.and.pencil"
                 )
             }
-            .toolbar {
-                ToolbarItem(
-                    placement:
-                        .cancellationAction
-                ) {
-                    Button("Zamknij") {
-                        dismiss()
-                    }
-                }
+            .help("Otwórz formularz edycji materiałów, szuflad i wierceń")
 
-                ToolbarItemGroup(
-                    placement:
-                        .confirmationAction
-                ) {
-                    Button {
-                        generateTechnicalPDF()
-                    } label: {
-                        Label(
-                            isGeneratingPDF
-                            ? "Tworzenie PDF"
-                            : "Eksport PDF",
-                            systemImage:
-                                "doc.richtext"
-                        )
-                    }
-                    .disabled(
-                        isGeneratingPDF
-                    )
+            Button {
+                generateTechnicalPDF()
+            } label: {
+                Label(
+                    isGeneratingPDF ? "Tworzenie PDF" : "Eksport PDF",
+                    systemImage: "doc.richtext"
+                )
+            }
+            .disabled(isGeneratingPDF)
+            .keyboardShortcut("p", modifiers: [.command])
+            .help("Wygeneruj PDF karty technicznej (⌘P)")
 
-                    Button {
-                        activeSheet =
-                            .drawerConfigurator
-                    } label: {
-                        Label(
-                            "Szuflady",
-                            systemImage:
-                                "shippingbox.and.arrow.backward"
-                        )
-                    }
+            Button("Zapisz") {
+                card.dataAktualizacji = Date()
+                KartaTechnicznaSzafkiStore.save(card)
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut("s", modifiers: [.command])
+        }
 
-                    Button {
-                        activeSheet =
-                            .accessoryRules
-                    } label: {
-                        Label(
-                            "Akcesoria",
-                            systemImage:
-                                "wrench.adjustable"
-                        )
-                    }
-
-                    Button {
-                        activeSheet =
-                            .drillingTemplates
-                    } label: {
-                        Label(
-                            "Szablony wierceń",
-                            systemImage:
-                                "scope"
-                        )
-                    }
-
-                    Button("Zapisz") {
-                        card.dataAktualizacji =
-                            Date()
-                        KartaTechnicznaSzafkiStore
-                            .save(card)
-                        dismiss()
-                    }
-                    .buttonStyle(
-                        .borderedProminent
+        ToolbarItem(placement: .secondaryAction) {
+            Menu {
+                Button {
+                    activeSheet = .drawerConfigurator
+                } label: {
+                    Label(
+                        "Szuflady",
+                        systemImage: "shippingbox.and.arrow.backward"
                     )
                 }
+
+                Button {
+                    activeSheet = .accessoryRules
+                } label: {
+                    Label(
+                        "Akcesoria",
+                        systemImage: "wrench.adjustable"
+                    )
+                }
+
+                Button {
+                    activeSheet = .drillingTemplates
+                } label: {
+                    Label(
+                        "Szablony wierceń",
+                        systemImage: "scope"
+                    )
+                }
+            } label: {
+                Label(
+                    "Dane produkcyjne",
+                    systemImage: "ellipsis.circle"
+                )
             }
         }
     }
 
     @ViewBuilder
     private func activeSheetView(
-        _ sheet: KartaTechnicznaSzafkiSheet
+        sheet: KartaTechnicznaSzafkiSheet
     ) -> some View {
         switch sheet {
         case .drawerConfigurator:
@@ -959,162 +1103,26 @@ struct KartaTechnicznaSzafkiView:
         return "Układ mieści się w korpusie"
     }
 
+    private var linieProwadnicSzufladV084:
+        [LiniaProwadnicySzufladyKartyV084]
+    {
+        KartaTechnicznaProwadniceSzufladV084
+            .linie(w: card)
+    }
+
     private var dimensions:
         String
     {
         "\(formatted(card.szerokoscMM)) × \(formatted(card.wysokoscMM)) × \(formatted(card.glebokoscMM)) mm"
     }
 
-    private var drawing:
-        some View
-    {
-        GeometryReader { proxy in
-            let inset:
-                CGFloat = 44
-            let available =
-                CGSize(
-                    width:
-                        max(
-                            proxy.size.width
-                            - inset * 2,
-                            1
-                        ),
-                    height:
-                        max(
-                            proxy.size.height
-                            - inset * 2,
-                            1
-                        )
-                )
-
-            let scale =
-                min(
-                    available.width
-                    / max(
-                        card.szerokoscMM,
-                        1
-                    ),
-                    available.height
-                    / max(
-                        card.wysokoscMM,
-                        1
-                    )
-                )
-
-            let cabinetSize =
-                CGSize(
-                    width:
-                        card.szerokoscMM
-                        * scale,
-                    height:
-                        card.wysokoscMM
-                        * scale
-                )
-
-            let origin =
-                CGPoint(
-                    x:
-                        (
-                            proxy.size.width
-                            - cabinetSize.width
-                        ) / 2,
-                    y:
-                        (
-                            proxy.size.height
-                            - cabinetSize.height
-                        ) / 2
-                )
-
-            ZStack {
-                RoundedRectangle(
-                    cornerRadius: 18
-                )
-                .fill(
-                    .regularMaterial
-                )
-
-                Path { path in
-                    path.addRect(
-                        CGRect(
-                            origin: origin,
-                            size:
-                                cabinetSize
-                        )
-                    )
-                }
-                .stroke(
-                    .primary,
-                    lineWidth: 2
-                )
-
-                enclosureOverlay(
-                    origin: origin,
-                    cabinetSize:
-                        cabinetSize,
-                    scale: scale
-                )
-
-                drawerOverlay(
-                    origin: origin,
-                    cabinetSize:
-                        cabinetSize,
-                    scale: scale
-                )
-
-                ForEach(
-                    card.punktyWiercenia
-                ) { point in
-                    let x =
-                        origin.x
-                        + min(
-                            max(
-                                point.xMM,
-                                0
-                            ),
-                            card
-                                .szerokoscMM
-                        )
-                        * scale
-
-                    let y =
-                        origin.y
-                        + cabinetSize.height
-                        - min(
-                            max(
-                                point.yMM,
-                                0
-                            ),
-                            card
-                                .wysokoscMM
-                        )
-                        * scale
-
-                    Circle()
-                        .fill(
-                            point.typ
-                                == .prowadnica
-                            ? Color.orange
-                            : Color.accentColor
-                        )
-                        .frame(
-                            width: 12,
-                            height: 12
-                        )
-                        .overlay {
-                            Circle()
-                                .stroke(
-                                    .white,
-                                    lineWidth: 2
-                                )
-                        }
-                        .position(
-                            x: x,
-                            y: y
-                        )
-                }
-            }
-        }
+    /// Typ punktu wiercenia z jego średnicą — klucz legendy rysunku.
+    private struct WpisLegendyWiercen: Hashable {
+        let typ: TypPunktuWiercenia
+        let srednica: Double
     }
+
+    private enum KierunekGrotu { case up, down, left, right }
 
     private func generateTechnicalPDF() {
         guard !isGeneratingPDF else {
@@ -1238,286 +1246,7 @@ struct KartaTechnicznaSzafkiView:
                 )
         }
     }
-
     @ViewBuilder
-    private func drawerOverlay(
-        origin: CGPoint,
-        cabinetSize: CGSize,
-        scale: CGFloat
-    ) -> some View {
-        let bottomThickness =
-            card
-                .efektywneElementy
-                .first {
-                    $0.typ == .dno
-                    || $0.typ
-                        == .wieniecDolny
-                }?
-                .gruboscMM
-            ?? 18
-
-        ForEach(
-            card
-                .efektywneSzuflady
-                .filter(\.aktywna)
-        ) { drawer in
-            let frontHeight =
-                max(
-                    drawer
-                        .wysokoscFrontuMM
-                    * scale,
-                    1
-                )
-
-            let bottomY =
-                drawer.pozycjaDolnaYMM
-                + bottomThickness
-
-            let centerY =
-                origin.y
-                + cabinetSize.height
-                - (
-                    bottomY
-                    + drawer
-                        .wysokoscFrontuMM
-                        / 2
-                )
-                * scale
-
-            RoundedRectangle(
-                cornerRadius: 2
-            )
-            .fill(
-                Color.accentColor
-                    .opacity(0.08)
-            )
-            .overlay {
-                RoundedRectangle(
-                    cornerRadius: 2
-                )
-                .stroke(
-                    Color.accentColor,
-                    lineWidth: 1
-                )
-            }
-            .frame(
-                width:
-                    max(
-                        cabinetSize.width
-                        - 4,
-                        1
-                    ),
-                height:
-                    frontHeight
-            )
-            .position(
-                x:
-                    origin.x
-                    + cabinetSize.width / 2,
-                y: centerY
-            )
-
-            Text(drawer.etykieta)
-                .font(
-                    .system(
-                        size: 8,
-                        design:
-                            .monospaced
-                    )
-                    .weight(
-                        .semibold
-                    )
-                )
-                .lineLimit(1)
-                .position(
-                    x:
-                        origin.x
-                        + cabinetSize.width / 2,
-                    y: centerY
-                )
-        }
-    }
-
-    @ViewBuilder
-    private func enclosureOverlay(
-        origin: CGPoint,
-        cabinetSize: CGSize,
-        scale: CGFloat
-    ) -> some View {
-        let enclosure =
-            card.efektywneZamkniecieBryly
-
-        if enclosure.blendaLewa {
-            Rectangle()
-                .fill(
-                    Color.accentColor
-                        .opacity(0.18)
-                )
-                .frame(
-                    width:
-                        max(
-                            enclosure
-                                .szerokoscBlendyLewejMM
-                            * scale,
-                            4
-                        ),
-                    height:
-                        cabinetSize.height
-                )
-                .position(
-                    x:
-                        origin.x
-                        - max(
-                            enclosure
-                                .szerokoscBlendyLewejMM
-                            * scale,
-                            4
-                        ) / 2,
-                    y:
-                        origin.y
-                        + cabinetSize.height / 2
-                )
-        }
-
-        if enclosure.blendaPrawa {
-            Rectangle()
-                .fill(
-                    Color.accentColor
-                        .opacity(0.18)
-                )
-                .frame(
-                    width:
-                        max(
-                            enclosure
-                                .szerokoscBlendyPrawejMM
-                            * scale,
-                            4
-                        ),
-                    height:
-                        cabinetSize.height
-                )
-                .position(
-                    x:
-                        origin.x
-                        + cabinetSize.width
-                        + max(
-                            enclosure
-                                .szerokoscBlendyPrawejMM
-                            * scale,
-                            4
-                        ) / 2,
-                    y:
-                        origin.y
-                        + cabinetSize.height / 2
-                )
-        }
-
-        if enclosure.wieniecGorny {
-            Rectangle()
-                .fill(
-                    Color.orange
-                        .opacity(0.22)
-                )
-                .frame(
-                    width:
-                        cabinetSize.width,
-                    height:
-                        max(
-                            enclosure
-                                .gruboscWiencaGornegoMM
-                            * scale,
-                            4
-                        )
-                )
-                .position(
-                    x:
-                        origin.x
-                        + cabinetSize.width / 2,
-                    y:
-                        origin.y
-                        - max(
-                            enclosure
-                                .gruboscWiencaGornegoMM
-                            * scale,
-                            4
-                        ) / 2
-                )
-        }
-
-        if enclosure.wieniecDolny {
-            Rectangle()
-                .fill(
-                    Color.orange
-                        .opacity(0.22)
-                )
-                .frame(
-                    width:
-                        cabinetSize.width,
-                    height:
-                        max(
-                            enclosure
-                                .gruboscWiencaDolnegoMM
-                            * scale,
-                            4
-                        )
-                )
-                .position(
-                    x:
-                        origin.x
-                        + cabinetSize.width / 2,
-                    y:
-                        origin.y
-                        + cabinetSize.height
-                        + max(
-                            enclosure
-                                .gruboscWiencaDolnegoMM
-                            * scale,
-                            4
-                        ) / 2
-                )
-        }
-
-        if enclosure.sciankaBocznaLewa {
-            Rectangle()
-                .stroke(
-                    Color.green,
-                    lineWidth: 4
-                )
-                .frame(
-                    width: 4,
-                    height:
-                        cabinetSize.height
-                )
-                .position(
-                    x: origin.x,
-                    y:
-                        origin.y
-                        + cabinetSize.height / 2
-                )
-        }
-
-        if enclosure.sciankaBocznaPrawa {
-            Rectangle()
-                .stroke(
-                    Color.green,
-                    lineWidth: 4
-                )
-                .frame(
-                    width: 4,
-                    height:
-                        cabinetSize.height
-                )
-                .position(
-                    x:
-                        origin.x
-                        + cabinetSize.width,
-                    y:
-                        origin.y
-                        + cabinetSize.height / 2
-                )
-        }
-    }
-
     private func valueField(
         _ title: String,
         value:
@@ -1797,7 +1526,7 @@ private struct ElementTechnicznySzafkiView:
                                     )
                             )
                             .padding(6)
-                            .background(
+                            .stolarniaMaterial(
                                 .thinMaterial,
                                 in: Capsule()
                             )

@@ -165,8 +165,7 @@ struct StolarniaAppThemeRoot<Content: View>:
     private let content: Content
 
     init(
-        @ViewBuilder content:
-            () -> Content
+            @ViewBuilder content: () -> Content
     ) {
         self.content = content()
     }
@@ -195,7 +194,7 @@ struct StolarniaAppThemeRoot<Content: View>:
         )
         .controlSize(.large)
         .animation(
-            .easeInOut(duration: 0.18),
+            StolarniaMotion.pojawienie,
             value: reduceTransparency
         )
     }
@@ -518,6 +517,64 @@ struct StolarniaReadableInterfaceModifier:
     }
 }
 
+/// Tło materiałowe, które respektuje Reduce Transparency.
+///
+/// `StolarniaFrostedCardModifier` robi to samo, ale narzuca padding i zaokrąglenie,
+/// więc nadaje się tylko na karty. Paski, nakładki i pigułki potrzebowały czegoś
+/// bez własnego kształtu — i z braku takiego narzędzia wstawiały `.thinMaterial`
+/// wprost, przez co systemowe ustawienie dostępności ich nie dotyczyło.
+/// Audyt UI 2026-08-26 naliczył 39 takich miejsc w 24 plikach.
+///
+/// Etykiety argumentów są **celowo takie same jak w `background(_:in:)`**, żeby
+/// migracja była czystym przemianowaniem wywołania.
+struct StolarniaAdaptiveMaterialModifier<S: Shape>: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+
+    let material: Material
+    let ksztalt: S
+    let zastepcze: Color
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(zastepcze, in: ksztalt)
+        } else {
+            content.background(material, in: ksztalt)
+        }
+    }
+}
+
+extension View {
+    /// Tło materiałowe bez własnego kształtu.
+    func stolarniaMaterial(
+        _ material: Material,
+        zastepcze: Color = StolarniaPalette.canvasRaised
+    ) -> some View {
+        modifier(
+            StolarniaAdaptiveMaterialModifier(
+                material: material,
+                ksztalt: Rectangle(),
+                zastepcze: zastepcze
+            )
+        )
+    }
+
+    /// Tło materiałowe przycięte do kształtu.
+    func stolarniaMaterial<S: Shape>(
+        _ material: Material,
+        in ksztalt: S,
+        zastepcze: Color = StolarniaPalette.canvasRaised
+    ) -> some View {
+        modifier(
+            StolarniaAdaptiveMaterialModifier(
+                material: material,
+                ksztalt: ksztalt,
+                zastepcze: zastepcze
+            )
+        )
+    }
+}
+
 extension View {
     func stolarniaFrostedCard(
         cornerRadius: CGFloat = 18,
@@ -766,10 +823,20 @@ enum StolarniaLayout {
     static let maxReadableWidth: CGFloat = 980
 }
 
+/// Starsze nazwy animacji, przepięte na słownik ruchu.
+///
+/// Obie brały `easeInOut`, czyli krzywą **zaczynającą się wolno**. Dla wejść,
+/// wyjść i reakcji na dotyk to zły wybór: opóźnia ruch dokładnie w chwili,
+/// w której użytkownik patrzy najuważniej, więc interfejs czyta się jako
+/// ociężały mimo krótkiego czasu trwania.
+///
+/// `easeInOut` ma sens tylko dla rzeczy **przemieszczających się po ekranie** —
+/// tam przyspieszenie na starcie odpowiada temu, jak ruszają rzeczy z masą.
+/// Do tego jest `StolarniaMotion.ruch(_:)`.
+///
+/// Nazwy zostają, żeby nie ruszać kilkunastu wywołań; wartości idą
+/// z `StolarniaMotion`.
 enum StolarniaAnimation {
-    static let quick =
-        Animation.easeInOut(duration: 0.16)
-
-    static let standard =
-        Animation.easeInOut(duration: 0.22)
+    static let quick = StolarniaMotion.wejscie(StolarniaMotion.puszczenie)
+    static let standard = StolarniaMotion.wejscie(StolarniaMotion.lista)
 }

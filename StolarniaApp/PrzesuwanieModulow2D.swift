@@ -93,8 +93,9 @@ struct PunktPrzyciagnieciaModulu2D: Sendable {
 /// przypadkowo uruchamiać zamianę.
 struct KontekstPrzesunieciaModulu2D: Sendable {
     let furnitureID: FurnitureAssemblyID
-    let wallID: WallID
+    let wallID: WallID?
     let proponowaneOdsuniecie: Millimeters
+    let proponowaneOdsuniecieOdSciany: Millimeters?
     let celZamianyID: FurnitureAssemblyID?
     let przyciagniecie: PunktPrzyciagnieciaModulu2D?
     let proponowaneOdsuniecieOdDolu: Millimeters?
@@ -102,8 +103,9 @@ struct KontekstPrzesunieciaModulu2D: Sendable {
 
     init(
         furnitureID: FurnitureAssemblyID,
-        wallID: WallID,
+        wallID: WallID?,
         proponowaneOdsuniecie: Millimeters,
+        proponowaneOdsuniecieOdSciany: Millimeters? = nil,
         celZamianyID: FurnitureAssemblyID?,
         przyciagniecie: PunktPrzyciagnieciaModulu2D? = nil,
         proponowaneOdsuniecieOdDolu: Millimeters? = nil,
@@ -112,6 +114,8 @@ struct KontekstPrzesunieciaModulu2D: Sendable {
         self.furnitureID = furnitureID
         self.wallID = wallID
         self.proponowaneOdsuniecie = proponowaneOdsuniecie
+        self.proponowaneOdsuniecieOdSciany =
+            proponowaneOdsuniecieOdSciany
         self.celZamianyID = celZamianyID
         self.przyciagniecie = przyciagniecie
         self.proponowaneOdsuniecieOdDolu = proponowaneOdsuniecieOdDolu

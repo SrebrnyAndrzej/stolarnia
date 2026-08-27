@@ -240,6 +240,7 @@ enum ListaFormatekProjektuBuilderV070 {
     static func build(
         projectName: String,
         assemblies: [StoredFurnitureAssembly],
+        room: RoomDefinition? = nil,
         globalneMaterialy: GlobalneMaterialyPomieszczenia
     ) -> ListaFormatekProjektuV070 {
         let sortedAssemblies = assemblies.sorted(
@@ -329,6 +330,15 @@ enum ListaFormatekProjektuBuilderV070 {
             }
         }
 
+        result += sharedRunFormatkiV084(
+            assemblies: sortedAssemblies,
+            room: room,
+            globalneMaterialy:
+                globalneMaterialy,
+            startIndex:
+                sortedAssemblies.count + 1
+        )
+
         return ListaFormatekProjektuV070(
             nazwaProjektu: projectName,
             dataUtworzenia: Date(),
@@ -373,6 +383,438 @@ enum ListaFormatekProjektuBuilderV070 {
         }
 
         return lhs.id.description < rhs.id.description
+    }
+
+    private static func sharedRunFormatkiV084(
+        assemblies:
+            [StoredFurnitureAssembly],
+        room:
+            RoomDefinition?,
+        globalneMaterialy:
+            GlobalneMaterialyPomieszczenia,
+        startIndex:
+            Int
+    ) -> [FormatkaProjektuV070] {
+        let sourceAssemblies =
+            assemblies.filter {
+                !isFinishingAssemblyV084($0)
+            }
+        let furniture =
+            sourceAssemblies.map(\.assembly)
+        let wallIDs =
+            Array(
+                Set(
+                    furniture.compactMap {
+                        $0.placement?.wallID
+                    }
+                )
+            )
+            .sorted {
+                $0.description < $1.description
+            }
+
+        var result: [FormatkaProjektuV070] = []
+        var sharedIndex =
+            startIndex
+        let panelThicknessMM = 18.0
+        let visibleEndThreshold: Millimeters = 3
+
+        for wallID in wallIDs {
+            let wallLength =
+                room?
+                .geometry
+                .geometry(of: wallID)?
+                .length
+            let runs =
+                KitchenRunAnalyzerV015
+                    .runs(
+                        on: wallID,
+                        assemblies: furniture
+                    )
+
+            for run in runs {
+                let depth =
+                    runDepthV084(
+                        run,
+                        sourceAssemblies:
+                            sourceAssemblies
+                    )
+                let height =
+                    run.topOffset
+                    - run.bottomOffset
+                guard run.width > .zero,
+                      depth > .zero,
+                      height > .zero else {
+                    continue
+                }
+
+                if run.startOffset > visibleEndThreshold {
+                    let offset =
+                        max(
+                            .zero,
+                            run.startOffset
+                            - Millimeters(panelThicknessMM)
+                        )
+                    if !hasPhysicalClosingPanelV084(
+                        at: offset,
+                        wallID: wallID,
+                        bottom: run.bottomOffset,
+                        height: height,
+                        assemblies: assemblies
+                    ) {
+                        result.append(
+                            sharedSidePanelV084(
+                                run: run,
+                                side: "L",
+                                moduleIndex:
+                                    sharedIndex,
+                                lengthMM:
+                                    height.rawValue,
+                                widthMM:
+                                    depth.rawValue,
+                                thicknessMM:
+                                    panelThicknessMM,
+                                globalneMaterialy:
+                                    globalneMaterialy
+                            )
+                        )
+                        sharedIndex += 1
+                    }
+                }
+
+                let hasOpenRightEnd =
+                    wallLength.map {
+                        $0 - run.endOffset
+                        > visibleEndThreshold
+                    }
+                    ?? true
+
+                if hasOpenRightEnd,
+                   !hasPhysicalClosingPanelV084(
+                       at: run.endOffset,
+                       wallID: wallID,
+                       bottom: run.bottomOffset,
+                       height: height,
+                       assemblies: assemblies
+                   ) {
+                    result.append(
+                        sharedSidePanelV084(
+                            run: run,
+                            side: "P",
+                            moduleIndex:
+                                sharedIndex,
+                            lengthMM:
+                                height.rawValue,
+                            widthMM:
+                                depth.rawValue,
+                            thicknessMM:
+                                panelThicknessMM,
+                            globalneMaterialy:
+                                globalneMaterialy
+                        )
+                    )
+                    sharedIndex += 1
+                }
+
+                guard run.kind != .base,
+                      !hasPhysicalTopCrownV084(
+                        for: run,
+                        wallID: wallID,
+                        assemblies: assemblies
+                      )
+                else {
+                    continue
+                }
+
+                result.append(
+                    sharedTopCrownV084(
+                        run: run,
+                        moduleIndex:
+                            sharedIndex,
+                        lengthMM:
+                            run.width.rawValue,
+                        widthMM:
+                            depth.rawValue,
+                        thicknessMM:
+                            panelThicknessMM,
+                        globalneMaterialy:
+                            globalneMaterialy
+                    )
+                )
+                sharedIndex += 1
+            }
+        }
+
+        return result
+    }
+
+    private static func sharedSidePanelV084(
+        run:
+            KitchenRunV015,
+        side:
+            String,
+        moduleIndex:
+            Int,
+        lengthMM:
+            Double,
+        widthMM:
+            Double,
+        thicknessMM:
+            Double,
+        globalneMaterialy:
+            GlobalneMaterialyPomieszczenia
+    ) -> FormatkaProjektuV070 {
+        let role =
+            FurnitureComponentRole
+                .decorativeSide
+        let sideName =
+            side == "L"
+            ? "lewa"
+            : "prawa"
+
+        return FormatkaProjektuV070(
+            id:
+                "RUN-SHARED|\(run.id)|SIDE-\(side)",
+            etykieta:
+                String(
+                    format:
+                        "%02d-01-BOK%@",
+                    moduleIndex,
+                    side
+                ),
+            indeksModulu:
+                moduleIndex,
+            nazwaModulu:
+                "Ciąg \(run.kind.shortTitle) - ścianka boczna \(sideName)",
+            kodKomponentu:
+                "WSPOLNY-BOK-\(side)",
+            rolaKomponentu:
+                role,
+            kategoria:
+                category(for: role),
+            material:
+                material(
+                    for: role,
+                    globalneMaterialy:
+                        globalneMaterialy
+                ),
+            dlugoscMM:
+                lengthMM,
+            szerokoscMM:
+                widthMM,
+            gruboscMM:
+                thicknessMM,
+            kierunekDekoru:
+                grain(for: role),
+            wspoldzielona:
+                true
+        )
+    }
+
+    private static func sharedTopCrownV084(
+        run:
+            KitchenRunV015,
+        moduleIndex:
+            Int,
+        lengthMM:
+            Double,
+        widthMM:
+            Double,
+        thicknessMM:
+            Double,
+        globalneMaterialy:
+            GlobalneMaterialyPomieszczenia
+    ) -> FormatkaProjektuV070 {
+        let role =
+            FurnitureComponentRole.top
+
+        return FormatkaProjektuV070(
+            id:
+                "RUN-SHARED|\(run.id)|TOP-CROWN",
+            etykieta:
+                String(
+                    format:
+                        "%02d-01-GORA",
+                    moduleIndex
+                ),
+            indeksModulu:
+                moduleIndex,
+            nazwaModulu:
+                "Ciąg \(run.kind.shortTitle) - wieniec górny wspólny",
+            kodKomponentu:
+                "WSPOLNY-WIENIEC-GORNY",
+            rolaKomponentu:
+                role,
+            kategoria:
+                category(for: role),
+            material:
+                material(
+                    for: role,
+                    globalneMaterialy:
+                        globalneMaterialy
+                ),
+            dlugoscMM:
+                lengthMM,
+            szerokoscMM:
+                widthMM,
+            gruboscMM:
+                thicknessMM,
+            kierunekDekoru:
+                grain(for: role),
+            wspoldzielona:
+                true
+        )
+    }
+
+    private static func runDepthV084(
+        _ run:
+            KitchenRunV015,
+        sourceAssemblies:
+            [StoredFurnitureAssembly]
+    ) -> Millimeters {
+        let ids =
+            Set(run.assemblyIDs)
+        return sourceAssemblies
+            .filter {
+                ids.contains($0.id)
+            }
+            .map {
+                $0.assembly.size.depth
+            }
+            .max()
+            ?? .zero
+    }
+
+    private static func isFinishingAssemblyV084(
+        _ stored:
+            StoredFurnitureAssembly
+    ) -> Bool {
+        guard let templateID =
+                stored.assembly.templateID
+        else {
+            return false
+        }
+
+        return StandardKitchenFinishingTemplatesV015
+            .kind(for: templateID) != nil
+    }
+
+    private static func hasPhysicalClosingPanelV084(
+        at offsetAlongWall:
+            Millimeters,
+        wallID:
+            WallID,
+        bottom:
+            Millimeters,
+        height:
+            Millimeters,
+        assemblies:
+            [StoredFurnitureAssembly]
+    ) -> Bool {
+        assemblies.contains { stored in
+            guard let placement =
+                    stored.assembly.placement,
+                  placement.wallID == wallID,
+                  stored.assembly.components.contains(
+                    where: {
+                        $0.role == .decorativeSide
+                    }
+                  ),
+                  abs(
+                    (
+                        placement.offsetAlongWall
+                            - offsetAlongWall
+                    )
+                    .rawValue
+                  ) < 22 else {
+                return false
+            }
+
+            return overlapsV084(
+                lhsStart: bottom,
+                lhsLength: height,
+                rhsStart:
+                    placement.bottomOffset,
+                rhsLength:
+                    stored.assembly
+                        .size
+                        .height
+            )
+        }
+    }
+
+    private static func hasPhysicalTopCrownV084(
+        for run:
+            KitchenRunV015,
+        wallID:
+            WallID,
+        assemblies:
+            [StoredFurnitureAssembly]
+    ) -> Bool {
+        assemblies.contains { stored in
+            guard let templateID =
+                    stored.assembly.templateID,
+                  StandardKitchenFinishingTemplatesV015
+                    .kind(for: templateID) == .topCrown,
+                  let placement =
+                    stored.assembly.placement,
+                  placement.wallID == wallID,
+                  abs(
+                    (
+                        placement.offsetAlongWall
+                            - run.startOffset
+                    )
+                    .rawValue
+                  ) < 22,
+                  abs(
+                    (
+                        stored.assembly.size.width
+                            - run.width
+                    )
+                    .rawValue
+                  ) < 22 else {
+                return false
+            }
+
+            return overlapsV084(
+                lhsStart:
+                    run.topOffset,
+                lhsLength:
+                    Millimeters(20),
+                rhsStart:
+                    placement.bottomOffset,
+                rhsLength:
+                    stored.assembly
+                        .size
+                        .height
+            )
+        }
+    }
+
+    private static func overlapsV084(
+        lhsStart:
+            Millimeters,
+        lhsLength:
+            Millimeters,
+        rhsStart:
+            Millimeters,
+        rhsLength:
+            Millimeters
+    ) -> Bool {
+        let overlapStart =
+            max(
+                lhsStart.rawValue,
+                rhsStart.rawValue
+            )
+        let overlapEnd =
+            min(
+                (lhsStart + lhsLength)
+                    .rawValue,
+                (rhsStart + rhsLength)
+                    .rawValue
+            )
+
+        return overlapEnd - overlapStart > 0.1
     }
 
     private struct PanelDimensions {
@@ -438,7 +880,9 @@ enum ListaFormatekProjektuBuilderV070 {
                 thickness: width
             )
 
-        case .leg, .custom:
+        // Elementy skrzynki (dno, boki, tył) traktujemy jak każdą inną
+        // formatkę płytową: najmniejszy z trzech wymiarów to grubość.
+        case .drawerBox, .leg, .custom:
             let sorted = [width, height, depth].sorted()
             values = PanelDimensions(
                 length: sorted[2],
@@ -480,7 +924,11 @@ enum ListaFormatekProjektuBuilderV070 {
              .maskingPanel,
              .decorativeSide:
             return .maskownice
-        case .leg,
+        // Skrzynka nie jest korpusem ani frontem — przy systemach z gotową
+        // skrzynką (Amix Slim Box, LEGRABOX) te formatki w ogóle nie idą
+        // na piłę, więc muszą dać się odróżnić na liście.
+        case .drawerBox,
+             .leg,
              .custom:
             return .pozostale
         }
@@ -535,6 +983,7 @@ enum ListaFormatekProjektuBuilderV070 {
         case .back,
              .reinforcement,
              .rail,
+             .drawerBox,
              .leg,
              .custom:
             return .dowolny
@@ -601,6 +1050,8 @@ enum ListaFormatekProjektuBuilderV070 {
             return "LISTWA"
         case .leg:
             return "NOGA"
+        case .drawerBox:
+            return "SKRZYNKA"
         case .custom:
             return "INNE"
         }

@@ -81,15 +81,38 @@ enum RozkrojPlytEngineV071 {
         var rotated: Bool
     }
 
-    private struct Shelf {
+    private struct FreeRect {
+        var x: Double
         var y: Double
-        var height: Double
-        var usedWidth: Double
-        var placements: [PolozenieFormatkiV071]
+        var width: Double
+        var length: Double
+
+        var maxX: Double {
+            x + width
+        }
+
+        var maxY: Double {
+            y + length
+        }
+
+        var area: Double {
+            width * length
+        }
     }
 
     private struct WorkingSheet {
-        var shelves: [Shelf]
+        var freeRects: [FreeRect]
+        var placements: [PolozenieFormatkiV071]
+    }
+
+    private struct SheetFillCandidate {
+        var pieceIndex: Int
+        var rectIndex: Int
+        var orientation: Orientation
+        var pieceArea: Double
+        var wasteArea: Double
+        var shortSideWaste: Double
+        var longSideWaste: Double
     }
 
     private static func pack(
@@ -106,6 +129,7 @@ enum RozkrojPlytEngineV071 {
 
         var workingSheets: [WorkingSheet] = []
         var rejected: [NierozmieszczonaFormatkaV071] = []
+        var remaining: [FormatkaProjektuV070] = []
 
         for piece in pieces {
             let orientations = orientations(
@@ -128,44 +152,46 @@ enum RozkrojPlytEngineV071 {
                 continue
             }
 
-            if placeInExistingShelf(
-                piece,
-                orientations: orientations,
-                sheets: &workingSheets,
-                settings: settings,
-                usableWidth: usableWidth
-            ) {
-                continue
+            remaining.append(piece)
+        }
+
+        while !remaining.isEmpty {
+            var newSheet =
+                makeEmptySheet(
+                    settings: settings,
+                    usableWidth: usableWidth,
+                    usableLength: usableLength
+                )
+            var placedOnSheet = false
+
+            while let candidate =
+                bestCandidate(
+                    for: newSheet,
+                    remaining: remaining,
+                    settings: settings
+                ) {
+                let piece =
+                    remaining.remove(
+                        at: candidate.pieceIndex
+                    )
+                place(
+                    piece,
+                    orientation: candidate.orientation,
+                    inRectAt: candidate.rectIndex,
+                    sheet: &newSheet,
+                    settings: settings
+                )
+                placedOnSheet = true
             }
 
-            if placeOnNewShelf(
-                piece,
-                orientations: orientations,
-                sheets: &workingSheets,
-                settings: settings,
-                usableWidth: usableWidth,
-                usableLength: usableLength
-            ) {
-                continue
-            }
-
-            var newSheet = WorkingSheet(
-                shelves: []
-            )
-
-            guard appendNewShelf(
-                piece,
-                orientations: orientations,
-                sheet: &newSheet,
-                settings: settings,
-                usableWidth: usableWidth,
-                usableLength: usableLength
-            ) else {
+            guard placedOnSheet else {
+                let piece =
+                    remaining.removeFirst()
                 rejected.append(
                     NierozmieszczonaFormatkaV071(
                         formatka: piece,
                         powod:
-                            "Nie udało się rozpocząć nowego arkusza dla formatki."
+                            "Nie udało się dopasować formatki mimo poprawnego wymiaru arkusza."
                     )
                 )
                 continue
@@ -184,10 +210,7 @@ enum RozkrojPlytEngineV071 {
                 grupa: group,
                 szerokoscMM: settings.szerokoscArkuszaMM,
                 dlugoscMM: settings.dlugoscArkuszaMM,
-                polozenia:
-                    working.shelves.flatMap(
-                        \.placements
-                    )
+                polozenia: working.placements
             )
         }
 
@@ -197,211 +220,128 @@ enum RozkrojPlytEngineV071 {
         )
     }
 
-    private static func placeInExistingShelf(
-        _ piece: FormatkaProjektuV070,
-        orientations: [Orientation],
-        sheets: inout [WorkingSheet],
-        settings: UstawieniaRozkrojuPlytV071,
-        usableWidth: Double
-    ) -> Bool {
-        struct Candidate {
-            var sheetIndex: Int
-            var shelfIndex: Int
-            var orientation: Orientation
-            var score: Double
-        }
+    private static func bestCandidate(
+        for sheet: WorkingSheet,
+        remaining: [FormatkaProjektuV070],
+        settings: UstawieniaRozkrojuPlytV071
+    ) -> SheetFillCandidate? {
+        var best: SheetFillCandidate?
 
-        var best: Candidate?
+        for pieceIndex in remaining.indices {
+            let piece =
+                remaining[pieceIndex]
+            let pieceArea =
+                piece.dlugoscMM
+                * piece.szerokoscMM
+            let pieceOrientations =
+                orientations(
+                    for: piece,
+                    settings: settings
+                )
 
-        for sheetIndex in sheets.indices {
-            for shelfIndex in sheets[sheetIndex].shelves.indices {
-                let shelf = sheets[sheetIndex].shelves[shelfIndex]
+            for rectIndex in sheet.freeRects.indices {
+                let freeRect =
+                    sheet.freeRects[rectIndex]
 
-                for orientation in orientations {
-                    let fits =
-                        orientation.length <= shelf.height
-                        && shelf.usedWidth
-                            + orientation.width
-                            <= usableWidth
-
-                    guard fits else {
+                for orientation in pieceOrientations {
+                    guard fits(
+                        orientation,
+                        in: freeRect
+                    ) else {
                         continue
                     }
 
-                    let horizontalWaste =
-                        usableWidth
-                        - shelf.usedWidth
+                    let widthWaste =
+                        freeRect.width
                         - orientation.width
-                    let verticalWaste =
-                        shelf.height
+                    let lengthWaste =
+                        freeRect.length
                         - orientation.length
-                    let score =
-                        horizontalWaste
-                        + verticalWaste * 0.25
-
-                    if best == nil
-                        || score < best!.score {
-                        best = Candidate(
-                            sheetIndex: sheetIndex,
-                            shelfIndex: shelfIndex,
+                    let candidate =
+                        SheetFillCandidate(
+                            pieceIndex: pieceIndex,
+                            rectIndex: rectIndex,
                             orientation: orientation,
-                            score: score
+                            pieceArea: pieceArea,
+                            wasteArea:
+                                freeRect.area
+                                - orientation.width
+                                * orientation.length,
+                            shortSideWaste:
+                                min(widthWaste, lengthWaste),
+                            longSideWaste:
+                                max(widthWaste, lengthWaste)
                         )
-                    }
+
+                    best =
+                        better(candidate, than: best)
+                        ? candidate
+                        : best
                 }
             }
         }
 
-        guard let best else {
-            return false
-        }
-
-        var shelf =
-            sheets[best.sheetIndex]
-                .shelves[best.shelfIndex]
-        let x =
-            settings.marginesMM
-            + shelf.usedWidth
-        let placement = PolozenieFormatkiV071(
-            formatka: piece,
-            xMM: x,
-            yMM: shelf.y,
-            szerokoscNaArkuszuMM:
-                best.orientation.width,
-            dlugoscNaArkuszuMM:
-                best.orientation.length,
-            obrocona:
-                best.orientation.rotated
-        )
-
-        shelf.placements.append(placement)
-        shelf.usedWidth +=
-            best.orientation.width
-            + settings.rzazMM
-
-        sheets[best.sheetIndex]
-            .shelves[best.shelfIndex] = shelf
-        return true
+        return best
     }
 
-    private static func placeOnNewShelf(
-        _ piece: FormatkaProjektuV070,
-        orientations: [Orientation],
-        sheets: inout [WorkingSheet],
+    private static func makeEmptySheet(
         settings: UstawieniaRozkrojuPlytV071,
         usableWidth: Double,
         usableLength: Double
-    ) -> Bool {
-        struct Candidate {
-            var sheetIndex: Int
-            var orientation: Orientation
-            var score: Double
-        }
-
-        var best: Candidate?
-
-        for sheetIndex in sheets.indices {
-            let nextY = nextShelfY(
-                for: sheets[sheetIndex],
-                settings: settings
-            )
-            let availableLength =
-                settings.marginesMM
-                + usableLength
-                - nextY
-
-            for orientation in orientations {
-                guard orientation.width <= usableWidth,
-                      orientation.length <= availableLength else {
-                    continue
-                }
-
-                let score =
-                    availableLength
-                    - orientation.length
-
-                if best == nil
-                    || score < best!.score {
-                    best = Candidate(
-                        sheetIndex: sheetIndex,
-                        orientation: orientation,
-                        score: score
-                    )
-                }
-            }
-        }
-
-        guard let best else {
-            return false
-        }
-
-        let y = nextShelfY(
-            for: sheets[best.sheetIndex],
-            settings: settings
-        )
-        let placement = PolozenieFormatkiV071(
-            formatka: piece,
-            xMM: settings.marginesMM,
-            yMM: y,
-            szerokoscNaArkuszuMM:
-                best.orientation.width,
-            dlugoscNaArkuszuMM:
-                best.orientation.length,
-            obrocona:
-                best.orientation.rotated
-        )
-
-        sheets[best.sheetIndex]
-            .shelves.append(
-                Shelf(
-                    y: y,
-                    height:
-                        best.orientation.length,
-                    usedWidth:
-                        best.orientation.width
-                        + settings.rzazMM,
-                    placements: [placement]
+    ) -> WorkingSheet {
+        WorkingSheet(
+            freeRects: [
+                FreeRect(
+                    x: settings.marginesMM,
+                    y: settings.marginesMM,
+                    width: usableWidth,
+                    length: usableLength
                 )
-            )
-
-        return true
+            ],
+            placements: []
+        )
     }
 
-    private static func appendNewShelf(
-        _ piece: FormatkaProjektuV070,
-        orientations: [Orientation],
-        sheet: inout WorkingSheet,
-        settings: UstawieniaRozkrojuPlytV071,
-        usableWidth: Double,
-        usableLength: Double
+    private static func better(
+        _ candidate: SheetFillCandidate,
+        than best: SheetFillCandidate?
     ) -> Bool {
-        let fitting = orientations
-            .filter {
-                $0.width <= usableWidth
-                    && $0.length <= usableLength
-            }
-            .sorted {
-                let lhsWaste =
-                    usableWidth
-                    - $0.width
-                let rhsWaste =
-                    usableWidth
-                    - $1.width
-
-                if lhsWaste == rhsWaste {
-                    return $0.length > $1.length
-                }
-                return lhsWaste < rhsWaste
-            }
-
-        guard let orientation = fitting.first else {
-            return false
+        guard let best else {
+            return true
         }
 
+        if candidate.wasteArea != best.wasteArea {
+            return candidate.wasteArea < best.wasteArea
+        }
+
+        if candidate.shortSideWaste != best.shortSideWaste {
+            return candidate.shortSideWaste < best.shortSideWaste
+        }
+
+        if candidate.longSideWaste != best.longSideWaste {
+            return candidate.longSideWaste < best.longSideWaste
+        }
+
+        if candidate.pieceArea != best.pieceArea {
+            return candidate.pieceArea > best.pieceArea
+        }
+
+        return candidate.pieceIndex < best.pieceIndex
+    }
+
+    private static func place(
+        _ piece: FormatkaProjektuV070,
+        orientation: Orientation,
+        inRectAt rectIndex: Int,
+        sheet: inout WorkingSheet,
+        settings: UstawieniaRozkrojuPlytV071
+    ) {
+        let freeRect =
+            sheet.freeRects[rectIndex]
         let placement = PolozenieFormatkiV071(
             formatka: piece,
-            xMM: settings.marginesMM,
-            yMM: settings.marginesMM,
+            xMM: freeRect.x,
+            yMM: freeRect.y,
             szerokoscNaArkuszuMM:
                 orientation.width,
             dlugoscNaArkuszuMM:
@@ -410,31 +350,163 @@ enum RozkrojPlytEngineV071 {
                 orientation.rotated
         )
 
-        sheet.shelves.append(
-            Shelf(
-                y: settings.marginesMM,
-                height: orientation.length,
-                usedWidth:
+        sheet.placements.append(placement)
+
+        let occupied = FreeRect(
+            x: freeRect.x,
+            y: freeRect.y,
+            width:
+                min(
                     orientation.width
-                    + settings.rzazMM,
-                placements: [placement]
-            )
+                        + settings.rzazMM,
+                    freeRect.width
+                ),
+            length:
+                min(
+                    orientation.length
+                        + settings.rzazMM,
+                    freeRect.length
+                )
         )
 
-        return true
+        splitFreeRects(
+            in: &sheet,
+            around: occupied
+        )
     }
 
-    private static func nextShelfY(
-        for sheet: WorkingSheet,
-        settings: UstawieniaRozkrojuPlytV071
-    ) -> Double {
-        guard let last = sheet.shelves.last else {
-            return settings.marginesMM
+    private static func splitFreeRects(
+        in sheet: inout WorkingSheet,
+        around occupied: FreeRect
+    ) {
+        var updated: [FreeRect] = []
+
+        for freeRect in sheet.freeRects {
+            guard intersects(
+                freeRect,
+                occupied
+            ) else {
+                updated.append(freeRect)
+                continue
+            }
+
+            if occupied.x > freeRect.x {
+                updated.append(
+                    FreeRect(
+                        x: freeRect.x,
+                        y: freeRect.y,
+                        width:
+                            occupied.x
+                            - freeRect.x,
+                        length: freeRect.length
+                    )
+                )
+            }
+
+            if occupied.maxX < freeRect.maxX {
+                updated.append(
+                    FreeRect(
+                        x: occupied.maxX,
+                        y: freeRect.y,
+                        width:
+                            freeRect.maxX
+                            - occupied.maxX,
+                        length: freeRect.length
+                    )
+                )
+            }
+
+            if occupied.y > freeRect.y {
+                updated.append(
+                    FreeRect(
+                        x: freeRect.x,
+                        y: freeRect.y,
+                        width: freeRect.width,
+                        length:
+                            occupied.y
+                            - freeRect.y
+                    )
+                )
+            }
+
+            if occupied.maxY < freeRect.maxY {
+                updated.append(
+                    FreeRect(
+                        x: freeRect.x,
+                        y: occupied.maxY,
+                        width: freeRect.width,
+                        length:
+                            freeRect.maxY
+                            - occupied.maxY
+                    )
+                )
+            }
         }
 
-        return last.y
-            + last.height
-            + settings.rzazMM
+        sheet.freeRects =
+            pruneContained(
+                updated.filter {
+                    $0.width > 0.5
+                        && $0.length > 0.5
+                }
+            )
+    }
+
+    private static func pruneContained(
+        _ rects: [FreeRect]
+    ) -> [FreeRect] {
+        var result = rects
+        var index = 0
+
+        while index < result.count {
+            var removed = false
+
+            for otherIndex in result.indices
+            where otherIndex != index {
+                if contains(
+                    result[otherIndex],
+                    result[index]
+                ) {
+                    result.remove(at: index)
+                    removed = true
+                    break
+                }
+            }
+
+            if !removed {
+                index += 1
+            }
+        }
+
+        return result
+    }
+
+    private static func fits(
+        _ orientation: Orientation,
+        in rect: FreeRect
+    ) -> Bool {
+        orientation.width <= rect.width
+            && orientation.length <= rect.length
+    }
+
+    private static func intersects(
+        _ lhs: FreeRect,
+        _ rhs: FreeRect
+    ) -> Bool {
+        lhs.x < rhs.maxX
+            && rhs.x < lhs.maxX
+            && lhs.y < rhs.maxY
+            && rhs.y < lhs.maxY
+    }
+
+    private static func contains(
+        _ outer: FreeRect,
+        _ inner: FreeRect
+    ) -> Bool {
+        outer.x <= inner.x
+            && outer.y <= inner.y
+            && outer.maxX >= inner.maxX
+            && outer.maxY >= inner.maxY
     }
 
     private static func orientations(

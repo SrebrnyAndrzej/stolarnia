@@ -5,6 +5,7 @@ import Persistence
 enum KitchenRunKindV015: String, CaseIterable, Hashable, Sendable {
     case base
     case wall
+    case upper
     case tall
 
     var title: String {
@@ -13,6 +14,8 @@ enum KitchenRunKindV015: String, CaseIterable, Hashable, Sendable {
             return "Ciąg dolny"
         case .wall:
             return "Szafki wiszące"
+        case .upper:
+            return "Ciąg górny - nadstawki"
         case .tall:
             return "Wysoka zabudowa"
         }
@@ -24,6 +27,8 @@ enum KitchenRunKindV015: String, CaseIterable, Hashable, Sendable {
             return "Dolny"
         case .wall:
             return "Wiszące"
+        case .upper:
+            return "Górny"
         case .tall:
             return "Wysokie"
         }
@@ -35,6 +40,8 @@ enum KitchenRunKindV015: String, CaseIterable, Hashable, Sendable {
             return "cabinet"
         case .wall:
             return "square.topthird.inset.filled"
+        case .upper:
+            return "rectangle.topthird.inset.filled"
         case .tall:
             return "rectangle.portrait"
         }
@@ -53,7 +60,7 @@ enum KitchenAddDirectionV015: String, CaseIterable, Hashable, Sendable {
         case .right:
             return "Uzupełnij po prawej"
         case .above:
-            return "Dodaj wiszącą nad ciągiem"
+            return "Dodaj moduł nad ciągiem"
         }
     }
 
@@ -64,7 +71,7 @@ enum KitchenAddDirectionV015: String, CaseIterable, Hashable, Sendable {
         case .right:
             return "Dodaj moduł po prawej"
         case .above:
-            return "Dodaj szafkę wiszącą nad ciągiem dolnym"
+            return "Dodaj moduł w wyższej warstwie ciągu"
         }
     }
 
@@ -110,6 +117,7 @@ enum KitchenFinishingKindV015: String, Hashable, Sendable {
     case leftFiller
     case rightFiller
     case topFiller
+    case topCrown
     case leftClosingPanel
     case rightClosingPanel
 
@@ -120,6 +128,8 @@ enum KitchenFinishingKindV015: String, Hashable, Sendable {
         case .rightFiller:
             return "rectangle.rightthird.inset.filled"
         case .topFiller:
+            return "rectangle.topthird.inset.filled"
+        case .topCrown:
             return "rectangle.topthird.inset.filled"
         case .leftClosingPanel:
             return "sidebar.left"
@@ -168,6 +178,39 @@ enum KitchenRunAnalyzerV015 {
             return nil
         }
 
+        if let templateID = assembly.templateID {
+            if let finishingKind =
+                StandardKitchenFinishingTemplatesV015
+                .kind(for: templateID) {
+                return finishingKind.runKind
+            }
+
+            if let preset =
+                StandardKitchenTemplatesV0143
+                .preset(for: templateID),
+               preset.construction == .topBox
+                || preset.tags.contains(
+                    where: {
+                        $0.folding(
+                            options: [
+                                .caseInsensitive,
+                                .diacriticInsensitive
+                            ],
+                            locale:
+                                Locale(identifier: "pl_PL")
+                        )
+                        == "nadstawka"
+                    }
+                ) {
+                return .upper
+            }
+        }
+
+        if placement.bottomOffset >= 1_900,
+           assembly.size.height <= 800 {
+            return .upper
+        }
+
         if placement.anchoringMode == .builtIn,
            assembly.size.height >= 1_200 {
             return .tall
@@ -191,6 +234,11 @@ enum KitchenRunAnalyzerV015 {
         height: Millimeters,
         bottomOffset: Millimeters
     ) -> KitchenRunKindV015 {
+        if bottomOffset >= 1_900,
+           height <= 800 {
+            return .upper
+        }
+
         if anchoringMode == .builtIn, height >= 1_200 {
             return .tall
         }
@@ -264,7 +312,8 @@ enum KitchenRunAnalyzerV015 {
         for elements: [Element],
         kind: KitchenRunKindV015
     ) -> [[Element]] {
-        guard kind == .wall else {
+        guard kind == .wall
+                || kind == .upper else {
             return elements.isEmpty ? [] : [elements]
         }
 
@@ -425,6 +474,26 @@ enum KitchenRunTemplateClassifierV015 {
             return finishingKind.runKind
         }
 
+        if let preset =
+            StandardKitchenTemplatesV0143
+            .preset(for: template.id),
+           preset.construction == .topBox
+            || preset.tags.contains(
+                where: {
+                    $0.folding(
+                        options: [
+                            .caseInsensitive,
+                            .diacriticInsensitive
+                        ],
+                        locale:
+                            Locale(identifier: "pl_PL")
+                    )
+                    == "nadstawka"
+                }
+            ) {
+            return .upper
+        }
+
         let height =
             (try? template.defaultParameters.millimeters(
                 for: .height
@@ -441,12 +510,254 @@ enum KitchenRunTemplateClassifierV015 {
 }
 
 extension MeblePomieszczeniaViewModel {
+    private struct RunAssistantFreeIntervalV087:
+        Hashable
+    {
+        let start: Millimeters
+        let width: Millimeters
+        let hasLeftNeighbor: Bool
+        let hasRightNeighbor: Bool
+
+        var end: Millimeters {
+            start + width
+        }
+    }
+
     func kitchenRuns(
         on wall: WallSegment
     ) -> [KitchenRunV015] {
         KitchenRunAnalyzerV015.runs(
             on: wall.id,
             assemblies: assemblies
+        )
+    }
+
+    func kitchenBaseFinishingSegmentsV087(
+        room:
+            RoomDefinition
+    ) -> [KitchenRunFinishingSegmentV087] {
+        room
+            .geometry
+            .walls
+            .flatMap {
+                wall -> [KitchenRunFinishingSegmentV087] in
+
+                KitchenRunAnalyzerV015
+                    .runs(
+                        on:
+                            wall.id,
+                        assemblies:
+                            assemblies
+                    )
+                    .filter {
+                        $0.kind == .base
+                    }
+                    .map {
+                        run in
+
+                        let runIDs =
+                            Set(run.assemblyIDs)
+                        let depth =
+                            storedAssemblies
+                                .filter {
+                                    runIDs
+                                        .contains(
+                                            $0.id
+                                        )
+                                }
+                                .map {
+                                    $0.assembly.size.depth
+                                }
+                                .max()
+                            ?? 560
+
+                        return KitchenRunFinishingSegmentV087(
+                            id:
+                                run.id,
+                            roomID:
+                                room.id.description,
+                            wallID:
+                                wall.id.description,
+                            nazwaSciany:
+                                wall.name.isEmpty
+                                ? "Ściana"
+                                : wall.name,
+                            startOffsetMM:
+                                run
+                                    .startOffset
+                                    .rawValue,
+                            dlugoscMM:
+                                run.width.rawValue,
+                            glebokoscMM:
+                                depth.rawValue,
+                            dolMM:
+                                run
+                                    .bottomOffset
+                                    .rawValue
+                        )
+                    }
+            }
+            .sorted {
+                if $0.nazwaSciany == $1.nazwaSciany {
+                    return $0.startOffsetMM
+                        < $1.startOffsetMM
+                }
+
+                return $0.nazwaSciany
+                    .localizedCaseInsensitiveCompare(
+                        $1.nazwaSciany
+                    )
+                    == .orderedAscending
+            }
+    }
+
+    func runAssistantCompletionPlacementV087(
+        for template:
+            FurnitureTemplate,
+        wall:
+            WallSegment,
+        room:
+            RoomDefinition
+    ) -> SugerowanePolozenieModulu? {
+        guard let wallGeometry =
+            room.geometry.geometry(of: wall.id),
+              case .line = wallGeometry,
+              let templateWidth =
+                try? template
+                .defaultParameters
+                .millimeters(for: .width),
+              let templateHeight =
+                try? template
+                .defaultParameters
+                .millimeters(for: .height),
+              let templateDepth =
+                try? template
+                .defaultParameters
+                .millimeters(for: .depth)
+        else {
+            return nil
+        }
+
+        let runKind =
+            KitchenRunTemplateClassifierV015
+                .kind(for: template)
+
+        guard runKind == .base
+            || runKind == .wall
+            || runKind == .tall
+        else {
+            return nil
+        }
+
+        let bottom =
+            KitchenRunTemplateClassifierV015
+                .defaultBottomOffset(
+                    for: template
+                )
+        let intervals =
+            runAssistantFreeIntervalsV087(
+                wall:
+                    wall,
+                wallLength:
+                    wallGeometry.length,
+                bottom:
+                    bottom,
+                height:
+                    templateHeight,
+                offsetFromWall:
+                    .zero,
+                depth:
+                    templateDepth,
+                room:
+                    room
+            )
+            .filter {
+                $0.width >= templateWidth
+                    && (
+                        $0.hasLeftNeighbor
+                        || $0.hasRightNeighbor
+                    )
+            }
+
+        guard let best =
+            intervals.min(
+                by: {
+                    lhs,
+                    rhs in
+
+                    let lhsScore =
+                        runAssistantCompletionScoreV087(
+                            template:
+                                template,
+                            interval:
+                                lhs,
+                            templateWidth:
+                                templateWidth,
+                            runKind:
+                                runKind
+                        )
+                    let rhsScore =
+                        runAssistantCompletionScoreV087(
+                            template:
+                                template,
+                            interval:
+                                rhs,
+                            templateWidth:
+                                templateWidth,
+                            runKind:
+                                runKind
+                        )
+
+                    if lhsScore == rhsScore {
+                        return lhs.width < rhs.width
+                    }
+
+                    return lhsScore < rhsScore
+                }
+            )
+        else {
+            return nil
+        }
+
+        let priority =
+            runAssistantCompletionScoreV087(
+                template:
+                    template,
+                interval:
+                    best,
+                templateWidth:
+                    templateWidth,
+                runKind:
+                    runKind
+            )
+        let gapLabel =
+            runAssistantFormatted(
+                best.width
+            )
+        let templateLabel =
+            runAssistantFormatted(
+                templateWidth
+            )
+
+        return SugerowanePolozenieModulu(
+            offsetAlongWall:
+                best.start,
+            offsetFromWall:
+                .zero,
+            bottomOffset:
+                bottom,
+            maximumWidth:
+                best.width,
+            requiredAnchoringMode:
+                nil,
+            requiredRunKind:
+                runKind,
+            suggestionTitle:
+                "Luka \(gapLabel): \(template.name)",
+            suggestionReason:
+                "Pasuje w wolny odcinek ciągu \(runKind.shortTitle.lowercased()); szerokość modułu \(templateLabel).",
+            suggestionPriority:
+                priority
         )
     }
 
@@ -514,10 +825,14 @@ extension MeblePomieszczeniaViewModel {
             targetKind = sourceKind
 
         case .above:
-            guard sourceKind == .base else {
+            switch sourceKind {
+            case .base:
+                targetKind = .wall
+            case .wall, .tall:
+                targetKind = .upper
+            case .upper:
                 return nil
             }
-            targetKind = .wall
         }
 
         guard KitchenRunTemplateClassifierV015.kind(
@@ -549,9 +864,17 @@ extension MeblePomieszczeniaViewModel {
                 sourcePlacement.offsetFromWall
 
         case .above:
-            targetBottom =
+            let templateDefaultBottom =
                 KitchenRunTemplateClassifierV015
-                    .defaultBottomOffset(for: template)
+                .defaultBottomOffset(for: template)
+            let sourceTop =
+                sourcePlacement.bottomOffset
+                + stored.assembly.size.height
+
+            targetBottom =
+                targetKind == .upper
+                ? max(templateDefaultBottom, sourceTop)
+                : templateDefaultBottom
             targetOffsetFromWall = .zero
         }
 
@@ -619,7 +942,7 @@ extension MeblePomieszczeniaViewModel {
                 on: wall.id,
                 assemblies: assemblies
             ),
-            baseRun.kind == .base else {
+            baseRun.kind == sourceKind else {
                 return nil
             }
 
@@ -774,7 +1097,7 @@ extension MeblePomieszczeniaViewModel {
             )
         }
 
-        // Wieńce zamykające (closing side panels) — suggest at open run ends
+        // Ścianki boczne zamykające — na wolnych końcach warstwy ciągu.
         let closingPanelWidth: Millimeters = 18
         let closingPanelThreshold: Millimeters = 3
         if let run = KitchenRunAnalyzerV015.run(
@@ -783,7 +1106,11 @@ extension MeblePomieszczeniaViewModel {
             assemblies: assemblies
         ) {
             let panelHeight = run.topOffset - run.bottomOffset
-            let panelDepth = stored.assembly.size.depth
+            let panelDepth =
+                runAssistantDepth(
+                    for: run,
+                    fallback: stored.assembly.size.depth
+                )
 
             if run.startOffset > closingPanelThreshold {
                 let panelOffset = max(.zero, run.startOffset - closingPanelWidth)
@@ -799,14 +1126,14 @@ extension MeblePomieszczeniaViewModel {
                             kind: .leftClosingPanel,
                             templateKind:
                                 runAssistantClosingPanelTemplateKind(
-                                    for: kind
+                                    for: run.kind
                                 ),
                             runKind: run.kind,
                             wallID: wall.id,
                             sourceAssemblyID: stored.id,
-                            title: "Dodaj wieniec lewy",
+                            title: "Dodaj ściankę boczną lewą",
                             reason:
-                                "Domknie widoczną lewą stronę ciągu meblowego.",
+                                "Domknie widoczną lewą stronę warstwy \(run.kind.shortTitle.lowercased()).",
                             offsetAlongWall: panelOffset,
                             bottomOffset: run.bottomOffset,
                             width: closingPanelWidth,
@@ -831,14 +1158,14 @@ extension MeblePomieszczeniaViewModel {
                             kind: .rightClosingPanel,
                             templateKind:
                                 runAssistantClosingPanelTemplateKind(
-                                    for: kind
+                                    for: run.kind
                                 ),
                             runKind: run.kind,
                             wallID: wall.id,
                             sourceAssemblyID: stored.id,
-                            title: "Dodaj wieniec prawy",
+                            title: "Dodaj ściankę boczną prawą",
                             reason:
-                                "Domknie widoczną prawą stronę ciągu meblowego.",
+                                "Domknie widoczną prawą stronę warstwy \(run.kind.shortTitle.lowercased()).",
                             offsetAlongWall: panelOffset,
                             bottomOffset: run.bottomOffset,
                             width: closingPanelWidth,
@@ -848,6 +1175,7 @@ extension MeblePomieszczeniaViewModel {
                     )
                 }
             }
+
         }
 
         if abs(
@@ -944,6 +1272,288 @@ extension MeblePomieszczeniaViewModel {
         )
     }
 
+    private func runAssistantCompletionScoreV087(
+        template:
+            FurnitureTemplate,
+        interval:
+            RunAssistantFreeIntervalV087,
+        templateWidth:
+            Millimeters,
+        runKind:
+            KitchenRunKindV015
+    ) -> Int {
+        let category =
+            FurnitureLibraryClassificationV016
+                .category(for: template)
+        let gap =
+            interval.width.rawValue
+        let width =
+            templateWidth.rawValue
+        let diff =
+            max(gap - width, 0)
+        let exactFit =
+            diff <= 10
+        let narrowBaseGap =
+            runKind == .base
+            && gap <= 420
+
+        if category == .cargo,
+           narrowBaseGap {
+            return exactFit
+            ? 0
+            : 6 + Int(diff / 10)
+        }
+
+        if exactFit {
+            return 12
+        }
+
+        if narrowBaseGap {
+            switch category {
+            case .kitchenBase,
+                 .kitchenDrawers:
+                return 34 + Int(diff / 10)
+            default:
+                break
+            }
+        }
+
+        switch category {
+        case .kitchenBase:
+            return 50 + Int(diff / 20)
+        case .kitchenDrawers:
+            return 56 + Int(diff / 20)
+        case .sinkCabinet,
+             .applianceHousing:
+            return 68 + Int(diff / 20)
+        case .cargo:
+            return 72 + Int(diff / 20)
+        case .kitchenWall:
+            return 80 + Int(diff / 20)
+        case .kitchenTall:
+            return 88 + Int(diff / 20)
+        default:
+            return 120 + Int(diff / 20)
+        }
+    }
+
+    private func runAssistantFreeIntervalsV087(
+        wall:
+            WallSegment,
+        wallLength:
+            Millimeters,
+        bottom:
+            Millimeters,
+        height:
+            Millimeters,
+        offsetFromWall:
+            Millimeters,
+        depth:
+            Millimeters,
+        room:
+            RoomDefinition
+    ) -> [RunAssistantFreeIntervalV087] {
+        var occupied: [(
+            start: Millimeters,
+            end: Millimeters
+        )] = []
+        var hasFurnitureInLane =
+            false
+
+        for stored in storedAssemblies {
+            guard let placement =
+                stored.assembly.placement,
+                  placement.wallID == wall.id,
+                  runAssistantOverlaps(
+                      lhsStart:
+                        bottom,
+                      lhsLength:
+                        height,
+                      rhsStart:
+                        placement.bottomOffset,
+                      rhsLength:
+                        stored.assembly.size.height
+                  ),
+                  runAssistantOverlaps(
+                      lhsStart:
+                        offsetFromWall,
+                      lhsLength:
+                        depth,
+                      rhsStart:
+                        placement.offsetFromWall,
+                      rhsLength:
+                        stored.assembly.size.depth
+                  )
+            else {
+                continue
+            }
+
+            occupied.append(
+                (
+                    start:
+                        max(
+                            .zero,
+                            placement.offsetAlongWall
+                        ),
+                    end:
+                        min(
+                            wallLength,
+                            placement.offsetAlongWall
+                            + stored.assembly.size.width
+                        )
+                )
+            )
+            hasFurnitureInLane = true
+        }
+
+        guard hasFurnitureInLane else {
+            return []
+        }
+
+        for opening in MebelElewacjaScianyGeometry
+            .openings(
+                on:
+                    wall,
+                room:
+                    room
+            ) {
+            guard runAssistantOverlaps(
+                lhsStart:
+                    bottom,
+                lhsLength:
+                    height,
+                rhsStart:
+                    opening.rect.y,
+                rhsLength:
+                    opening.rect.height
+            )
+            else {
+                continue
+            }
+
+            occupied.append(
+                (
+                    start:
+                        max(
+                            .zero,
+                            opening.rect.x
+                        ),
+                    end:
+                        min(
+                            wallLength,
+                            opening.rect.maxX
+                        )
+                )
+            )
+        }
+
+        let merged =
+            runAssistantMergedIntervalsV087(
+                occupied
+            )
+        var result:
+            [RunAssistantFreeIntervalV087] = []
+        var cursor: Millimeters =
+            .zero
+        var hasLeftNeighbor =
+            false
+
+        for interval in merged {
+            let freeWidth =
+                interval.start - cursor
+
+            if freeWidth >= runAssistantMinimumWidth {
+                result.append(
+                    RunAssistantFreeIntervalV087(
+                        start:
+                            cursor,
+                        width:
+                            freeWidth,
+                        hasLeftNeighbor:
+                            hasLeftNeighbor,
+                        hasRightNeighbor:
+                            true
+                    )
+                )
+            }
+
+            cursor =
+                max(
+                    cursor,
+                    interval.end
+                )
+            hasLeftNeighbor = true
+        }
+
+        let tailWidth =
+            wallLength - cursor
+
+        if tailWidth >= runAssistantMinimumWidth {
+            result.append(
+                RunAssistantFreeIntervalV087(
+                    start:
+                        cursor,
+                    width:
+                        tailWidth,
+                    hasLeftNeighbor:
+                        hasLeftNeighbor,
+                    hasRightNeighbor:
+                        false
+                )
+            )
+        }
+
+        return result
+    }
+
+    private func runAssistantMergedIntervalsV087(
+        _ intervals:
+            [(
+                start: Millimeters,
+                end: Millimeters
+            )]
+    ) -> [(
+        start: Millimeters,
+        end: Millimeters
+    )] {
+        let sorted =
+            intervals
+                .filter {
+                    $0.end > $0.start
+                }
+                .sorted {
+                    $0.start < $1.start
+                }
+
+        guard var current =
+            sorted.first
+        else {
+            return []
+        }
+
+        var merged:
+            [(
+                start: Millimeters,
+                end: Millimeters
+            )] = []
+
+        for interval in sorted.dropFirst() {
+            if interval.start <= current.end + 0.1 {
+                current.end =
+                    max(
+                        current.end,
+                        interval.end
+                    )
+            } else {
+                merged.append(current)
+                current = interval
+            }
+        }
+
+        merged.append(current)
+        return merged
+    }
+
     private var runAssistantMinimumWidth: Millimeters {
         150
     }
@@ -955,6 +1565,8 @@ extension MeblePomieszczeniaViewModel {
         case .base:
             return .baseFiller
         case .wall:
+            return .wallFiller
+        case .upper:
             return .wallFiller
         case .tall:
             return .tallFiller
@@ -968,6 +1580,8 @@ extension MeblePomieszczeniaViewModel {
         case .base:
             return .baseClosingPanel
         case .wall:
+            return .wallClosingPanel
+        case .upper:
             return .wallClosingPanel
         case .tall:
             return .tallClosingPanel
@@ -998,6 +1612,22 @@ extension MeblePomieszczeniaViewModel {
                 rhsLength: stored.assembly.size.height
             )
         }
+    }
+
+    private func runAssistantDepth(
+        for run: KitchenRunV015,
+        fallback: Millimeters
+    ) -> Millimeters {
+        let ids = Set(run.assemblyIDs)
+        return storedAssemblies
+            .filter {
+                ids.contains($0.id)
+            }
+            .map {
+                $0.assembly.size.depth
+            }
+            .max()
+            ?? fallback
     }
 
     private func runAssistantBoundary(

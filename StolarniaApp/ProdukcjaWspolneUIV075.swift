@@ -415,7 +415,7 @@ struct ProdukcjaLicznikWynikowV075:
             .vertical,
             4
         )
-        .background(
+        .stolarniaMaterial(
             .thinMaterial,
             in: Capsule()
         )

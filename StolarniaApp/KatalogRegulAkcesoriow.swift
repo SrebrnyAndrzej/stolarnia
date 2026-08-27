@@ -815,6 +815,8 @@ enum KatalogRegulAkcesoriow {
                 uwagi: [
                     "Wymiar C i głębokość puszki muszą pochodzić z karty konkretnego zawiasu."
                 ],
+                regulaSzufladyZaFrontem:
+                    .standard110,
                 zrodlo:
                     "Przesłana dokumentacja techniczna okuć."
             ),
@@ -840,8 +842,40 @@ enum KatalogRegulAkcesoriow {
                     .front,
                     .scianaBoczna
                 ],
+                regulaSzufladyZaFrontem:
+                    .zeroProtrusion155,
                 zrodlo:
-                    "Przesłana dokumentacja techniczna okuć."
+                    "Blum Hinge systems, 2024: CLIP top BLUMOTION 155° zero protrusion do szafek z szufladami wewnętrznymi."
+            ),
+            ProfilAkcesoriumMeblowego(
+                id: "blum.cliptop.125.zero",
+                producent: "Blum",
+                rodzina: "CLIP top BLUMOTION",
+                model: "125° zero protrusion",
+                kategoria:
+                    .zawias,
+                status:
+                    .oficjalnaDokumentacja,
+                katOtwarciaStopnie:
+                    125,
+                srednicaPuszkiMM:
+                    35,
+                funkcje: [
+                    "Zerowy uskok",
+                    "Do wewnętrznych roll-outów",
+                    "Cichy domyk zależnie od wariantu"
+                ],
+                elementyDocelowe: [
+                    .front,
+                    .scianaBoczna
+                ],
+                uwagi: [
+                    "Reguła dopuszcza roll-out/cargo za drzwiami; pełne szuflady wewnętrzne wymagają 155° albo potwierdzenia konkretnego SKU."
+                ],
+                regulaSzufladyZaFrontem:
+                    .zeroProtrusion125RollOut,
+                zrodlo:
+                    "Blum Hinge systems, 2024: 125° zero protrusion jako rozwiązanie dla interior roll-outs."
             ),
             ProfilAkcesoriumMeblowego(
                 id: "salice.silentia",
@@ -889,6 +923,19 @@ enum KatalogRegulAkcesoriow {
                     .front,
                     .scianaBoczna
                 ],
+                regulaSzufladyZaFrontem:
+                    RegulaSzufladyZaFrontem(
+                        zeroProtrusion: false,
+                        dopuszczaSzufladyWewnetrzne: false,
+                        dopuszczaRollOut: false,
+                        minimalnyKatOtwarciaStopnie: 155,
+                        zalecaneOdsuniecieOdZawiasuMM: 50,
+                        zalecaneOdsuniecieOdStronyWolnejMM: 0,
+                        dodatkowyLuzBezpieczenstwaMM: 0,
+                        wymagaPotwierdzeniaSKU: true,
+                        opis:
+                            "Szeroki kąt otwarcia nie oznacza automatycznie zero-protrusion. Do szuflad za frontem wymagaj karty konkretnego zawiasu."
+                    ),
                 zrodlo:
                     "Przesłany raport technologiczny."
             ),
@@ -965,10 +1012,71 @@ enum KatalogRegulAkcesoriow {
                     .scianaBoczna
                 ],
                 uwagi: [
-                    "Wymagane światło frontu i szerokość korpusu zależą od wariantu tacy."
+                    "Wymagane światło frontu i szerokość korpusu zależą od wariantu tacy.",
+                    "W dokumentacji pokaż kopertę ruchu półek, ogranicznik kąta otwarcia i linie wierceń z szablonu producenta."
                 ],
                 zrodlo:
-                    "Przesłany raport technologiczny."
+                    "Kesseböhmer LeMans, dokumentacja produktowa producenta."
+            ),
+            ProfilAkcesoriumMeblowego(
+                id: "kessebohmer.magiccorner",
+                producent: "Kesseböhmer",
+                rodzina: "Magic Corner",
+                model: "System do ślepego narożnika",
+                kategoria:
+                    .systemNarozny,
+                status:
+                    .dokumentBranzowy,
+                maksymalneObciazenieKG:
+                    32,
+                minimalnaGlebokoscSwiatlaMM:
+                    500,
+                funkcje: [
+                    "Kosze frontowe i tylna strefa wysuwu",
+                    "SoftSTOPP",
+                    "Kierunek lewy lub prawy"
+                ],
+                elementyDocelowe: [
+                    .dno,
+                    .wieniecGorny,
+                    .scianaBoczna
+                ],
+                uwagi: [
+                    "Wymaga blendy/pull przy ślepym narożniku oraz opisanej martwej strefy za sąsiednim modułem.",
+                    "W dokumentacji pokaż podział na część frontową, część tylną, kopertę wysuwu i linie wierceń producenta."
+                ],
+                zrodlo:
+                    "Kesseböhmer Magic Corner, dokumentacja produktowa producenta."
+            ),
+            ProfilAkcesoriumMeblowego(
+                id: "kessebohmer.revo90",
+                producent: "Kesseböhmer",
+                rodzina: "REVO 90",
+                model: "Karuzela narożna",
+                kategoria:
+                    .systemNarozny,
+                status:
+                    .dokumentBranzowy,
+                maksymalneObciazenieKG:
+                    57,
+                minimalnaGlebokoscSwiatlaMM:
+                    560,
+                funkcje: [
+                    "Obrót w obie strony",
+                    "Korpus narożny 80/90 cm",
+                    "Regulacja wysokości półek"
+                ],
+                elementyDocelowe: [
+                    .dno,
+                    .wieniecGorny,
+                    .scianaBoczna
+                ],
+                uwagi: [
+                    "Wymaga osi obrotu, kontroli promienia półek i światła wysokości dla kolumny.",
+                    "W dokumentacji pokaż położenie trzpienia/kolumny, promień półek oraz ograniczenia obrotu."
+                ],
+                zrodlo:
+                    "Kesseböhmer REVO 90, dokumentacja produktowa producenta."
             ),
             ProfilAkcesoriumMeblowego(
                 id: "agd.ventilation.200",
@@ -1259,6 +1367,8 @@ enum KatalogRegulAkcesoriow {
                     "Zawias bez cichego domyku — segment Eco.",
                     "Cena referencyjna za 1 szt."
                 ],
+                regulaSzufladyZaFrontem:
+                    .standard110,
                 zrodlo:
                     "Profil rynkowy — zawias puszkowy GTV 110°."
             ),

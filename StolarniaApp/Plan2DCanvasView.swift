@@ -20,6 +20,10 @@ struct Plan2DCanvasView: View {
     let allowsViewportGestures: Bool
     let onEditDimension: ((KontekstEdycjiWymiaru2D) -> Void)?
     let onMoveFurniture: ((KontekstPrzesunieciaModulu2D) -> Void)?
+    let slidingPartitionDraftV092:
+        SlidingRoomPartitionCandidateV092?
+    let onChangeSlidingPartitionDraftEndV092:
+        ((Point2MM) -> Void)?
     /// Przekazywany z MeblePomieszczeniaViewModel.renderRevision.
     /// Zmiana wartości wyzwala odświeżenie cachedFootprints i cachedLabelByID,
     /// eliminując przeliczanie geometrii na każdym evencie pan/zoom/drag (60fps).
@@ -70,6 +74,10 @@ struct Plan2DCanvasView: View {
         allowsViewportGestures: Bool = false,
         onEditDimension: ((KontekstEdycjiWymiaru2D) -> Void)? = nil,
         onMoveFurniture: ((KontekstPrzesunieciaModulu2D) -> Void)? = nil,
+        slidingPartitionDraftV092:
+            SlidingRoomPartitionCandidateV092? = nil,
+        onChangeSlidingPartitionDraftEndV092:
+            ((Point2MM) -> Void)? = nil,
         renderRevision: Int = 0
     ) {
         self.room = room
@@ -92,6 +100,10 @@ struct Plan2DCanvasView: View {
         self.allowsViewportGestures = allowsViewportGestures
         self.onEditDimension = onEditDimension
         self.onMoveFurniture = onMoveFurniture
+        self.slidingPartitionDraftV092 =
+            slidingPartitionDraftV092
+        self.onChangeSlidingPartitionDraftEndV092 =
+            onChangeSlidingPartitionDraftEndV092
         self.renderRevision = renderRevision
 
         // Inicjalizacja cache — obliczane raz przy tworzeniu widoku,
@@ -127,6 +139,20 @@ struct Plan2DCanvasView: View {
             .gesture(
                 SpatialTapGesture()
                     .onEnded { event in
+                        if slidingPartitionDraftV092 != nil,
+                           let point =
+                            modelPoint(
+                                at:
+                                    event.location,
+                                size:
+                                    proxy.size
+                            ) {
+                            onChangeSlidingPartitionDraftEndV092?(
+                                point
+                            )
+                            return
+                        }
+
                         if let dimension =
                             dimensionEditContext(
                                 at: event.location,
@@ -173,25 +199,45 @@ struct Plan2DCanvasView: View {
                 dragGesture,
                 including:
                     allowsViewportGestures
+                    && slidingPartitionDraftV092 == nil
                     && !trybWielokrotnegoZaznaczaniaV066
                     ? .all
                     : .none
             )
             .simultaneousGesture(
                 furnitureMoveGesture(size: proxy.size),
-                including: onMoveFurniture == nil ? .none : .all
+                including:
+                    onMoveFurniture == nil
+                    || slidingPartitionDraftV092 != nil
+                    ? .none
+                    : .all
+            )
+            .simultaneousGesture(
+                slidingPartitionDraftGestureV092(
+                    size:
+                        proxy.size
+                ),
+                including:
+                    slidingPartitionDraftV092 == nil
+                    ? .none
+                    : .all
             )
             .simultaneousGesture(
                 selectionMarqueeGestureV067(size: proxy.size),
                 including:
                     trybWielokrotnegoZaznaczaniaV066
+                    && slidingPartitionDraftV092 == nil
                     && onReplaceFurnitureSelectionV067 != nil
                     ? .all
                     : .none
             )
             .simultaneousGesture(
                 magnificationGesture,
-                including: allowsViewportGestures ? .all : .none
+                including:
+                    allowsViewportGestures
+                    && slidingPartitionDraftV092 == nil
+                    ? .all
+                    : .none
             )
             .background(StolarniaPalette.drawingDesk)
             .environment(\.colorScheme, .light)
@@ -257,7 +303,7 @@ struct Plan2DCanvasView: View {
         }
         .buttonStyle(.bordered)
         .padding(10)
-        .background(
+        .stolarniaMaterial(
             .regularMaterial,
             in: RoundedRectangle(cornerRadius: 14)
         )
@@ -563,6 +609,36 @@ struct Plan2DCanvasView: View {
             }
     }
 
+    private func slidingPartitionDraftGestureV092(
+        size:
+            CGSize
+    ) -> some Gesture {
+        DragGesture(
+            minimumDistance:
+                0,
+            coordinateSpace:
+                .local
+        )
+        .onChanged {
+            value in
+
+            guard let point =
+                modelPoint(
+                    at:
+                        value.location,
+                    size:
+                        size
+                )
+            else {
+                return
+            }
+
+            onChangeSlidingPartitionDraftEndV092?(
+                point
+            )
+        }
+    }
+
     private func setZoom(_ value: CGFloat) {
         let newValue = clampedZoom(value)
         zoomScale = newValue
@@ -574,6 +650,44 @@ struct Plan2DCanvasView: View {
         committedZoomScale = 1
         panOffset = .zero
         committedPanOffset = .zero
+    }
+
+    private func modelPoint(
+        at location:
+            CGPoint,
+        size:
+            CGSize
+    ) -> Point2MM? {
+        let allPoints =
+            room.geometry.boundary.segments.flatMap {
+                Plan2DGeometryAdapter
+                    .sampledPoints(
+                        for:
+                            $0
+                    )
+            }
+
+        guard !allPoints.isEmpty else {
+            return nil
+        }
+
+        let projection =
+            Plan2DProjection(
+                points:
+                    allPoints,
+                size:
+                    size,
+                padding:
+                    projectionPadding,
+                zoomScale:
+                    zoomScale,
+                panOffset:
+                    panOffset
+            )
+
+        return projection.modelPoint(
+            location
+        )
     }
 
     private func clampedZoom(_ value: CGFloat) -> CGFloat {
@@ -674,6 +788,16 @@ struct Plan2DCanvasView: View {
             in: context
         )
 
+        if let slidingPartitionDraftV092 {
+            drawSlidingPartitionDraftV092(
+                slidingPartitionDraftV092,
+                projection:
+                    projection,
+                in:
+                    context
+            )
+        }
+
         drawFurnitureDimensions(
             footprints: cachedFootprints,
             assemblyByID: cachedAssemblyByID,
@@ -688,6 +812,264 @@ struct Plan2DCanvasView: View {
                 in: context
             )
         }
+    }
+
+    private func drawSlidingPartitionDraftV092(
+        _ draft:
+            SlidingRoomPartitionCandidateV092,
+        projection:
+            Plan2DProjection,
+        in context:
+            GraphicsContext
+    ) {
+        let start =
+            projection.screenPoint(
+                draft.start
+            )
+        let end =
+            projection.screenPoint(
+                draft.end
+            )
+        let dx =
+            end.x - start.x
+        let dy =
+            end.y - start.y
+        let length =
+            max(
+                hypot(dx, dy),
+                0.001
+            )
+        let normal =
+            CGVector(
+                dx:
+                    -dy / length,
+                dy:
+                    dx / length
+            )
+        let trackHalf:
+            CGFloat = 4
+        let railAStart =
+            CGPoint(
+                x:
+                    start.x + normal.dx * trackHalf,
+                y:
+                    start.y + normal.dy * trackHalf
+            )
+        let railAEnd =
+            CGPoint(
+                x:
+                    end.x + normal.dx * trackHalf,
+                y:
+                    end.y + normal.dy * trackHalf
+            )
+        let railBStart =
+            CGPoint(
+                x:
+                    start.x - normal.dx * trackHalf,
+                y:
+                    start.y - normal.dy * trackHalf
+            )
+        let railBEnd =
+            CGPoint(
+                x:
+                    end.x - normal.dx * trackHalf,
+                y:
+                    end.y - normal.dy * trackHalf
+            )
+
+        var centerPath = Path()
+        centerPath.move(to: start)
+        centerPath.addLine(to: end)
+
+        context.stroke(
+            centerPath,
+            with:
+                .color(
+                    Color.accentColor.opacity(0.92)
+                ),
+            style:
+                StrokeStyle(
+                    lineWidth:
+                        3,
+                    lineCap:
+                        .round,
+                    dash:
+                        [9, 5]
+                )
+        )
+
+        for points in [
+            (railAStart, railAEnd),
+            (railBStart, railBEnd)
+        ] {
+            var rail = Path()
+            rail.move(to: points.0)
+            rail.addLine(to: points.1)
+            context.stroke(
+                rail,
+                with:
+                    .color(
+                        StolarniaPalette
+                            .drawingMutedInk
+                            .opacity(0.72)
+                    ),
+                lineWidth:
+                    1.2
+            )
+        }
+
+        drawSlidingPartitionHandleV092(
+            at:
+                start,
+            title:
+                "START",
+            color:
+                .secondary,
+            in:
+                context
+        )
+        drawSlidingPartitionHandleV092(
+            at:
+                end,
+            title:
+                "KONIEC",
+            color:
+                .accentColor,
+            in:
+                context
+        )
+
+        let mid =
+            CGPoint(
+                x:
+                    (start.x + end.x) / 2,
+                y:
+                    (start.y + end.y) / 2
+            )
+        let label =
+            "\(draft.lengthLabel) / \(draft.doorCount) skrzydła"
+        let labelRect =
+            CGRect(
+                x:
+                    mid.x - 96,
+                y:
+                    mid.y - 16,
+                width:
+                    192,
+                height:
+                    32
+            )
+
+        context.fill(
+            Path(
+                roundedRect:
+                    labelRect,
+                cornerRadius:
+                    8
+            ),
+            with:
+                .color(
+                    StolarniaPalette
+                        .drawingLabelFill
+                        .opacity(0.96)
+                )
+        )
+        context.stroke(
+            Path(
+                roundedRect:
+                    labelRect,
+                cornerRadius:
+                    8
+            ),
+            with:
+                .color(
+                    Color.accentColor.opacity(0.56)
+                ),
+            lineWidth:
+                1
+        )
+        context.draw(
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(
+                    Color.accentColor
+                ),
+            at:
+                CGPoint(
+                    x:
+                        labelRect.midX,
+                    y:
+                        labelRect.midY
+                ),
+            anchor:
+                .center
+        )
+    }
+
+    private func drawSlidingPartitionHandleV092(
+        at point:
+            CGPoint,
+        title:
+            String,
+        color:
+            Color,
+        in context:
+            GraphicsContext
+    ) {
+        let handleRect =
+            CGRect(
+                x:
+                    point.x - 11,
+                y:
+                    point.y - 11,
+                width:
+                    22,
+                height:
+                    22
+            )
+
+        context.fill(
+            Path(
+                ellipseIn:
+                    handleRect
+            ),
+            with:
+                .color(
+                    color.opacity(0.92)
+                )
+        )
+        context.stroke(
+            Path(
+                ellipseIn:
+                    handleRect.insetBy(
+                        dx:
+                            -2,
+                        dy:
+                            -2
+                    )
+            ),
+            with:
+                .color(
+                    Color.white.opacity(0.92)
+                ),
+            lineWidth:
+                2
+        )
+
+        context.draw(
+            Text(title)
+                .font(.caption2.monospaced().bold())
+                .foregroundColor(color),
+            at:
+                CGPoint(
+                    x:
+                        point.x,
+                    y:
+                        point.y + 24
+                ),
+            anchor:
+                .center
+        )
     }
 
     private func drawFurniture(
@@ -1827,7 +2209,8 @@ struct Plan2DCanvasView: View {
             ?? [
                 KitchenRunKindV015.base,
                 .tall,
-                .wall
+                .wall,
+                .upper
             ]
             .first { kind in
                 assembliesOnWall.contains {
@@ -2221,9 +2604,14 @@ struct Plan2DCanvasView: View {
         guard let assembly = assemblies.first(where: {
             $0.id == furnitureID
         }),
-        let wallID = assembly.placement?.wallID,
-        let segment = room.geometry.geometry(of: wallID),
-        case .line = segment else {
+        let placement = assembly.placement else {
+            return translation
+        }
+
+        guard placement.anchoringMode != .freestanding,
+              let wallID = placement.wallID,
+              let segment = room.geometry.geometry(of: wallID),
+              case .line = segment else {
             return translation
         }
 
@@ -2277,10 +2665,7 @@ struct Plan2DCanvasView: View {
         guard let assembly = assemblies.first(where: {
             $0.id == furnitureID
         }),
-        let placement = assembly.placement,
-        let wallID = placement.wallID,
-        let segment = room.geometry.geometry(of: wallID),
-        case .line = segment else {
+        let placement = assembly.placement else {
             return .zero
         }
 
@@ -2298,6 +2683,39 @@ struct Plan2DCanvasView: View {
             zoomScale: zoomScale,
             panOffset: panOffset
         )
+
+        if placement.anchoringMode == .freestanding
+            || placement.wallID == nil {
+            let currentCenter = Point2MM(
+                x: placement.offsetAlongWall
+                    + assembly.size.width / 2,
+                y: placement.offsetFromWall
+                    + assembly.size.depth / 2
+            )
+            let proposedCenter = Point2MM(
+                x: movement.proponowaneOdsuniecie
+                    + assembly.size.width / 2,
+                y: (movement.proponowaneOdsuniecieOdSciany
+                    ?? placement.offsetFromWall)
+                    + assembly.size.depth / 2
+            )
+            let currentPoint =
+                projection.screenPoint(currentCenter)
+            let proposedPoint =
+                projection.screenPoint(proposedCenter)
+
+            return CGSize(
+                width: proposedPoint.x - currentPoint.x,
+                height: proposedPoint.y - currentPoint.y
+            )
+        }
+
+        guard let wallID = placement.wallID,
+              let segment = room.geometry.geometry(of: wallID),
+              case .line = segment else {
+            return .zero
+        }
+
         let wallPoints = Plan2DGeometryAdapter
             .sampledPoints(for: segment)
             .map(projection.screenPoint)
@@ -2331,65 +2749,21 @@ struct Plan2DCanvasView: View {
         )
     }
 
-    private func idsWykluczoneZeSnapuV066(
-        sourceID: FurnitureAssemblyID
-    ) -> Set<FurnitureAssemblyID> {
-        guard zaznaczoneFurnitureIDsV066.count > 1,
-              zaznaczoneFurnitureIDsV066.contains(sourceID) else {
-            return [sourceID]
-        }
-        return zaznaczoneFurnitureIDsV066
-    }
-
+    /// Sąsiedzi do przyciągania — reguła wspólna z drugim płótnem.
+    ///
+    /// Ta funkcja miała identyczne ciało w planie 2D i w elewacji.
+    /// Logika mieszka teraz w `PrzyciaganieSasiadow2DV0102`, żeby
+    /// poprawka przyciągania działała w obu widokach naraz.
     private func snapNeighbors(
         for assembly: FurnitureAssembly,
         placement: FurniturePlacement
     ) -> [ZakresModuluPrzyciagania2D] {
-        let sourceLayer = MebelPlan2DGeometry.layer(
-            for: assembly
+        PrzyciaganieSasiadow2DV0102.sasiedzi(
+            dla: assembly,
+            placement: placement,
+            wsrod: assemblies,
+            zaznaczone: zaznaczoneFurnitureIDsV066
         )
-        let excludedIDs =
-            idsWykluczoneZeSnapuV066(
-                sourceID: assembly.id
-            )
-
-        return assemblies.compactMap { candidate in
-            guard !excludedIDs.contains(candidate.id),
-                  let candidatePlacement =
-                    candidate.placement,
-                  candidatePlacement.wallID
-                    == placement.wallID,
-                  MebelPlan2DGeometry.layer(
-                      for: candidate
-                  ) == sourceLayer,
-                  abs(
-                      candidatePlacement
-                          .bottomOffset
-                          .rawValue
-                      - placement
-                          .bottomOffset
-                          .rawValue
-                  ) <= 1,
-                  abs(
-                      candidatePlacement
-                          .offsetFromWall
-                          .rawValue
-                      - placement
-                          .offsetFromWall
-                          .rawValue
-                  ) <= 1 else {
-                return nil
-            }
-
-            return ZakresModuluPrzyciagania2D(
-                furnitureID: candidate.id,
-                start:
-                    candidatePlacement.offsetAlongWall,
-                end:
-                    candidatePlacement.offsetAlongWall
-                    + candidate.size.width
-            )
-        }
     }
 
     private func movementContext(
@@ -2400,10 +2774,7 @@ struct Plan2DCanvasView: View {
         guard let assembly = assemblies.first(where: {
             $0.id == furnitureID
         }),
-        let placement = assembly.placement,
-        let wallID = placement.wallID,
-        let segment = room.geometry.geometry(of: wallID),
-        case .line = segment else {
+        let placement = assembly.placement else {
             return nil
         }
 
@@ -2421,6 +2792,23 @@ struct Plan2DCanvasView: View {
             zoomScale: zoomScale,
             panOffset: panOffset
         )
+
+        if placement.anchoringMode == .freestanding
+            || placement.wallID == nil {
+            return freestandingMovementContext(
+                for: assembly,
+                at: location,
+                projection: projection,
+                roomPoints: allPoints
+            )
+        }
+
+        guard let wallID = placement.wallID,
+              let segment = room.geometry.geometry(of: wallID),
+              case .line = segment else {
+            return nil
+        }
+
         let wallPoints = Plan2DGeometryAdapter
             .sampledPoints(for: segment)
             .map(projection.screenPoint)
@@ -2537,6 +2925,73 @@ struct Plan2DCanvasView: View {
             proponowaneOdsuniecie: proposedOffset,
             celZamianyID: swapTarget?.id,
             przyciagniecie: snap
+        )
+    }
+
+    private func freestandingMovementContext(
+        for assembly: FurnitureAssembly,
+        at location: CGPoint,
+        projection: Plan2DProjection,
+        roomPoints: [Point2MM]
+    ) -> KontekstPrzesunieciaModulu2D? {
+        guard !roomPoints.isEmpty else {
+            return nil
+        }
+
+        let bounds = modelBounds(roomPoints)
+        let modelPoint = projection.modelPoint(location)
+        let maximumX = max(
+            bounds.maxX - assembly.size.width.rawValue,
+            bounds.minX
+        )
+        let maximumY = max(
+            bounds.maxY - assembly.size.depth.rawValue,
+            bounds.minY
+        )
+        let centeredX =
+            modelPoint.x.rawValue
+            - assembly.size.width.rawValue / 2
+        let centeredY =
+            modelPoint.y.rawValue
+            - assembly.size.depth.rawValue / 2
+        let rawX = min(
+            max(centeredX, bounds.minX),
+            maximumX
+        )
+        let rawY = min(
+            max(centeredY, bounds.minY),
+            maximumY
+        )
+
+        return KontekstPrzesunieciaModulu2D(
+            furnitureID: assembly.id,
+            wallID: nil,
+            proponowaneOdsuniecie:
+                PrzyciaganieModulow2D.odsuniecieDoSiatki(
+                    Millimeters(rawX)
+                ),
+            proponowaneOdsuniecieOdSciany:
+                PrzyciaganieModulow2D.odsuniecieDoSiatki(
+                    Millimeters(rawY)
+                ),
+            celZamianyID: nil,
+            przyciagniecie: nil
+        )
+    }
+
+    private func modelBounds(
+        _ points: [Point2MM]
+    ) -> (
+        minX: Double,
+        maxX: Double,
+        minY: Double,
+        maxY: Double
+    ) {
+        (
+            minX: points.map(\.x.rawValue).min() ?? 0,
+            maxX: points.map(\.x.rawValue).max() ?? 0,
+            minY: points.map(\.y.rawValue).min() ?? 0,
+            maxY: points.map(\.y.rawValue).max() ?? 0
         )
     }
 
@@ -2801,12 +3256,13 @@ struct Plan2DCanvasView: View {
         HStack(spacing: 10) {
             legendItem(layer: .dolna, title: "Dolne")
             legendItem(layer: .wiszaca, title: "Wiszące")
+            legendItem(layer: .gorna, title: "Nadstawki")
             legendItem(layer: .wysoka, title: "Wysokie")
         }
         .font(.caption2.weight(.semibold))
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(
+        .stolarniaMaterial(
             .regularMaterial,
             in: RoundedRectangle(cornerRadius: 10)
         )
@@ -2855,6 +3311,14 @@ struct Plan2DCanvasView: View {
                 fillOpacity: 0.20,
                 lineWidth: 2,
                 dash: [7, 4]
+            )
+
+        case .gorna:
+            return FurniturePlan2DVisualStyle(
+                color: materialColor,
+                fillOpacity: 0.16,
+                lineWidth: 2,
+                dash: [3, 3]
             )
 
         case .wysoka:

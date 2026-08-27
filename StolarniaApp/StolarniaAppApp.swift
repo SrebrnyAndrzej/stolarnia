@@ -243,7 +243,7 @@ private struct StolarniaStartupRecoveryView:
                         maxWidth: .infinity,
                         alignment: .leading
                     )
-                    .background(
+                    .stolarniaMaterial(
                         .thinMaterial
                     )
             }

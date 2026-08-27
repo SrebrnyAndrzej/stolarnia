@@ -83,6 +83,11 @@ struct RozkrojPlytViewV071:
     @State private var raport:
         RaportRozkrojuPlytV071
     @State private var exportURL: URL?
+    /// Osobno od `exportURL`, bo to inny plik: rozkrój arkuszy kontra lista
+    /// formatek. Jeden `URL` na oba dawałby przycisk „Eksport CSV",
+    /// który po przejściu między zakładkami wysyła nie ten plik, co trzeba.
+    @State private var formatkiExportURL: URL?
+    @State private var formatkiExportError: String?
     @State private var exportError: String?
     @State private var rozkrojSzukaj = ""
     @State private var zakupSzukaj = ""
@@ -362,9 +367,12 @@ struct RozkrojPlytViewV071:
                 )
 
             case .formatki:
-                ListaFormatekProjektuContentV070(
-                    list: lista
-                )
+                VStack(alignment: .leading, spacing: 0) {
+                    paskEksportuFormatekV0102
+                    ListaFormatekProjektuContentV070(
+                        list: lista
+                    )
+                }
 
             case .rozkroj:
                 rozkrojContent
@@ -821,7 +829,7 @@ struct RozkrojPlytViewV071:
                         )
 
                         Text(
-                            sheet.grupa.opis
+                            sheet.grupa.material.nazwa
                         )
                         .font(.caption)
                         .foregroundStyle(
@@ -842,6 +850,10 @@ struct RozkrojPlytViewV071:
                             .monospacedDigit()
                     )
                 }
+
+                materialSummary(
+                    for: sheet.grupa
+                )
 
                 RozkrojArkuszaCanvasV071(
                     arkusz: sheet
@@ -1040,6 +1052,45 @@ struct RozkrojPlytViewV071:
                                 ) {
                                     GridRow {
                                         Text(
+                                            "Dekor"
+                                        )
+                                        Text(
+                                            item
+                                                .grupa
+                                                .material
+                                                .nazwa
+                                        )
+                                    }
+
+                                    GridRow {
+                                        Text(
+                                            "Kod dekoru"
+                                        )
+                                        Text(
+                                            materialCode(
+                                                item
+                                                    .grupa
+                                                    .material
+                                            )
+                                        )
+                                        .monospaced()
+                                    }
+
+                                    GridRow {
+                                        Text(
+                                            "Producent"
+                                        )
+                                        Text(
+                                            materialProducer(
+                                                item
+                                                    .grupa
+                                                    .material
+                                            )
+                                        )
+                                    }
+
+                                    GridRow {
+                                        Text(
                                             "Arkusze"
                                         )
                                         Text(
@@ -1110,6 +1161,14 @@ struct RozkrojPlytViewV071:
                                         "Grubość \(formatMM(item.grupa.gruboscMM)) mm"
                                     )
                                     .font(.caption)
+                                    .foregroundStyle(
+                                        .secondary
+                                    )
+
+                                    Text(
+                                        "\(materialProducer(item.grupa.material)) • \(materialCode(item.grupa.material))"
+                                    )
+                                    .font(.caption2)
                                     .foregroundStyle(
                                         .secondary
                                     )
@@ -1185,6 +1244,62 @@ struct RozkrojPlytViewV071:
         }
     }
 
+    /// Eksport listy formatek do CSV.
+    ///
+    /// `ListaFormatekCSVV070` istniał, ale **jedyne wejście do niego prowadziło
+    /// przez `ListaFormatekProjektuViewV070`, którego nic już nie otwierało**.
+    /// Zakładka `Formatki` pokazuje tę samą treść (`…ContentV070`), tylko bez
+    /// przycisku eksportu — czyli lista formatek była do obejrzenia, ale nie
+    /// do wysłania do hurtowni. Funkcja nie zginęła po cichu tylko dlatego,
+    /// że nikt jej nie szukał.
+    @ViewBuilder
+    private var paskEksportuFormatekV0102: some View {
+        HStack(spacing: 12) {
+            if let formatkiExportURL {
+                ShareLink(item: formatkiExportURL) {
+                    Label(
+                        "Eksport CSV",
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
+            } else {
+                Button {
+                    przygotujEksportFormatekV0102()
+                } label: {
+                    Label("Przygotuj CSV", systemImage: "tablecells")
+                }
+                .disabled(lista.formatki.isEmpty)
+            }
+
+            if let formatkiExportError {
+                Label(formatkiExportError, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            StolarniaResultCount(
+                count: lista.formatki.count,
+                noun: "formatek"
+            )
+        }
+        .frame(minHeight: 52)
+        .padding(.horizontal, 16)
+    }
+
+    private func przygotujEksportFormatekV0102() {
+        do {
+            formatkiExportURL =
+                try ListaFormatekCSVV070.makeFile(for: lista)
+            formatkiExportError = nil
+        } catch {
+            formatkiExportURL = nil
+            formatkiExportError = error.localizedDescription
+        }
+    }
+
     private func area(
         _ value: Double
     ) -> String {
@@ -1199,6 +1314,98 @@ struct RozkrojPlytViewV071:
                     .fractionLength(0...3)
                 )
         )
+    }
+
+    private func materialSummary(
+        for group: KluczGrupyRozkrojuV071
+    ) -> some View {
+        let material = group.material
+
+        return HStack(
+            alignment: .top,
+            spacing: 10
+        ) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(
+                    Color(
+                        stolarniaHEX:
+                            material.kolorHEX
+                    )
+                )
+                .frame(
+                    width: 24,
+                    height: 24
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(
+                            .secondary.opacity(0.35),
+                            lineWidth: 1
+                        )
+                }
+                .accessibilityHidden(true)
+
+            Grid(
+                alignment:
+                    .leadingFirstTextBaseline,
+                horizontalSpacing: 12,
+                verticalSpacing: 4
+            ) {
+                GridRow {
+                    Text("Dekor")
+                        .foregroundStyle(.secondary)
+                    Text(material.nazwa)
+                }
+
+                GridRow {
+                    Text("Kod")
+                        .foregroundStyle(.secondary)
+                    Text(materialCode(material))
+                        .monospaced()
+                }
+
+                GridRow {
+                    Text("Producent")
+                        .foregroundStyle(.secondary)
+                    Text(materialProducer(material))
+                }
+
+                GridRow {
+                    Text("Grubość")
+                        .foregroundStyle(.secondary)
+                    Text("\(formatMM(group.gruboscMM)) mm")
+                        .monospacedDigit()
+                }
+            }
+            .font(.caption)
+            .textSelection(.enabled)
+        }
+    }
+
+    private func materialCode(
+        _ material: MaterialFormatkiV070
+    ) -> String {
+        let value =
+            material.kod
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+
+        return value.isEmpty ? "brak kodu" : value
+    }
+
+    private func materialProducer(
+        _ material: MaterialFormatkiV070
+    ) -> String {
+        let value =
+            material.producent
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+
+        return value.isEmpty ? "brak producenta" : value
     }
 
     private func percent(

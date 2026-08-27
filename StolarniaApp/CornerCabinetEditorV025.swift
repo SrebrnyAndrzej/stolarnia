@@ -27,6 +27,15 @@ struct CornerCabinetEditorV025:
     @State private var deadSpaceMM = 300.0
     @State private var frontAngleDegrees = 45.0
     @State private var shelfCount = 2
+    @State private var accessTechnology:
+        CornerCabinetAccessTechnologyV085 =
+            .shelves
+    @State private var fillerKind:
+        CornerCabinetFillerKindV086 =
+            .cornerPost90
+    @State private var fillerWidthMM = 30.0
+    @State private var clearHeightMM = 720.0
+    @State private var handleProjectionMM = 0.0
 
     var body: some View {
         NavigationStack {
@@ -133,6 +142,70 @@ struct CornerCabinetEditorV025:
                     )
                 }
 
+                Section("Mechanika i blendy") {
+                    Picker(
+                        "Mechanizm",
+                        selection:
+                            $accessTechnology
+                    ) {
+                        ForEach(
+                            CornerCabinetAccessTechnologyV085
+                                .allCases
+                        ) {
+                            Text($0.title)
+                                .tag($0)
+                        }
+                    }
+
+                    Picker(
+                        "Blenda / luz",
+                        selection:
+                            $fillerKind
+                    ) {
+                        ForEach(
+                            CornerCabinetFillerKindV086
+                                .allCases
+                        ) {
+                            Text($0.title)
+                                .tag($0)
+                        }
+                    }
+
+                    Button(
+                        "Ustaw zalecany mechanizm i blendę"
+                    ) {
+                        applyRecommendedTechnology()
+                    }
+
+                    Button(
+                        "Dopasuj blendę do mechanizmu"
+                    ) {
+                        applyRecommendedFiller()
+                    }
+
+                    if fillerKind != .none {
+                        numberField(
+                            "Szerokość blendy [mm]",
+                            value:
+                                $fillerWidthMM
+                        )
+                    }
+
+                    numberField(
+                        "Światło wysokości [mm]",
+                        value:
+                            $clearHeightMM
+                    )
+
+                    numberField(
+                        "Wystawanie uchwytu [mm]",
+                        value:
+                            $handleProjectionMM
+                    )
+
+                    ruleSummary
+                }
+
                 if let draft =
                     currentDefinition {
                     Section("Walidacja") {
@@ -229,7 +302,19 @@ struct CornerCabinetEditorV025:
             frontAngleDegrees:
                 frontAngleDegrees,
             shelfCount:
-                shelfCount
+                shelfCount,
+            accessTechnologyOverride:
+                accessTechnology,
+            fillerKindOverride:
+                fillerKind,
+            fillerWidthMM:
+                fillerKind == .none
+                    ? 0
+                    : fillerWidthMM,
+            clearHeightMM:
+                clearHeightMM,
+            handleProjectionMM:
+                handleProjectionMM
         )
     }
 
@@ -254,9 +339,54 @@ struct CornerCabinetEditorV025:
                 }
             )
         else {
+            let assembly =
+                assemblies[
+                    selectedIndex
+                ]
+            let draft =
+                CornerCabinetDefinitionV025(
+                    assemblyID: id,
+                    leftArmMM:
+                        max(
+                            assembly.size.width.rawValue,
+                            900
+                        ),
+                    rightArmMM:
+                        max(
+                            assembly.size.depth.rawValue,
+                            900
+                        ),
+                    depthMM:
+                        max(
+                            assembly.size.depth.rawValue,
+                            560
+                        ),
+                    clearHeightMM:
+                        assembly.size.height.rawValue
+                )
+            apply(
+                definition: draft,
+                assemblyHeight:
+                    assembly.size.height.rawValue
+            )
             return
         }
 
+        apply(
+            definition: value,
+            assemblyHeight:
+                assemblies[
+                    selectedIndex
+                ].size.height.rawValue
+        )
+    }
+
+    private func apply(
+        definition value:
+            CornerCabinetDefinitionV025,
+        assemblyHeight:
+            Double
+    ) {
         kind = value.kind
         handedness =
             value.handedness
@@ -274,6 +404,18 @@ struct CornerCabinetEditorV025:
             value.frontAngleDegrees
         shelfCount =
             value.shelfCount
+        accessTechnology =
+            value.effectiveAccessTechnology
+        fillerKind =
+            value.effectiveFillerKind
+        fillerWidthMM =
+            value.effectiveFillerWidthMM
+        clearHeightMM =
+            value.clearHeightMM
+                ?? assemblyHeight
+        handleProjectionMM =
+            value.handleProjectionMM
+                ?? 0
     }
 
     private func save() {
@@ -307,5 +449,94 @@ struct CornerCabinetEditorV025:
                 )
         )
         .keyboardType(.decimalPad)
+    }
+
+    private var currentRule:
+        CornerCabinetTechnologyRuleV086
+    {
+        CornerCabinetRuleBookV086
+            .technologyRule(
+                for: accessTechnology
+            )
+    }
+
+    private var ruleSummary:
+        some View
+    {
+        VStack(
+            alignment: .leading,
+            spacing: 8
+        ) {
+            LabeledContent(
+                "Min. front",
+                value:
+                    "\(Int(currentRule.minimumFrontOpeningMM)) mm"
+            )
+            LabeledContent(
+                "Min. głębokość",
+                value:
+                    "\(Int(currentRule.minimumInternalDepthMM)) mm"
+            )
+            LabeledContent(
+                "Min. ramiona",
+                value:
+                    "\(Int(currentRule.minimumPrimarySpanMM)) / \(Int(currentRule.minimumSecondarySpanMM)) mm"
+            )
+
+            if currentRule
+                .requiresMotionEnvelopeCheck {
+                Label(
+                    "Wymagana koperta ruchu w 2D / elewacji / 3D",
+                    systemImage:
+                        "scope"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if currentRule
+                .requiresOpeningAngleLimiter {
+                Label(
+                    "Wymagany ogranicznik kąta otwarcia frontu",
+                    systemImage:
+                        "angle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Text(
+                fillerKind.productionDescription
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func applyRecommendedTechnology() {
+        accessTechnology =
+            CornerCabinetRuleBookV086
+                .defaultAccessTechnology(
+                    for: kind
+                )
+        applyRecommendedFiller()
+    }
+
+    private func applyRecommendedFiller() {
+        let recommendedKind =
+            CornerCabinetRuleBookV086
+                .recommendedFillerKind(
+                    kind: kind,
+                    technology:
+                        accessTechnology
+                )
+        fillerKind =
+            recommendedKind
+        fillerWidthMM =
+            CornerCabinetRuleBookV086
+                .technologyRule(
+                    for: accessTechnology
+                )
+                .recommendedFillerWidthMM
     }
 }

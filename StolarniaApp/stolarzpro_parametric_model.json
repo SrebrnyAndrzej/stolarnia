@@ -1,0 +1,232 @@
+{
+  "cabinet_parametric_model": {
+    "module_config": {
+      "version": "1.2",
+      "system_standard": "System 32",
+      "architecture": {
+        "logic_layer": "single_file",
+        "view_layer": "single_file"
+      }
+    },
+    "input_data": {
+      "measurement_devices": [
+        "Hoto",
+        "Bosch",
+        "Yato"
+      ],
+      "room_dimensions_mm": {
+        "width": 0,
+        "height": 0,
+        "depth": 0
+      }
+    },
+    "dimensions_mm": {
+      "global": {
+        "width": 600,
+        "height": 720,
+        "depth": 510
+      },
+      "clearances": {
+        "front_gap": 2,
+        "side_gap": 1,
+        "back_ventilation": 50,
+        "wall_offset": 15
+      }
+    },
+    "materials": {
+      "carcass": {
+        "board_thickness_mm": [
+          16,
+          18
+        ],
+        "default_thickness_mm": 18,
+        "edge_banding_mm": [
+          0.5,
+          1.0,
+          2.0
+        ],
+        "edge_banding_technology": {
+          "standard": "EVA",
+          "water_resistant": "PUR"
+        }
+      },
+      "back_panel": {
+        "material": "HDF",
+        "thickness_mm": 3,
+        "mounting_style": "grooved",
+        "groove_offset_mm": 16,
+        "groove_depth_mm": 6
+      },
+      "worktops": {
+        "types": [
+          "laminate",
+          "compact_hpl",
+          "quartz",
+          "wood"
+        ],
+        "standard_depths_mm": [
+          600,
+          635,
+          650
+        ],
+        "overhang_front_mm": 40
+      }
+    },
+    "construction_elements": {
+      "wreaths_and_traverses": {
+        "bottom_wreath": {
+          "type": "inserted",
+          "thickness_mm": 18
+        },
+        "top_wreath": {
+          "type": "full_or_traverses",
+          "traverse_width_mm": 80,
+          "front_traverse_orientation": "vertical",
+          "rear_traverse_orientation": "horizontal"
+        }
+      },
+      "blends_and_fillers": {
+        "side_blend_width_mm": [
+          30,
+          50
+        ],
+        "material_match": "front"
+      },
+      "cnc_machining_features": {
+        "led_channel_routing": {
+          "width_mm": 16,
+          "depth_mm": 12,
+          "offset_from_front_mm": 30
+        },
+        "worktop_cutouts": {
+          "sink_clearance_mm": 10,
+          "hob_ventilation_clearance_mm": 50
+        }
+      }
+    },
+    "hardware_and_systems": {
+      "legs_and_base": {
+        "brand": "Häfele Axilo",
+        "clip_system": "spring_loaded_clip",
+        "default_height_mm": 100,
+        "adjustment_range_mm": [
+          -10,
+          20
+        ],
+        "setbacks_mm": {
+          "front": 50,
+          "rear": 30,
+          "side": 0
+        },
+        "plinth": {
+          "thickness_mm": 18,
+          "blends_included": true
+        }
+      },
+      "drawers": {
+        "systems": [
+          "Blum",
+          "GTV Modern Box"
+        ],
+        "bottom_thickness_mm": 16,
+        "slide_clearance_mm": 13,
+        "drilling_pattern_front_mm": 32
+      },
+      "hinges": {
+        "brands": [
+          "Blum",
+          "GTV"
+        ],
+        "drilling": {
+          "cup_diameter_mm": 35,
+          "cup_depth_mm": 13,
+          "distance_from_edge_mm": 5,
+          "system_32_offset_mm": 37
+        }
+      },
+      "corner_systems": {
+        "brands": [
+          "Kesseböhmer Le Mans",
+          "Peka Magic Corner"
+        ],
+        "kinematics": {
+          "min_door_width_mm": 450,
+          "min_internal_depth_mm": 500,
+          "collision_zone_check_required": true
+        }
+      },
+      "lighting_led": {
+        "profiles": [
+          "surface",
+          "recessed",
+          "corner"
+        ],
+        "components_to_calculate": [
+          "led_strip_length",
+          "profile_length",
+          "diffuser_length",
+          "transformer_wattage",
+          "switch_type"
+        ]
+      }
+    },
+    "views_and_drawings": {
+      "elevation_2d": {
+        "required_elements": [
+          "dimensions",
+          "hidden_lines_for_shelves",
+          "opening_direction_symbols"
+        ],
+        "hidden_line_style": "dashed"
+      },
+      "axonometry_3d": {
+        "required_elements": [
+          "wireframe",
+          "exploded_view_option",
+          "hardware_markers"
+        ],
+        "explode_distance_mm": 150
+      },
+      "technical_section": {
+        "required_elements": [
+          "drilling_points",
+          "material_hatching",
+          "clearance_zones"
+        ],
+        "cut_plane": "sagittal"
+      }
+    },
+    "financials_and_pricing": {
+      "tiers": {
+        "eco": {
+          "description": "Podstawowe okucia, płyta 16mm, klej EVA"
+        },
+        "standard": {
+          "description": "Standardowe okucia GTV, płyta 18mm, klej EVA"
+        },
+        "premium": {
+          "description": "Okucia Blum, szuflady Modern Box, okleinowanie PUR"
+        },
+        "vip": {
+          "description": "Pełen system Blum, oświetlenie LED, systemy Le Mans, blaty kompaktowe/kamienne"
+        }
+      },
+      "calculation_parameters": {
+        "margin_percentage": 30.0,
+        "hourly_labor_rate": 150.0,
+        "assembly_time_hours": 1.5,
+        "cnc_processing_time_hours": 0.5
+      },
+      "logistics_and_services": {
+        "transport_base_fee": 200.0,
+        "floor_level_surcharge": 50.0,
+        "elevator_available": false,
+        "cnc_operations_pricing": {
+          "sink_cutout": 80.0,
+          "hob_cutout": 80.0,
+          "led_routing_per_meter": 25.0
+        }
+      }
+    }
+  }
+}

@@ -13,7 +13,16 @@ enum WorkspaceDestinationV074:
 {
     case plan
     case elewacja
+    case elewacjaWyspy
     case widok3D
+    case garderobyDrzwi
+    /// Wycena pomieszczenia **wewnątrz** warsztatu.
+    ///
+    /// Osobna od oferty projektowej na ekranie projektu: tamta obejmuje
+    /// wszystkie pomieszczenia i jest dokumentem dla klienta, ta odpowiada
+    /// na pytanie „ile kosztuje to, co mam przed sobą". Stara droga
+    /// (`ProjektSzczegolySheet.projectQuote`) działa bez zmian.
+    case wycena
     case produkcjaStart
     case formatki
     case rozkroj
@@ -30,7 +39,9 @@ enum WorkspaceDestinationV074:
         [
             .plan,
             .elewacja,
-            .widok3D
+            .elewacjaWyspy,
+            .widok3D,
+            .garderobyDrzwi
         ]
     }
 
@@ -48,14 +59,43 @@ enum WorkspaceDestinationV074:
         ]
     }
 
+    /// Do którego etapu pracy należy ten ekran.
+    ///
+    /// Podział idzie po tym, **po co się tam wchodzi**, nie po tym, jaka
+    /// technologia za tym stoi. Dlatego obrzeża i CNC są przy rozkroju
+    /// (to jedna robota na formatkach), a zakup płyt i pakowanie przy
+    /// zamówieniu (to jedna robota z hurtownią).
+    var etap: EtapPracyV0103 {
+        switch self {
+        case .plan, .elewacja, .elewacjaWyspy, .widok3D, .garderobyDrzwi:
+            return .projekt
+        case .wycena:
+            return .wycena
+        case .produkcjaStart, .formatki, .rozkroj, .obrzeza, .cnc:
+            return .rozkroj
+        case .montazPakowanie, .zakupPlyt:
+            return .zamowienie
+        }
+    }
+
+    static func cele(etapu etap: EtapPracyV0103) -> [WorkspaceDestinationV074] {
+        allCases.filter { $0.etap == etap }
+    }
+
     var tytul: String {
         switch self {
         case .plan:
             return "Plan 2D"
         case .elewacja:
             return "Elewacja"
+        case .elewacjaWyspy:
+            return "Elewacja wyspy"
         case .widok3D:
             return "Widok 3D"
+        case .garderobyDrzwi:
+            return "Garderoby i drzwi"
+        case .wycena:
+            return "Wycena"
         case .produkcjaStart:
             return "Produkcja"
         case .formatki:
@@ -79,8 +119,14 @@ enum WorkspaceDestinationV074:
             return "Układ pomieszczenia i modułów"
         case .elewacja:
             return "Widok aktywnej ściany"
+        case .elewacjaWyspy:
+            return "Widok modułów wolnostojących"
         case .widok3D:
             return "Kontrola bryły projektu"
+        case .garderobyDrzwi:
+            return "Szafy przesuwne i dostęp"
+        case .wycena:
+            return "Warianty i cena tego pomieszczenia"
         case .produkcjaStart:
             return "Status przygotowania produkcji"
         case .formatki:
@@ -98,14 +144,36 @@ enum WorkspaceDestinationV074:
         }
     }
 
+    /// Krótka etykieta do przełącznika nad rysunkiem.
+    ///
+    /// Pełne tytuły („Elewacja wyspy", „Garderoby i drzwi") są dobre w pasku
+    /// bocznym, ale w poziomym rzędzie zjadają miejsce i wymuszają przewijanie
+    /// przy pierwszym spojrzeniu.
+    var tytulSkrocony: String {
+        switch self {
+        case .plan:           return "Plan"
+        case .elewacja:       return "Elewacja"
+        case .elewacjaWyspy:  return "Wyspa"
+        case .widok3D:        return "3D"
+        case .garderobyDrzwi: return "Przesuwne"
+        default:              return tytul
+        }
+    }
+
     var symbol: String {
         switch self {
         case .plan:
             return "square.grid.2x2"
         case .elewacja:
             return "rectangle.portrait"
+        case .elewacjaWyspy:
+            return "rectangle.center.inset.filled"
         case .widok3D:
             return "cube"
+        case .garderobyDrzwi:
+            return "rectangle.split.3x1"
+        case .wycena:
+            return "banknote"
         case .produkcjaStart:
             return "shippingbox"
         case .formatki:
@@ -135,8 +203,12 @@ enum WorkspaceDestinationV074:
             return .plan
         case .elewacja:
             return .elewacja
+        case .elewacjaWyspy:
+            return .elewacjaWyspy
         case .widok3D:
             return .widok3D
+        case .garderobyDrzwi:
+            return .garderobyDrzwi
         default:
             return nil
         }
@@ -199,25 +271,38 @@ struct WorkspaceNawigacjaV074:
     let liczbaFormatek: Int
     let liczbaBlokadGotowosci: Int
     let liczbaOstrzezenGotowosci: Int
+    /// Cena brutto pomieszczenia — widoczna **podczas projektowania**.
+    ///
+    /// W narzędziach wycenowych dla wykonawców suma aktualizuje się na bieżąco,
+    /// gdy klient zaznacza opcje. U nas cena mieszkała za osobnym oknem, więc
+    /// przestawała być narzędziem decyzji, a stawała się raportem na koniec.
+    ///
+    /// `nil` znaczy „nie ma z czego policzyć" (pusty pokój), a nie zero.
+    let cenaBruttoPomieszczenia: Double?
+    /// Ile pozycji wyceny nie ma jeszcze ceny w cenniku.
+    ///
+    /// Wzorzec z systemów CPQ: brak danych oznacza się **przy pozycji**,
+    /// a nie milczy o nim w podsumowaniu. Dopóki cennik jest uzupełniany,
+    /// suma jest oszacowaniem i musi to mówić.
+    let brakiCennika: Int
 
     var body: some View {
+        // Sekcje to **etapy drogi**, nie kategorie techniczne.
+        //
+        // Wcześniej były dwa worki („Projekt" i „Produkcja") z dwunastoma
+        // równorzędnymi pozycjami, a wyceny nie było wśród nich wcale.
+        // Teraz nagłówek mówi, na którym etapie się jest i po co on jest;
+        // ekrany zostają te same, więc nic nie znika z zasięgu.
+        // **Jeden wiersz na etap**, nie lista ekranów.
+        //
+        // Pasek miał dwanaście równorzędnych pozycji w dwóch workach
+        // („Projekt" i „Produkcja"), a wyceny nie było wśród nich wcale.
+        // Teraz są cztery etapy drogi, którą się chodzi. Widoki wewnątrz
+        // etapu nie znikają — przełącznik plan / elewacja / 3D stoi nad
+        // rysunkiem, a produkcja ma własny pasek zakładek w treści.
         List {
-            Section("Projekt") {
-                ForEach(
-                    WorkspaceDestinationV074
-                        .projektowe
-                ) {
-                    row($0)
-                }
-            }
-
-            Section("Produkcja") {
-                ForEach(
-                    WorkspaceDestinationV074
-                        .produkcyjne
-                ) {
-                    row($0)
-                }
+            ForEach(EtapPracyV0103.allCases) { etap in
+                wierszEtapu(etap)
             }
         }
         .listStyle(.sidebar)
@@ -227,79 +312,110 @@ struct WorkspaceNawigacjaV074:
         }
     }
 
-    private func row(
-        _ destination:
-            WorkspaceDestinationV074
+    /// Wiersz etapu — numer, nazwa, cel i skrót zawartości.
+    ///
+    /// Wyróżnienie idzie po **etapie**, nie po konkretnym ekranie: przełączenie
+    /// z planu na elewację nie zmienia etapu, bo to nadal projektowanie.
+    private func wierszEtapu(
+        _ etap: EtapPracyV0103
     ) -> some View {
-        Button {
-            wybor = destination
+        let aktywny = wybor.etap == etap
+
+        return Button {
+            // Wejście w etap, na którym już jesteśmy, nie może wyrzucić
+            // z bieżącego widoku — inaczej stuknięcie w „Projekt" przy
+            // otwartej elewacji cofałoby na plan bez powodu.
+            if !aktywny {
+                wybor = etap.celDomyslny
+            }
         } label: {
             HStack(spacing: 12) {
-                Image(
-                    systemName:
-                        destination.symbol
-                )
-                .font(
-                    .body
-                        .weight(.semibold)
-                )
-                .frame(
-                    width: 26,
-                    height: 26
-                )
-                .foregroundStyle(
-                    wybor == destination
-                        ? Color.accentColor
-                        : Color.secondary
-                )
-
-                VStack(
-                    alignment: .leading,
-                    spacing: 2
-                ) {
-                    Text(destination.tytul)
-                        .font(
-                            .subheadline
-                                .weight(.semibold)
+                Text("\(etap.numer)")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(aktywny ? Color.white : Color.accentColor)
+                    .frame(width: 26, height: 26)
+                    .background(
+                        Circle().fill(
+                            aktywny
+                            ? Color.accentColor
+                            : Color.accentColor.opacity(0.16)
                         )
-                        .foregroundStyle(.primary)
+                    )
 
-                    Text(destination.opis)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(etap.nazwa)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(etap.opis)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
-                Spacer(minLength: 8)
-
-                if wybor == destination {
-                    Image(
-                        systemName:
-                            "checkmark.circle.fill"
-                    )
-                    .foregroundStyle(
-                        Color.accentColor
-                    )
-                }
+                Spacer(minLength: 0)
             }
-            .padding(.vertical, 5)
+            .frame(minHeight: 56)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        // Wiersz etapu jest dużym celem — przy dużej powierzchni ta sama
+        // skala procentowa to więcej ruchu, więc jest łagodniejsza.
+        //
+        // Samo **przejście między etapami nie jest animowane**: stolarz robi
+        // to dziesiątki razy podczas jednego projektu, a animacja oglądana
+        // tak często przestaje być ozdobą i staje się podatkiem od kliknięcia.
+        .stolarniaPressable(skala: 0.985)
         .listRowBackground(
-            wybor == destination
-                ? Color.accentColor
-                    .opacity(0.10)
-                : Color.clear
+            aktywny
+            ? Color.accentColor.opacity(0.12)
+            : Color.clear
         )
-        .accessibilityLabel(
-            "\(destination.tytul), \(destination.opis)"
-        )
-        .accessibilityAddTraits(
-            wybor == destination
-                ? [.isSelected]
-                : []
-        )
+        .accessibilityAddTraits(aktywny ? [.isSelected] : [])
+    }
+
+    /// Nagłówek sekcji z numerem kroku i celem etapu.
+    ///
+    /// Numer niesie prawdziwą informację — te etapy **są** kolejnością pracy,
+    /// a nie listą kategorii, więc numerowanie nie jest tu ozdobą.
+    /// Cena pomieszczenia w stopce paska — zawsze na oczach.
+    @ViewBuilder
+    private var cenaPomieszczeniaV0103: some View {
+        if let cena = cenaBruttoPomieszczenia {
+            VStack(alignment: .leading, spacing: 1) {
+                Label {
+                    Text(cena.formatted(.currency(code: "PLN")))
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        // Cyfry przetaczają się zamiast podmieniać skokowo.
+                        //
+                        // To jedyne miejsce w aplikacji, gdzie liczba zmienia
+                        // się **w reakcji na pracę użytkownika** — po każdej
+                        // zmianie modułu. Skokowa podmiana czyta się jak
+                        // przeładowanie ekranu; przetoczenie mówi, że to ta
+                        // sama liczba, która właśnie urosła.
+                        //
+                        // Font jest `monospacedDigit`, więc szerokość nie
+                        // skacze przy zmianie cyfr — bez tego przetaczanie
+                        // ciągnęłoby za sobą cały wiersz.
+                        .contentTransition(.numericText())
+                        .animation(StolarniaMotion.pojawienie, value: cena)
+                } icon: {
+                    Image(systemName: "banknote")
+                }
+
+                // Słowo „szacunek" pada wprost, dopóki cennik ma dziury.
+                // Liczba bez tego zastrzeżenia byłaby obietnicą, której
+                // nie mamy z czego dotrzymać.
+                Text(
+                    brakiCennika > 0
+                    ? "szacunek — \(brakiCennika) poz. bez ceny"
+                    : "brutto, cennik kompletny"
+                )
+                .font(.caption2)
+                .foregroundStyle(
+                    brakiCennika > 0 ? Color.orange : Color.secondary
+                )
+            }
+            .padding(.top, 2)
+        }
     }
 
     private var podsumowanie:
@@ -331,6 +447,8 @@ struct WorkspaceNawigacjaV074:
             .foregroundStyle(
                 statusGotowosciKolor
             )
+
+            cenaPomieszczeniaV0103
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -340,7 +458,7 @@ struct WorkspaceNawigacjaV074:
             maxWidth: .infinity,
             alignment: .leading
         )
-        .background(.regularMaterial)
+        .stolarniaMaterial(.regularMaterial)
     }
 
     private var statusGotowosciTekst:

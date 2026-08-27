@@ -1,5 +1,35 @@
 import Foundation
 
+enum TrybDokumentuOfertyKlienta:
+    String,
+    Codable,
+    CaseIterable,
+    Identifiable
+{
+    case handlowy
+    case wariantowy
+
+    var id: String { rawValue }
+
+    var nazwa: String {
+        switch self {
+        case .handlowy:
+            return "Handlowa"
+        case .wariantowy:
+            return "Wariantowa"
+        }
+    }
+
+    var opis: String {
+        switch self {
+        case .handlowy:
+            return "Dwustronicowa oferta dla klienta, bez kosztów wewnętrznych."
+        case .wariantowy:
+            return "Techniczne porównanie wariantów z większą liczbą danych."
+        }
+    }
+}
+
 struct WarunkiOfertyKlienta:
     Codable,
     Hashable
@@ -16,9 +46,17 @@ struct WarunkiOfertyKlienta:
     var platnoscPoMontazuProcent = 10.0
     var uwagi =
         "Oferta nie obejmuje prac elektrycznych, hydraulicznych ani budowlanych, chyba że wskazano inaczej."
+    var trybDokumentu:
+        TrybDokumentuOfertyKlienta = .handlowy
     var pokazWszystkieWarianty = true
     var pokazCenyNetto = true
     var pokazVAT = true
+    var doliczVAT = true
+    var vatProcent = 23.0
+    var uzyjMarzyOferty = false
+    var marzaOfertyProcent = 15.0
+    var uzyjCenyRecznej = false
+    var cenaRecznaNetto = 0.0
 
     /// Gwarancja na wady wykonania — domyślnie 24 miesiące (wymagane prawnie)
     var gwarancjaMiesiecy = 24
@@ -38,6 +76,66 @@ struct WarunkiOfertyKlienta:
             sumaPlatnosciProcent
             - 100
         ) < 0.01
+    }
+
+    func podsumowanieHandlowe(
+        dla summary:
+            PodsumowanieWariantuWyceny,
+        ustawienia:
+            UstawieniaStolarni
+    ) -> PodsumowanieWariantuWyceny {
+        var result = summary
+
+        let cenaNetto: Double
+        let marzaKwota: Double
+
+        if uzyjCenyRecznej,
+           cenaRecznaNetto > 0 {
+            cenaNetto = cenaRecznaNetto
+            marzaKwota =
+                cenaRecznaNetto
+                - summary.kosztBazowyNetto
+                - summary.zapasKosztowyKwota
+                - summary.narzutKwota
+        } else if uzyjMarzyOferty {
+            let bazaPoNarzucie =
+                summary.kosztBazowyNetto
+                + summary.zapasKosztowyKwota
+                + summary.narzutKwota
+            marzaKwota =
+                bazaPoNarzucie
+                * max(marzaOfertyProcent, 0)
+                / 100
+            cenaNetto =
+                max(
+                    bazaPoNarzucie
+                    + marzaKwota,
+                    ustawienia
+                        .finanse
+                        .minimalnaWartoscZlecenia
+                )
+        } else {
+            cenaNetto = summary.cenaNetto
+            marzaKwota = summary.marzaKwota
+        }
+
+        let vat =
+            doliczVAT
+            ? cenaNetto
+                * max(vatProcent, 0)
+                / 100
+            : 0
+
+        result.marzaKwota =
+            marzaKwota
+        result.cenaNetto =
+            cenaNetto
+        result.vatKwota =
+            vat
+        result.cenaBrutto =
+            cenaNetto + vat
+
+        return result
     }
 
     /// Generuje numer oferty w formacie RRRR/NNN na podstawie bieżącego roku.

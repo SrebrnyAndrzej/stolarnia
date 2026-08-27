@@ -78,7 +78,7 @@ struct SciankaPodzialowaEditorView: View {
                 skrzydloPreviewBar
                     .padding(.horizontal)
                     .padding(.vertical, 10)
-                    .background(.ultraThinMaterial)
+                    .stolarniaMaterial(.ultraThinMaterial)
 
                 Divider()
 

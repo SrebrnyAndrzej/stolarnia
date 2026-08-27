@@ -1,6 +1,32 @@
 import Combine
 import Foundation
 
+struct KitchenRunFinishingSegmentV087:
+    Identifiable,
+    Codable,
+    Hashable,
+    Sendable
+{
+    var id: String
+    var roomID: String
+    var wallID: String
+    var nazwaSciany: String
+    var startOffsetMM: Double
+    var dlugoscMM: Double
+    var glebokoscMM: Double
+    var dolMM: Double
+
+    var koniecOffsetMM: Double {
+        startOffsetMM + dlugoscMM
+    }
+
+    var label: String {
+        nazwaSciany.isEmpty
+        ? "Ciąg dolny"
+        : "Ciąg dolny - \(nazwaSciany)"
+    }
+}
+
 // MARK: - Blat kuchenny
 
 enum BlatKuchennyKsztaltV082: String, Codable, CaseIterable, Identifiable {
@@ -160,6 +186,9 @@ final class WykonczeniaKuchenneRepositoryV082: ObservableObject {
     @Published var fartuchy: [FartuchPomieszczeniaV082] = []
     @Published var wienceDekory: [WieniecDekoracyjnyV082] = []
 
+    private let autoRunMarkerV087 =
+        "[AUTO_CIAG_WYKONCZENIA_V087]"
+
     private(set) var roomID: String = ""
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -206,6 +235,58 @@ final class WykonczeniaKuchenneRepositoryV082: ObservableObject {
     func zaktualizujFartuch(_ fartuch: FartuchPomieszczeniaV082) {
         guard let idx = fartuchy.firstIndex(where: { $0.id == fartuch.id }) else { return }
         fartuchy[idx] = fartuch
+        save()
+    }
+
+    func synchronizujZCiagamiDolnymiV087(
+        _ segments:
+            [KitchenRunFinishingSegmentV087]
+    ) {
+        blaty.removeAll {
+            $0.uwagi.contains(autoRunMarkerV087)
+        }
+        fartuchy.removeAll {
+            $0.uwagi.contains(autoRunMarkerV087)
+        }
+
+        for (index, segment) in segments.enumerated() {
+            let ordinal = index + 1
+            let segmentRoomID =
+                segment.roomID.isEmpty
+                ? (roomID.isEmpty ? "unknown" : roomID)
+                : segment.roomID
+
+            var blat =
+                BlatKuchennyV082(
+                    roomID:
+                        segmentRoomID
+                )
+            blat.nazwa =
+                "Blat \(ordinal) - \(segment.nazwaSciany)"
+            blat.dlugoscCiagu1MM =
+                max(segment.dlugoscMM, 0)
+            blat.szerokoscMM =
+                max(segment.glebokoscMM + 40, 600)
+            blat.uwagi =
+                "\(autoRunMarkerV087) \(segment.id) • od \(Int(segment.startOffsetMM.rounded())) do \(Int(segment.koniecOffsetMM.rounded())) mm na ścianie \(segment.nazwaSciany)."
+            blaty.append(blat)
+
+            var fartuch =
+                FartuchPomieszczeniaV082(
+                    roomID:
+                        segmentRoomID
+                )
+            fartuch.nazwa =
+                "Fartuch \(ordinal) - \(segment.nazwaSciany)"
+            fartuch.liczyAutoZ = false
+            fartuch.dlugoscMM =
+                max(segment.dlugoscMM, 0)
+            fartuch.wysokoscMM = 600
+            fartuch.uwagi =
+                "\(autoRunMarkerV087) \(segment.id) • długość z realnego ciągu dolnego, od \(Int(segment.startOffsetMM.rounded())) do \(Int(segment.koniecOffsetMM.rounded())) mm."
+            fartuchy.append(fartuch)
+        }
+
         save()
     }
 

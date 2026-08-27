@@ -118,6 +118,7 @@ struct DokumentacjaZdjęciowaPomieszczeniaView:
                 .buttonStyle(
                     .borderedProminent
                 )
+                .help("Dołącz zdjęcie pomiaru z biblioteki iCloud")
             }
         }
         .onChange(

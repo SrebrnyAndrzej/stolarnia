@@ -386,6 +386,44 @@ struct SzafaPrzesuwnaDefinicjaV075:
     var liczbaTorów: Int {
         liczbaDrzwi <= 2 ? 2 : (liczbaDrzwi <= 3 ? 2 : 3)
     }
+
+    /// Orientacyjna głębokość zajęta przez tory, skrzydła i luz pracy.
+    /// To nie zastępuje karty producenta, ale pozwala szybko wykryć
+    /// szafy, które w projekcie "na papierze" mają 600 mm, a realnie po
+    /// torach nie dają miejsca na wieszanie ani szuflady.
+    var glebokoscZajetaPrzezToryMM: Double {
+        Double(liczbaTorów)
+            * (gruboscDrzwiMM + 10)
+            + 24
+    }
+
+    var glebokoscUzytkowaPoTorachMM: Double {
+        max(
+            glebokoscMM
+            - glebokoscZajetaPrzezToryMM,
+            0
+        )
+    }
+
+    var swiatloDostepuPoOdsunieciuSkrzydlaMM: Double {
+        max(
+            szerokoscCalkowitaMM
+            - szerokoscSkrzydlaMM,
+            0
+        )
+    }
+
+    var szerokoscSekcjiReferencyjnejMM: Double {
+        szerokoscCalkowitaMM
+            / Double(max(liczbaDrzwi, 1))
+    }
+
+    var zalecaneOdsuniecieSzufladOdBokuMM: Double {
+        max(
+            zachodMM + 20,
+            80
+        )
+    }
 }
 
 // MARK: - Elementy raportu
@@ -680,6 +718,27 @@ enum SilnikSzafyPrzesuwanejV075 {
         if definicja.szerokoscSkrzydlaMM < 400 {
             ostrzezenia.append(
                 "Skrzydło \(Int(definicja.szerokoscSkrzydlaMM)) mm jest wąskie — sprawdź minimalną szerokość systemu."
+            )
+        }
+
+        if definicja.zachodMM < 50
+            || definicja.zachodMM > 80 {
+            ostrzezenia.append(
+                "Zakładka skrzydeł \(Int(definicja.zachodMM)) mm jest poza typowym zakresem 50–80 mm. Sprawdź system profili i uchwyty."
+            )
+        }
+
+        if definicja
+            .swiatloDostepuPoOdsunieciuSkrzydlaMM < 450 {
+            ostrzezenia.append(
+                "Światło dostępu po odsunięciu skrzydła wynosi \(Int(definicja.swiatloDostepuPoOdsunieciuSkrzydlaMM)) mm — może blokować wygodne korzystanie z półek i szuflad."
+            )
+        }
+
+        if definicja
+            .glebokoscUzytkowaPoTorachMM < 500 {
+            ostrzezenia.append(
+                "Głębokość użytkowa po torach wynosi \(Int(definicja.glebokoscUzytkowaPoTorachMM)) mm. Dla wieszania i szuflad wewnętrznych zwykle trzeba zwiększyć głębokość albo zmienić układ."
             )
         }
 

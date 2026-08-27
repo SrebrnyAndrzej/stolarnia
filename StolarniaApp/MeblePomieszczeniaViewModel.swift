@@ -11,6 +11,9 @@ struct SugerowanePolozenieModulu: Sendable {
     let requiredAnchoringMode: FurnitureAnchoringMode?
     let requiredRunKind: KitchenRunKindV015?
     let rightEdgeAnchor: Millimeters?
+    let suggestionTitle: String?
+    let suggestionReason: String?
+    let suggestionPriority: Int
 
     init(
         offsetAlongWall: Millimeters,
@@ -19,7 +22,10 @@ struct SugerowanePolozenieModulu: Sendable {
         maximumWidth: Millimeters,
         requiredAnchoringMode: FurnitureAnchoringMode?,
         requiredRunKind: KitchenRunKindV015? = nil,
-        rightEdgeAnchor: Millimeters? = nil
+        rightEdgeAnchor: Millimeters? = nil,
+        suggestionTitle: String? = nil,
+        suggestionReason: String? = nil,
+        suggestionPriority: Int = 1_000
     ) {
         self.offsetAlongWall = offsetAlongWall
         self.offsetFromWall = offsetFromWall
@@ -28,6 +34,56 @@ struct SugerowanePolozenieModulu: Sendable {
         self.requiredAnchoringMode = requiredAnchoringMode
         self.requiredRunKind = requiredRunKind
         self.rightEdgeAnchor = rightEdgeAnchor
+        self.suggestionTitle = suggestionTitle
+        self.suggestionReason = suggestionReason
+        self.suggestionPriority = suggestionPriority
+    }
+}
+
+struct SlidingRoomPartitionCandidateV092:
+    Identifiable,
+    Sendable
+{
+    let id:
+        String
+    let anchorAssemblyID:
+        FurnitureAssemblyID
+    let anchorName:
+        String
+    let start:
+        Point2MM
+    let end:
+        Point2MM
+    let length:
+        Millimeters
+    let height:
+        Millimeters
+    let rotationDegrees:
+        Double
+    let sideLabel:
+        String
+
+    var doorCount:
+        Int
+    {
+        min(
+            max(
+                SilnikSzafyPrzesuwanejV075
+                    .optymalnaLiczbaDrzwi(
+                        szerokoscMM:
+                            length.rawValue
+                    ),
+                2
+            ),
+            4
+        )
+    }
+
+    var lengthLabel:
+        String
+    {
+        MebelWymiarFormatterV0143
+            .millimeters(length)
     }
 }
 
@@ -51,6 +107,14 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
     @Published private(set) var lastCreatedAssemblyID: FurnitureAssemblyID?
     @Published private(set) var renderRevision = 0
     @Published var errorMessage: String?
+
+    /// Zastrzeżenia produkcyjne z `AssemblyInspector`, per zespół.
+    ///
+    /// Świadomie tylko informacyjne — projekty w toku mają formatki zamówione
+    /// i budowanie modułu nie może się wywalić dlatego, że kontrola coś
+    /// zgłasza. Ma być widać, a nie blokować.
+    @Published private(set) var zastrzezeniaProdukcyjne:
+        [FurnitureAssemblyID: [ProductionIssue]] = [:]
 
     let roomID: RoomID
 
@@ -548,6 +612,18 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
         wall: WallSegment,
         room: RoomDefinition
     ) -> SugerowanePolozenieModulu {
+        if let runPlacement =
+            runAssistantCompletionPlacementV087(
+                for:
+                    template,
+                wall:
+                    wall,
+                room:
+                    room
+            ) {
+            return runPlacement
+        }
+
         let offset = suggestedOffset(for: template, wallID: wall.id)
         let length = room.geometry.geometry(of: wall.id)?.length ?? .zero
         let maximumWidth = max(length - offset, .zero)
@@ -630,14 +706,16 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
             assembly = rozwiazWiezyMebla(assembly)
             assembly.name = data.name
 
-            assembly.placement = try FurniturePlacement(
-                roomID: room.id,
-                wallID: wall.id,
-                assemblyID: assembly.id,
-                offsetAlongWall: data.offsetAlongWall,
-                offsetFromWall: data.offsetFromWall,
-                bottomOffset: data.bottomOffset,
-                anchoringMode: anchoringMode(for: template)
+            let resolvedAnchoringMode =
+                anchoringMode(for: template)
+
+            assembly.placement = try placementForModuleV083(
+                data: data,
+                assembly: assembly,
+                wall: wall,
+                room: room,
+                anchoringMode: resolvedAnchoringMode,
+                existingPlacement: nil
             )
 
             try validatePlacement(
@@ -737,11 +815,26 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
     private func rozwiazWiezyMebla(
         _ assembly: FurnitureAssembly
     ) -> FurnitureAssembly {
-        guard !assembly.constraints.isEmpty else { return assembly }
-        do {
-            return try FurnitureConstraintSolver.solve(assembly).assembly
-        } catch {
-            return assembly
+        let rozwiazany: FurnitureAssembly
+        if assembly.constraints.isEmpty {
+            rozwiazany = assembly
+        } else {
+            rozwiazany = (try? FurnitureConstraintSolver.solve(assembly).assembly)
+                ?? assembly
+        }
+        zapiszZastrzezenia(dla: rozwiazany)
+        return rozwiazany
+    }
+
+    /// Przepuszcza zespół przez kontrolę produkcyjną i zapamiętuje wynik.
+    /// Wołane po solverze, bo dopiero po przeliczeniu więzów pozycje
+    /// komponentów są takie, jakie trafią na warsztat.
+    private func zapiszZastrzezenia(dla assembly: FurnitureAssembly) {
+        let uwagi = AssemblyInspector.inspect(assembly)
+        if uwagi.isEmpty {
+            zastrzezeniaProdukcyjne.removeValue(forKey: assembly.id)
+        } else {
+            zastrzezeniaProdukcyjne[assembly.id] = uwagi
         }
     }
 
@@ -833,16 +926,13 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
                 stored.assembly.placement?.anchoringMode
                 ?? anchoringMode(for: template)
 
-            assembly.placement = try FurniturePlacement(
-                id: stored.assembly.placement?.id ?? FurniturePlacementID(),
-                roomID: room.id,
-                wallID: wall.id,
-                assemblyID: assembly.id,
-                offsetAlongWall: data.offsetAlongWall,
-                offsetFromWall: data.offsetFromWall,
-                bottomOffset: data.bottomOffset,
-                rotationDegrees: stored.assembly.placement?.rotationDegrees ?? 0,
-                anchoringMode: resolvedAnchoringMode
+            assembly.placement = try placementForModuleV083(
+                data: data,
+                assembly: assembly,
+                wall: wall,
+                room: room,
+                anchoringMode: resolvedAnchoringMode,
+                existingPlacement: stored.assembly.placement
             )
 
             // Pomijamy walidację kolizji gdy moduł nie zmienił rozmiaru/pozycji —
@@ -911,14 +1001,15 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
             guard let source = storedAssemblies.first(where: {
                 $0.id == context.furnitureID
             }),
-            source.assembly.placement?.wallID
-                == context.wallID else {
+            let sourcePlacement = source.assembly.placement,
+            sourcePlacement.wallID == context.wallID else {
                 throw DomainError.invariantViolation(
                     "Nie znaleziono modułu w wybranym ciągu."
                 )
             }
 
             if let targetID = context.celZamianyID,
+               sourcePlacement.wallID != nil,
                targetID != source.id {
                 try await zamienKolejnoscModulow(
                     sourceID: source.id,
@@ -929,6 +1020,8 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
                 try await przesunModul(
                     source,
                     do: context.proponowaneOdsuniecie,
+                    offsetFromWall:
+                        context.proponowaneOdsuniecieOdSciany,
                     bottomOffset:
                         context.proponowaneOdsuniecieOdDolu,
                     room: room
@@ -947,41 +1040,72 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
     private func przesunModul(
         _ stored: StoredFurnitureAssembly,
         do offset: Millimeters,
+        offsetFromWall: Millimeters? = nil,
         bottomOffset: Millimeters?,
         room: RoomDefinition
     ) async throws {
-        guard let placement = stored.assembly.placement,
-              let wallID = placement.wallID,
-              let wall = room.geometry.wall(id: wallID) else {
+        guard let placement = stored.assembly.placement else {
             throw DomainError.invariantViolation(
-                "Moduł nie jest przypisany do prostej ściany."
+                "Moduł nie ma zapisanego położenia."
             )
         }
 
         let proposedBottom =
             bottomOffset ?? placement.bottomOffset
+        let proposedOffsetFromWall =
+            offsetFromWall ?? placement.offsetFromWall
         let horizontalUnchanged = abs(
             placement.offsetAlongWall.rawValue
                 - offset.rawValue
+        ) <= 0.5
+        let depthUnchanged = abs(
+            placement.offsetFromWall.rawValue
+                - proposedOffsetFromWall.rawValue
         ) <= 0.5
         let verticalUnchanged = abs(
             placement.bottomOffset.rawValue
                 - proposedBottom.rawValue
         ) <= 0.5
 
-        if horizontalUnchanged && verticalUnchanged {
+        if horizontalUnchanged
+            && depthUnchanged
+            && verticalUnchanged {
             return
         }
 
         let updated = storedZmieniajacPolozenie(
             stored,
             offsetAlongWall: offset,
+            offsetFromWall: proposedOffsetFromWall,
             bottomOffset: proposedBottom
         )
         let finalStored = storedAssemblies.map {
             $0.id == updated.id ? updated : $0
         }
         let finalAssemblies = finalStored.map(\.assembly)
+
+        if placement.anchoringMode == .freestanding
+            || placement.wallID == nil {
+            try validateFreestandingPlacementV083(
+                candidate: updated.assembly,
+                room: room,
+                excluding: updated.id,
+                among: finalAssemblies
+            )
+
+            try await repositories.assemblyRepository.save(
+                updated
+            )
+            zastosujAktualizacjePolozen([updated])
+            return
+        }
+
+        guard let wallID = placement.wallID,
+              let wall = room.geometry.wall(id: wallID) else {
+            throw DomainError.invariantViolation(
+                "Moduł nie jest przypisany do prostej ściany."
+            )
+        }
 
         try validatePlacement(
             candidate: updated.assembly,
@@ -1172,6 +1296,7 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
     private func storedZmieniajacPolozenie(
         _ stored: StoredFurnitureAssembly,
         offsetAlongWall: Millimeters,
+        offsetFromWall: Millimeters? = nil,
         bottomOffset: Millimeters? = nil
     ) -> StoredFurnitureAssembly {
         var assembly = stored.assembly
@@ -1179,6 +1304,10 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
         if var placement = assembly.placement {
             placement.offsetAlongWall =
                 offsetAlongWall
+            if let offsetFromWall {
+                placement.offsetFromWall =
+                    offsetFromWall
+            }
             if let bottomOffset {
                 placement.bottomOffset = bottomOffset
             }
@@ -2958,6 +3087,1842 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
         }
     }
 
+    func createSlidingWardrobeSystemV087(
+        for run:
+            SlidingWardrobeModuleRunV087,
+        wall:
+            WallSegment,
+        room:
+            RoomDefinition,
+        doorFill:
+            SlidingWardrobeDoorFillV093 = .solid
+    ) async -> Bool {
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let trackDepth =
+                slidingWardrobeTrackDepthV087(
+                    for:
+                        run
+                )
+            let existingSystemAssemblies =
+                slidingWardrobeStoredSystemAssembliesV094(
+                    for:
+                        run,
+                    wall:
+                        wall
+                )
+            let existingSystemIDs =
+                Set(
+                    existingSystemAssemblies
+                        .map(\.id)
+                )
+            let hasExistingSystem =
+                !existingSystemAssemblies.isEmpty
+            let shouldReserveTrackPocket =
+                !hasExistingSystem
+                && !run.hasUpperTrack
+                && !run.hasLowerTrack
+            let adjustedModules =
+                shouldReserveTrackPocket
+                ? try slidingWardrobeModulesAdjustedForTrackV092(
+                    run:
+                        run,
+                    trackDepth:
+                        trackDepth
+                )
+                : []
+            let adjustedByID =
+                Dictionary(
+                    uniqueKeysWithValues:
+                        adjustedModules.map {
+                            ($0.id, $0.assembly)
+                        }
+                )
+            let validationAssemblies =
+                assemblies.map {
+                    adjustedByID[$0.id] ?? $0
+                }
+                .filter {
+                    !existingSystemIDs.contains($0.id)
+                }
+            let assembliesToCreate =
+                try slidingWardrobeSystemAssembliesV087(
+                    for:
+                        hasExistingSystem
+                        ? run.requiringFullSystemRebuild()
+                        : run,
+                    wall:
+                        wall,
+                    room:
+                        room,
+                    doorFill:
+                        doorFill,
+                    modulesAlreadyReservedTrackPocket:
+                        hasExistingSystem
+                )
+
+            var stagedAssemblies =
+                validationAssemblies
+
+            for assembly in assembliesToCreate {
+                try validateSlidingWardrobeSystemAssemblyV093(
+                    assembly,
+                    wall:
+                        wall,
+                    room:
+                        room
+                )
+                stagedAssemblies.append(assembly)
+            }
+
+            for stored in adjustedModules {
+                try await repositories
+                    .assemblyRepository
+                    .save(stored)
+                upsert(stored)
+            }
+
+            for stored in existingSystemAssemblies {
+                try await repositories
+                    .assemblyRepository
+                    .delete(
+                        id:
+                            stored.id
+                    )
+            }
+
+            if !existingSystemIDs.isEmpty {
+                storedAssemblies.removeAll {
+                    existingSystemIDs.contains(
+                        $0.id
+                    )
+                }
+                rebuildAssemblyIndex()
+            }
+
+            for assembly in assembliesToCreate {
+                let stored =
+                    StoredFurnitureAssembly(
+                        roomID:
+                            room.id,
+                        assembly:
+                            assembly,
+                        parameters:
+                            FurnitureParameterSet()
+                    )
+
+                try await repositories
+                    .assemblyRepository
+                    .save(stored)
+                upsert(stored)
+            }
+
+            return true
+        } catch {
+            errorMessage =
+                "Nie udało się dodać systemu drzwi przesuwnych: "
+                + error.localizedDescription
+            return false
+        }
+    }
+
+    func slidingRoomPartitionCandidateV092(
+        from anchorAssemblyID:
+            FurnitureAssemblyID?,
+        room:
+            RoomDefinition
+    ) -> SlidingRoomPartitionCandidateV092? {
+        guard let anchorAssemblyID,
+              let stored =
+                storedAssembly(
+                    id:
+                        anchorAssemblyID
+                ),
+              isSlidingPartitionAnchorV092(
+                stored.assembly
+              ),
+              let footprint =
+                MebelPlan2DGeometry
+                    .footprint(
+                        for:
+                            stored.assembly,
+                        in:
+                            room
+                    ),
+              footprint.points.count == 4
+        else {
+            return nil
+        }
+
+        let frontStart =
+            footprint.points[3]
+        let frontEnd =
+            footprint.points[2]
+        let direction =
+            normalizedVectorV092(
+                from:
+                    frontStart,
+                to:
+                    frontEnd
+            )
+
+        guard direction.length > 0.01 else {
+            return nil
+        }
+
+        let height =
+            room.geometry.walls
+                .map {
+                    max(
+                        $0.startHeight,
+                        $0.endHeight
+                    )
+                }
+                .max()
+            ?? stored.assembly.size.height
+        let rays:
+            [(
+                point: Point2MM,
+                dx: Double,
+                dy: Double,
+                side: String
+            )] = [
+                (
+                    point:
+                        frontStart,
+                    dx:
+                        -direction.dx,
+                    dy:
+                        -direction.dy,
+                    side:
+                        "lewy bok modułu"
+                ),
+                (
+                    point:
+                        frontEnd,
+                    dx:
+                        direction.dx,
+                    dy:
+                        direction.dy,
+                    side:
+                        "prawy bok modułu"
+                )
+            ]
+        let best =
+            rays
+                .compactMap {
+                    ray -> SlidingRoomPartitionCandidateV092? in
+
+                    guard let hit =
+                        nearestBoundaryHitV092(
+                            from:
+                                ray.point,
+                            dx:
+                                ray.dx,
+                            dy:
+                                ray.dy,
+                            room:
+                                room
+                        ),
+                        hit.distance >= 600
+                    else {
+                        return nil
+                    }
+
+                    let rotation =
+                        atan2(
+                            ray.dy,
+                            ray.dx
+                        )
+                        * 180
+                        / .pi
+                    let id =
+                        [
+                            anchorAssemblyID
+                                .description,
+                            Int(
+                                ray.point.x
+                                    .rawValue
+                                    .rounded()
+                            )
+                            .description,
+                            Int(
+                                ray.point.y
+                                    .rawValue
+                                    .rounded()
+                            )
+                            .description,
+                            Int(
+                                hit.point.x
+                                    .rawValue
+                                    .rounded()
+                            )
+                            .description,
+                            Int(
+                                hit.point.y
+                                    .rawValue
+                                    .rounded()
+                            )
+                            .description
+                        ]
+                        .joined(separator: "-")
+
+                    return SlidingRoomPartitionCandidateV092(
+                        id:
+                            id,
+                        anchorAssemblyID:
+                            anchorAssemblyID,
+                        anchorName:
+                            stored.assembly.name,
+                        start:
+                            ray.point,
+                        end:
+                            hit.point,
+                        length:
+                            Millimeters(
+                                hit.distance
+                            ),
+                        height:
+                            height,
+                        rotationDegrees:
+                            rotation,
+                        sideLabel:
+                            ray.side
+                    )
+                }
+                .sorted {
+                    $0.length < $1.length
+                }
+                .first
+
+        return best
+    }
+
+    func createSlidingRoomPartitionV092(
+        from anchorAssemblyID:
+            FurnitureAssemblyID,
+        room:
+            RoomDefinition
+    ) async -> Bool {
+        guard !isSaving else {
+            return false
+        }
+
+        guard let candidate =
+            slidingRoomPartitionCandidateV092(
+                from:
+                    anchorAssemblyID,
+                room:
+                    room
+            )
+        else {
+            errorMessage =
+                "Nie znaleziono ściany, do której można dociągnąć przegrodę przesuwną z zaznaczonego modułu."
+            return false
+        }
+
+        return await createSlidingRoomPartitionV092(
+            candidate:
+                candidate,
+            room:
+                room
+        )
+    }
+
+    func createSlidingRoomPartitionV092(
+        candidate:
+            SlidingRoomPartitionCandidateV092,
+        room:
+            RoomDefinition
+    ) async -> Bool {
+        guard !isSaving else {
+            return false
+        }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            guard candidate.length >= 600 else {
+                throw DomainError.invariantViolation(
+                    "Przegroda przesuwna musi mieć co najmniej 600 mm światła."
+                )
+            }
+
+            let assembliesToCreate =
+                try slidingRoomPartitionAssembliesV092(
+                    candidate:
+                        candidate,
+                    room:
+                        room
+                )
+
+            var created:
+                [StoredFurnitureAssembly] = []
+            for assembly in assembliesToCreate {
+                let stored =
+                    StoredFurnitureAssembly(
+                        roomID:
+                            room.id,
+                        assembly:
+                            assembly,
+                        parameters:
+                            FurnitureParameterSet()
+                    )
+                try await repositories
+                    .assemblyRepository
+                    .save(stored)
+                created.append(stored)
+            }
+
+            for stored in created {
+                upsert(stored)
+            }
+
+            lastCreatedAssemblyID =
+                created.first?.id
+            return true
+        } catch {
+            errorMessage =
+                "Nie udało się dodać przegrody przesuwnej: "
+                + error.localizedDescription
+            return false
+        }
+    }
+
+    private func slidingWardrobeStoredSystemAssembliesV094(
+        for run:
+            SlidingWardrobeModuleRunV087,
+        wall:
+            WallSegment
+    ) -> [StoredFurnitureAssembly] {
+        storedAssemblies.filter {
+            stored in
+
+            guard stored.assembly.components.contains(
+                where: {
+                    SlidingWardrobeSystemMarkersV087
+                        .isWardrobeSystemCode(
+                            $0.code
+                        )
+                }
+            )
+            else {
+                return false
+            }
+
+            if SlidingWardrobeSystemMarkersV087
+                .bindingID(
+                    in:
+                        stored.assembly
+                ) == run.bindingID {
+                return true
+            }
+
+            guard SlidingWardrobeSystemMarkersV087
+                .bindingID(
+                    in:
+                        stored.assembly
+                ) == nil
+            else {
+                return false
+            }
+
+            return slidingWardrobeSystemAssemblyOverlapsRunV094(
+                stored.assembly,
+                run:
+                    run,
+                wall:
+                    wall
+            )
+        }
+    }
+
+    private func slidingWardrobeSystemAssemblyOverlapsRunV094(
+        _ assembly:
+            FurnitureAssembly,
+        run:
+            SlidingWardrobeModuleRunV087,
+        wall:
+            WallSegment
+    ) -> Bool {
+        guard let placement =
+            assembly.placement,
+              placement.wallID == wall.id
+        else {
+            return false
+        }
+
+        let elementStart =
+            placement.offsetAlongWall
+        let elementEnd =
+            placement.offsetAlongWall
+            + assembly.size.width
+        let elementTop =
+            placement.bottomOffset
+            + assembly.size.height
+        let horizontalOverlap =
+            min(
+                run.endOffset.rawValue,
+                elementEnd.rawValue
+            )
+            - max(
+                run.startOffset.rawValue,
+                elementStart.rawValue
+            )
+        let verticalOverlap =
+            min(
+                run.topOffset.rawValue,
+                elementTop.rawValue
+            )
+            - max(
+                run.bottomOffset.rawValue,
+                placement.bottomOffset.rawValue
+            )
+
+        return horizontalOverlap > 10
+            && verticalOverlap > 1
+    }
+
+    private func slidingWardrobeSystemAssembliesV087(
+        for run:
+            SlidingWardrobeModuleRunV087,
+        wall:
+            WallSegment,
+        room:
+            RoomDefinition,
+        doorFill:
+            SlidingWardrobeDoorFillV093,
+        modulesAlreadyReservedTrackPocket:
+            Bool = false
+    ) throws -> [FurnitureAssembly] {
+        let definition =
+            run.slidingDefinition()
+        let trackDepth =
+            slidingWardrobeTrackDepthV087(
+                for:
+                    run
+            )
+        let tracksAlreadyReserved =
+            modulesAlreadyReservedTrackPocket
+            ||
+            run.hasUpperTrack
+            || run.hasLowerTrack
+        let moduleDepthForTrack =
+            tracksAlreadyReserved
+            ? run.depth
+            : max(
+                .zero,
+                run.depth - trackDepth
+            )
+        let totalDepthWithTrack =
+            tracksAlreadyReserved
+            ? run.depth + trackDepth
+            : run.depth
+        let upperTrackHeight =
+            Millimeters(
+                max(
+                    definition
+                        .systemProfili
+                        .wysokoscProwadnicyGornejMM,
+                    24
+                )
+            )
+        let lowerTrackHeight =
+            Millimeters(
+                max(
+                    definition
+                        .systemProfili
+                        .wysokoscProwadnicyDolnejMM,
+                    12
+                )
+            )
+        let trackOffsetFromWall =
+            moduleDepthForTrack
+        let upperBottom =
+            max(
+                run.bottomOffset,
+                run.topOffset - upperTrackHeight
+            )
+        let wallLength =
+            room.geometry.geometry(
+                of:
+                    wall.id
+            )?
+            .length
+            ?? run.endOffset
+        var result:
+            [FurnitureAssembly] = []
+
+        if !run.hasUpperTrack {
+            result.append(
+                try slidingWardrobeSystemAssemblyV087(
+                    name:
+                        "Tor górny drzwi przesuwnych",
+                    code:
+                        SlidingWardrobeSystemMarkersV087
+                        .upperTrackCode,
+                    role:
+                        .rail,
+                    width:
+                        run.width,
+                    height:
+                        upperTrackHeight,
+                    depth:
+                        trackDepth,
+                    wall:
+                        wall,
+                    room:
+                        room,
+                    offsetAlongWall:
+                        run.startOffset,
+                    offsetFromWall:
+                        trackOffsetFromWall,
+                    bottomOffset:
+                        upperBottom,
+                    run:
+                        run
+                )
+            )
+        }
+
+        if !run.hasLowerTrack {
+            result.append(
+                try slidingWardrobeSystemAssemblyV087(
+                    name:
+                        "Tor dolny drzwi przesuwnych",
+                    code:
+                        SlidingWardrobeSystemMarkersV087
+                        .lowerTrackCode,
+                    role:
+                        .rail,
+                    width:
+                        run.width,
+                    height:
+                        lowerTrackHeight,
+                    depth:
+                        trackDepth,
+                    wall:
+                        wall,
+                    room:
+                        room,
+                    offsetAlongWall:
+                        run.startOffset,
+                    offsetFromWall:
+                        trackOffsetFromWall,
+                    bottomOffset:
+                        run.bottomOffset,
+                    run:
+                        run
+                )
+            )
+        }
+
+        if !run.hasDoorLeaves {
+            let doorLeafHeight =
+                max(
+                    run.height
+                    - upperTrackHeight
+                    - lowerTrackHeight
+                    - 8,
+                    Millimeters(300)
+                )
+            let doorBottom =
+                run.bottomOffset + lowerTrackHeight + 4
+            let doorWidth =
+                Millimeters(
+                    max(
+                        definition.szerokoscSkrzydlaMM,
+                        run.width.rawValue
+                            / Double(max(run.doorCount, 1))
+                    )
+                )
+            let travelMM =
+                max(
+                    run.width.rawValue
+                    - doorWidth.rawValue,
+                    1
+                )
+            let stepMM =
+                run.doorCount > 1
+                ? travelMM
+                    / Double(run.doorCount - 1)
+                : 0
+            let doorThickness:
+                Millimeters =
+                doorFill == .mirror
+                ? 22
+                : 18
+
+            for index in 0..<max(run.doorCount, 1) {
+                let offset =
+                    run.startOffset
+                    + Millimeters(
+                        Double(index)
+                        * stepMM
+                    )
+                let laneOffset =
+                    trackOffsetFromWall
+                    + Millimeters(
+                        Double(index % 2)
+                        * max(
+                            doorThickness.rawValue + 4,
+                            22
+                        )
+                    )
+
+                result.append(
+                    try slidingWardrobeSystemAssemblyV087(
+                        name:
+                            "Skrzydło drzwi przesuwnych \(doorFill.title.lowercased()) \(index + 1)",
+                        code:
+                            SlidingWardrobeSystemMarkersV087
+                            .doorLeafCode
+                            + "-"
+                            + doorFill.codeSuffix,
+                        role:
+                            .front,
+                        width:
+                            doorWidth,
+                        height:
+                            doorLeafHeight,
+                        depth:
+                            doorThickness,
+                        wall:
+                            wall,
+                        room:
+                            room,
+                        offsetAlongWall:
+                            offset,
+                        offsetFromWall:
+                            laneOffset,
+                        bottomOffset:
+                            doorBottom,
+                        run:
+                            run
+                    )
+                )
+            }
+        }
+
+        if !run.hasClosingWall {
+            let closing =
+                slidingWardrobeClosingPlacementV087(
+                    run:
+                        run,
+                    wallLength:
+                        wallLength,
+                    trackDepth:
+                        trackDepth,
+                    modulesAlreadyReservedTrackPocket:
+                        tracksAlreadyReserved
+                )
+            result.append(
+                try slidingWardrobeSystemAssemblyV087(
+                    name:
+                        closing.fullDepth
+                        ? "Ściana domykowa drzwi przesuwnych"
+                        : "Listwa domykowa drzwi przesuwnych",
+                    code:
+                        SlidingWardrobeSystemMarkersV087
+                        .closingWallCode,
+                    role:
+                        .decorativeSide,
+                    width:
+                        18,
+                    height:
+                        run.height,
+                    depth:
+                        closing.fullDepth
+                        ? totalDepthWithTrack
+                        : trackDepth,
+                    wall:
+                        wall,
+                    room:
+                        room,
+                    offsetAlongWall:
+                        closing.offsetAlongWall,
+                    offsetFromWall:
+                        closing.offsetFromWall,
+                    bottomOffset:
+                        run.bottomOffset,
+                    run:
+                        run
+                )
+            )
+        }
+
+        return result
+    }
+
+    private func slidingWardrobeTrackDepthV087(
+        for run:
+            SlidingWardrobeModuleRunV087
+    ) -> Millimeters {
+        let definition =
+            run.slidingDefinition()
+        return Millimeters(
+            max(
+                definition
+                    .glebokoscZajetaPrzezToryMM,
+                80
+            )
+        )
+    }
+
+    private func validateSlidingWardrobeSystemAssemblyV093(
+        _ assembly:
+            FurnitureAssembly,
+        wall:
+            WallSegment,
+        room:
+            RoomDefinition
+    ) throws {
+        guard let placement =
+            assembly.placement,
+              placement.roomID == room.id,
+              placement.wallID == wall.id
+        else {
+            throw DomainError.invariantViolation(
+                "Element systemu przesuwnego nie ma poprawnego osadzenia."
+            )
+        }
+
+        guard let geometry =
+            room.geometry.geometry(
+                of:
+                    wall.id
+            )
+        else {
+            throw DomainError.invariantViolation(
+                "Nie znaleziono geometrii ściany dla systemu przesuwnego."
+            )
+        }
+
+        guard case .line = geometry else {
+            throw DomainError.invariantViolation(
+                "System przesuwny można dodać tylko do prostego odcinka ściany."
+            )
+        }
+
+        let rightEdge =
+            placement.offsetAlongWall
+            + assembly.size.width
+        guard rightEdge <= geometry.length else {
+            let missing =
+                rightEdge - geometry.length
+            throw DomainError.invariantViolation(
+                "System przesuwny wychodzi poza ścianę o \(formatted(missing))."
+            )
+        }
+    }
+
+    private func slidingWardrobeModulesAdjustedForTrackV092(
+        run:
+            SlidingWardrobeModuleRunV087,
+        trackDepth:
+            Millimeters
+    ) throws -> [StoredFurnitureAssembly] {
+        let targetIDs =
+            Set(
+                run.assemblyIDs
+            )
+        var updated:
+            [StoredFurnitureAssembly] = []
+
+        for stored in storedAssemblies
+        where targetIDs.contains(stored.id) {
+            let currentDepth =
+                stored.assembly.size.depth
+            let newDepth =
+                currentDepth - trackDepth
+
+            guard newDepth >= 260 else {
+                throw DomainError.invariantViolation(
+                    "Tor drzwi przesuwnych zabiera \(formatted(trackDepth)) głębokości, a moduł \(stored.assembly.name) zostałby płytszy niż 260 mm."
+                )
+            }
+
+            var assembly =
+                stored.assembly
+            assembly.size.depth =
+                newDepth
+
+            for index in assembly.components.indices {
+                switch assembly.components[index].role {
+                // Skrzynka szuflady **nie skraca się razem z korpusem**.
+                //
+                // Jej głębokość wynika z długości nominalnej prowadnicy,
+                // a nie z gabarytu mebla. Przycięcie jej tutaj dałoby
+                // skrzynkę niepasującą do prowadnicy — a to jest dokładnie
+                // ta niezgodność, którą pilnuje reguła `NL + 22 mm`.
+                //
+                // Po zmianie głębokości korpusu prowadnicę trzeba dobrać
+                // od nowa (`DrawerProfile.nominalLength(for:cabinetInnerDepth:)`),
+                // i dopiero z niej wynika nowa skrzynka.
+                case .front,
+                     .back,
+                     .rail,
+                     .drawerBox,
+                     .leg,
+                     .custom:
+                    continue
+                case .side,
+                     .top,
+                     .bottom,
+                     .shelf,
+                     .divider,
+                     .worktop,
+                     .plinth,
+                     .filler,
+                     .maskingPanel,
+                     .decorativeSide,
+                     .reinforcement:
+                    if assembly.components[index]
+                        .size
+                        .depth > newDepth {
+                        assembly.components[index]
+                            .size
+                            .depth =
+                            newDepth
+                    }
+                }
+            }
+
+            updated.append(
+                StoredFurnitureAssembly(
+                    roomID:
+                        stored.roomID,
+                    assembly:
+                        assembly,
+                    parameters:
+                        stored.parameters,
+                    createdAt:
+                        stored.createdAt,
+                    updatedAt:
+                        Date()
+                )
+            )
+        }
+
+        return updated
+    }
+
+    private func slidingWardrobeClosingPlacementV087(
+        run:
+            SlidingWardrobeModuleRunV087,
+        wallLength:
+            Millimeters,
+        trackDepth:
+            Millimeters,
+        modulesAlreadyReservedTrackPocket:
+            Bool = false
+    ) -> (
+        offsetAlongWall: Millimeters,
+        offsetFromWall: Millimeters,
+        fullDepth: Bool
+    ) {
+        let panelWidth:
+            Millimeters = 18
+        let trackOffsetFromWall =
+            modulesAlreadyReservedTrackPocket
+            ||
+            (
+                run.hasUpperTrack
+                || run.hasLowerTrack
+            )
+            ? run.depth
+            : max(
+                .zero,
+                run.depth - trackDepth
+            )
+
+        if wallLength - run.endOffset >= panelWidth {
+            return (
+                offsetAlongWall:
+                    run.endOffset,
+                offsetFromWall:
+                    .zero,
+                fullDepth:
+                    true
+            )
+        }
+
+        if run.startOffset >= panelWidth {
+            return (
+                offsetAlongWall:
+                    run.startOffset - panelWidth,
+                offsetFromWall:
+                    .zero,
+                fullDepth:
+                    true
+            )
+        }
+
+        return (
+            offsetAlongWall:
+                max(
+                    .zero,
+                    run.endOffset - panelWidth
+                ),
+            offsetFromWall:
+                trackOffsetFromWall,
+            fullDepth:
+                false
+        )
+    }
+
+    private func slidingWardrobeSystemAssemblyV087(
+        name:
+            String,
+        code:
+            String,
+        role:
+            FurnitureComponentRole,
+        width:
+            Millimeters,
+        height:
+            Millimeters,
+        depth:
+            Millimeters,
+        wall:
+            WallSegment,
+        room:
+            RoomDefinition,
+        offsetAlongWall:
+            Millimeters,
+        offsetFromWall:
+            Millimeters,
+        bottomOffset:
+            Millimeters,
+        run:
+            SlidingWardrobeModuleRunV087
+    ) throws -> FurnitureAssembly {
+        let componentCode =
+            SlidingWardrobeSystemMarkersV087.boundCode(
+                code,
+                bindingID:
+                    run.bindingID
+            )
+            + "-\(run.id)"
+        let component =
+            try FurnitureComponent(
+                code:
+                    componentCode,
+                role:
+                    role,
+                size:
+                    Size3MM(
+                        width:
+                            width,
+                        height:
+                            height,
+                        depth:
+                            depth
+                    ),
+                isShared:
+                    true
+            )
+        let subassembly =
+            try FurnitureSubassembly(
+                name:
+                    "System drzwi przesuwnych",
+                componentIDs:
+                    [component.id]
+            )
+        let assemblyID =
+            FurnitureAssemblyID()
+        let placement =
+            try FurniturePlacement(
+                roomID:
+                    room.id,
+                wallID:
+                    wall.id,
+                assemblyID:
+                    assemblyID,
+                offsetAlongWall:
+                    offsetAlongWall,
+                offsetFromWall:
+                    offsetFromWall,
+                bottomOffset:
+                    bottomOffset,
+                anchoringMode:
+                    .builtIn
+            )
+
+        return try FurnitureAssembly(
+            id:
+                assemblyID,
+            templateID:
+                nil,
+            name:
+                "\(SlidingWardrobeSystemMarkersV087.namePrefix) - \(name)",
+            kind:
+                .custom,
+            size:
+                Size3MM(
+                    width:
+                        width,
+                    height:
+                        height,
+                    depth:
+                        depth
+                ),
+            components:
+                [component],
+            subassemblies:
+                [subassembly],
+            placement:
+                placement
+        )
+    }
+
+    private struct PartitionDisplayFrameV092 {
+        let originX:
+            Millimeters
+        let originY:
+            Millimeters
+        let width:
+            Millimeters
+        let depth:
+            Millimeters
+        let rotationDegrees:
+            Double
+    }
+
+    private func slidingRoomPartitionAssembliesV092(
+        candidate:
+            SlidingRoomPartitionCandidateV092,
+        room:
+            RoomDefinition
+    ) throws -> [FurnitureAssembly] {
+        var definition =
+            SzafaPrzesuwnaDefinicjaV075()
+        definition.szerokoscCalkowitaMM =
+            candidate.length.rawValue
+        definition.wysokoscCalkowitaMM =
+            candidate.height.rawValue
+        definition.liczbaDrzwi =
+            candidate.doorCount
+        definition.systemProfili =
+            .bonariPartition80
+        definition.konstrukjaDrzwi =
+            .szklo
+        definition.systemToru =
+            .gorny
+        definition.normalize()
+
+        let trackDepth =
+            Millimeters(
+                max(
+                    definition
+                        .glebokoscZajetaPrzezToryMM,
+                    80
+                )
+            )
+        let doorDepth =
+            Millimeters(
+                max(
+                    definition.gruboscDrzwiMM,
+                    18
+                )
+            )
+        let upperTrackHeight =
+            Millimeters(
+                max(
+                    definition
+                        .systemProfili
+                        .wysokoscProwadnicyGornejMM,
+                    24
+                )
+            )
+        let lowerGuideHeight =
+            Millimeters(
+                max(
+                    definition
+                        .systemProfili
+                        .wysokoscProwadnicyDolnejMM,
+                    8
+                )
+            )
+        let direction =
+            normalizedVectorV092(
+                from:
+                    candidate.start,
+                to:
+                    candidate.end
+            )
+        let jambWidth:
+            Millimeters = 18
+        let startJambEnd =
+            pointV092(
+                x:
+                    candidate.start.x.rawValue
+                    + direction.dx
+                    * jambWidth.rawValue,
+                y:
+                    candidate.start.y.rawValue
+                    + direction.dy
+                    * jambWidth.rawValue
+            )
+        let endJambStart =
+            pointV092(
+                x:
+                    candidate.end.x.rawValue
+                    - direction.dx
+                    * jambWidth.rawValue,
+                y:
+                    candidate.end.y.rawValue
+                    - direction.dy
+                    * jambWidth.rawValue
+            )
+
+        return try [
+            slidingRoomPartitionAssemblyV092(
+                name:
+                    "Przegroda przesuwna - skrzydła",
+                code:
+                    SlidingWardrobeSystemMarkersV087
+                    .partitionDoorLeafCode,
+                role:
+                    .front,
+                technicalWidth:
+                    candidate.length,
+                height:
+                    candidate.height,
+                technicalDepth:
+                    doorDepth,
+                displayThickness:
+                    doorDepth,
+                bottomOffset:
+                    .zero,
+                start:
+                    candidate.start,
+                end:
+                    candidate.end,
+                candidate:
+                    candidate,
+                room:
+                    room
+            ),
+            slidingRoomPartitionAssemblyV092(
+                name:
+                    "Przegroda przesuwna - tor górny",
+                code:
+                    SlidingWardrobeSystemMarkersV087
+                    .partitionUpperTrackCode,
+                role:
+                    .rail,
+                technicalWidth:
+                    candidate.length,
+                height:
+                    upperTrackHeight,
+                technicalDepth:
+                    trackDepth,
+                displayThickness:
+                    trackDepth,
+                bottomOffset:
+                    max(
+                        .zero,
+                        candidate.height - upperTrackHeight
+                    ),
+                start:
+                    candidate.start,
+                end:
+                    candidate.end,
+                candidate:
+                    candidate,
+                room:
+                    room
+            ),
+            slidingRoomPartitionAssemblyV092(
+                name:
+                    "Przegroda przesuwna - prowadzenie dolne",
+                code:
+                    SlidingWardrobeSystemMarkersV087
+                    .partitionLowerGuideCode,
+                role:
+                    .rail,
+                technicalWidth:
+                    candidate.length,
+                height:
+                    lowerGuideHeight,
+                technicalDepth:
+                    trackDepth,
+                displayThickness:
+                    trackDepth,
+                bottomOffset:
+                    .zero,
+                start:
+                    candidate.start,
+                end:
+                    candidate.end,
+                candidate:
+                    candidate,
+                room:
+                    room
+            ),
+            slidingRoomPartitionAssemblyV092(
+                name:
+                    "Przegroda przesuwna - profil przy szafie",
+                code:
+                    SlidingWardrobeSystemMarkersV087
+                    .partitionWardrobeJambCode,
+                role:
+                    .decorativeSide,
+                technicalWidth:
+                    jambWidth,
+                height:
+                    candidate.height,
+                technicalDepth:
+                    trackDepth,
+                displayThickness:
+                    trackDepth,
+                bottomOffset:
+                    .zero,
+                start:
+                    candidate.start,
+                end:
+                    startJambEnd,
+                candidate:
+                    candidate,
+                room:
+                    room
+            ),
+            slidingRoomPartitionAssemblyV092(
+                name:
+                    "Przegroda przesuwna - profil przy ścianie",
+                code:
+                    SlidingWardrobeSystemMarkersV087
+                    .partitionWallJambCode,
+                role:
+                    .decorativeSide,
+                technicalWidth:
+                    jambWidth,
+                height:
+                    candidate.height,
+                technicalDepth:
+                    trackDepth,
+                displayThickness:
+                    trackDepth,
+                bottomOffset:
+                    .zero,
+                start:
+                    endJambStart,
+                end:
+                    candidate.end,
+                candidate:
+                    candidate,
+                room:
+                    room
+            )
+        ]
+    }
+
+    private func slidingRoomPartitionAssemblyV092(
+        name:
+            String,
+        code:
+            String,
+        role:
+            FurnitureComponentRole,
+        technicalWidth:
+            Millimeters,
+        height:
+            Millimeters,
+        technicalDepth:
+            Millimeters,
+        displayThickness:
+            Millimeters,
+        bottomOffset:
+            Millimeters,
+        start:
+            Point2MM,
+        end:
+            Point2MM,
+        candidate:
+            SlidingRoomPartitionCandidateV092,
+        room:
+            RoomDefinition
+    ) throws -> FurnitureAssembly {
+        let frame =
+            partitionDisplayFrameV092(
+                start:
+                    start,
+                end:
+                    end,
+                thickness:
+                    displayThickness
+            )
+        let component =
+            try FurnitureComponent(
+                code:
+                    "\(code)-\(candidate.id)",
+                role:
+                    role,
+                size:
+                    Size3MM(
+                        width:
+                            technicalWidth,
+                        height:
+                            height,
+                        depth:
+                            technicalDepth
+                    ),
+                isShared:
+                    true
+            )
+        let subassembly =
+            try FurnitureSubassembly(
+                name:
+                    "Przegroda drzwi przesuwnych",
+                componentIDs:
+                    [component.id]
+            )
+        let assemblyID =
+            FurnitureAssemblyID()
+        let placement =
+            try FurniturePlacement(
+                roomID:
+                    room.id,
+                wallID:
+                    nil,
+                assemblyID:
+                    assemblyID,
+                offsetAlongWall:
+                    frame.originX,
+                offsetFromWall:
+                    frame.originY,
+                bottomOffset:
+                    bottomOffset,
+                rotationDegrees:
+                    frame.rotationDegrees,
+                anchoringMode:
+                    .freestanding
+            )
+
+        return try FurnitureAssembly(
+            id:
+                assemblyID,
+            templateID:
+                nil,
+            name:
+                "\(SlidingWardrobeSystemMarkersV087.namePrefix) - \(name)",
+            kind:
+                .custom,
+            size:
+                Size3MM(
+                    width:
+                        frame.width,
+                    height:
+                        height,
+                    depth:
+                        frame.depth
+                ),
+            components:
+                [component],
+            subassemblies:
+                [subassembly],
+            placement:
+                placement
+        )
+    }
+
+    private func partitionDisplayFrameV092(
+        start:
+            Point2MM,
+        end:
+            Point2MM,
+        thickness:
+            Millimeters
+    ) -> PartitionDisplayFrameV092 {
+        let dx =
+            end.x.rawValue - start.x.rawValue
+        let dy =
+            end.y.rawValue - start.y.rawValue
+        let length =
+            max(
+                hypot(dx, dy),
+                1
+            )
+        let horizontal =
+            abs(dx) >= abs(dy)
+        let tolerance =
+            max(
+                60,
+                length * 0.15
+            )
+
+        if horizontal,
+           abs(dy) <= tolerance {
+            return PartitionDisplayFrameV092(
+                originX:
+                    Millimeters(
+                        max(
+                            min(
+                                start.x.rawValue,
+                                end.x.rawValue
+                            ),
+                            0
+                        )
+                    ),
+                originY:
+                    Millimeters(
+                        max(
+                            (
+                                start.y.rawValue
+                                + end.y.rawValue
+                            ) / 2
+                            - thickness.rawValue / 2,
+                            0
+                        )
+                    ),
+                width:
+                    Millimeters(length),
+                depth:
+                    thickness,
+                rotationDegrees:
+                    0
+            )
+        }
+
+        if !horizontal,
+           abs(dx) <= tolerance {
+            return PartitionDisplayFrameV092(
+                originX:
+                    Millimeters(
+                        max(
+                            (
+                                start.x.rawValue
+                                + end.x.rawValue
+                            ) / 2
+                            - thickness.rawValue / 2,
+                            0
+                        )
+                    ),
+                originY:
+                    Millimeters(
+                        max(
+                            min(
+                                start.y.rawValue,
+                                end.y.rawValue
+                            ),
+                            0
+                        )
+                    ),
+                width:
+                    thickness,
+                depth:
+                    Millimeters(length),
+                rotationDegrees:
+                    0
+            )
+        }
+
+        let minX =
+            min(
+                start.x.rawValue,
+                end.x.rawValue
+            )
+        let maxX =
+            max(
+                start.x.rawValue,
+                end.x.rawValue
+            )
+        let minY =
+            min(
+                start.y.rawValue,
+                end.y.rawValue
+            )
+        let maxY =
+            max(
+                start.y.rawValue,
+                end.y.rawValue
+            )
+
+        return PartitionDisplayFrameV092(
+            originX:
+                Millimeters(
+                    max(minX, 0)
+                ),
+            originY:
+                Millimeters(
+                    max(minY, 0)
+                ),
+            width:
+                Millimeters(
+                    max(
+                        maxX - minX,
+                        thickness.rawValue
+                    )
+                ),
+            depth:
+                Millimeters(
+                    max(
+                        maxY - minY,
+                        thickness.rawValue
+                    )
+                ),
+            rotationDegrees:
+                0
+        )
+    }
+
+    private func isSlidingPartitionAnchorV092(
+        _ assembly:
+            FurnitureAssembly
+    ) -> Bool {
+        guard !SlidingWardrobeSystemMarkersV087
+            .isSystemAssembly(
+                assembly
+            )
+        else {
+            return false
+        }
+
+        let normalizedName =
+            assembly.name
+                .folding(
+                    options: [
+                        .diacriticInsensitive,
+                        .caseInsensitive
+                    ],
+                    locale:
+                        .current
+                )
+                .lowercased()
+
+        return assembly.kind == .wardrobe
+            || assembly.kind == .recessBuiltIn
+            || assembly.kind == .slidingWardrobe
+            || normalizedName.contains("szafa")
+            || normalizedName.contains("garderoba")
+            || assembly.size.height.rawValue >= 1600
+    }
+
+    private func normalizedVectorV092(
+        from start:
+            Point2MM,
+        to end:
+            Point2MM
+    ) -> (
+        dx: Double,
+        dy: Double,
+        length: Double
+    ) {
+        let dx =
+            end.x.rawValue - start.x.rawValue
+        let dy =
+            end.y.rawValue - start.y.rawValue
+        let length =
+            hypot(dx, dy)
+
+        guard length > 0.001 else {
+            return (0, 0, 0)
+        }
+
+        return (
+            dx:
+                dx / length,
+            dy:
+                dy / length,
+            length:
+                length
+        )
+    }
+
+    private func nearestBoundaryHitV092(
+        from start:
+            Point2MM,
+        dx:
+            Double,
+        dy:
+            Double,
+        room:
+            RoomDefinition
+    ) -> (
+        point: Point2MM,
+        distance: Double
+    )? {
+        boundarySegmentsV092(
+            room
+        )
+        .compactMap {
+            segment -> (
+                point: Point2MM,
+                distance: Double
+            )? in
+
+            raySegmentIntersectionV092(
+                rayStart:
+                    start,
+                rayDX:
+                    dx,
+                rayDY:
+                    dy,
+                segmentStart:
+                    segment.0,
+                segmentEnd:
+                    segment.1
+            )
+        }
+        .filter {
+            $0.distance > 80
+        }
+        .sorted {
+            $0.distance < $1.distance
+        }
+        .first
+    }
+
+    private func boundarySegmentsV092(
+        _ room:
+            RoomDefinition
+    ) -> [(Point2MM, Point2MM)] {
+        room.geometry.boundary.segments.flatMap {
+            segment -> [(Point2MM, Point2MM)] in
+
+            let points =
+                Plan2DGeometryAdapter
+                    .sampledPoints(
+                        for:
+                            segment
+                    )
+            guard points.count >= 2 else {
+                return []
+            }
+
+            return zip(
+                points,
+                points.dropFirst()
+            )
+            .map {
+                ($0.0, $0.1)
+            }
+        }
+    }
+
+    private func raySegmentIntersectionV092(
+        rayStart:
+            Point2MM,
+        rayDX:
+            Double,
+        rayDY:
+            Double,
+        segmentStart:
+            Point2MM,
+        segmentEnd:
+            Point2MM
+    ) -> (
+        point: Point2MM,
+        distance: Double
+    )? {
+        let px =
+            rayStart.x.rawValue
+        let py =
+            rayStart.y.rawValue
+        let qx =
+            segmentStart.x.rawValue
+        let qy =
+            segmentStart.y.rawValue
+        let sx =
+            segmentEnd.x.rawValue
+            - segmentStart.x.rawValue
+        let sy =
+            segmentEnd.y.rawValue
+            - segmentStart.y.rawValue
+        let denominator =
+            crossV092(
+                ax:
+                    rayDX,
+                ay:
+                    rayDY,
+                bx:
+                    sx,
+                by:
+                    sy
+            )
+
+        guard abs(denominator) > 0.0001 else {
+            return nil
+        }
+
+        let qpx =
+            qx - px
+        let qpy =
+            qy - py
+        let t =
+            crossV092(
+                ax:
+                    qpx,
+                ay:
+                    qpy,
+                bx:
+                    sx,
+                by:
+                    sy
+            )
+            / denominator
+        let u =
+            crossV092(
+                ax:
+                    qpx,
+                ay:
+                    qpy,
+                bx:
+                    rayDX,
+                by:
+                    rayDY
+            )
+            / denominator
+
+        guard t > 0,
+              u >= -0.001,
+              u <= 1.001 else {
+            return nil
+        }
+
+        return (
+            point:
+                pointV092(
+                    x:
+                        px + rayDX * t,
+                    y:
+                        py + rayDY * t
+                ),
+            distance:
+                t
+        )
+    }
+
+    private func crossV092(
+        ax:
+            Double,
+        ay:
+            Double,
+        bx:
+            Double,
+        by:
+            Double
+    ) -> Double {
+        ax * by - ay * bx
+    }
+
+    private func pointV092(
+        x:
+            Double,
+        y:
+            Double
+    ) -> Point2MM {
+        Point2MM(
+            x:
+                Millimeters(x),
+            y:
+                Millimeters(y)
+        )
+    }
 
     private func upsert(
         _ stored: StoredFurnitureAssembly
@@ -3116,8 +5081,8 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
             )
         case .slidingWardrobe:
             return ParametricFurnitureBuilderV077(
-                builderType: .slidingWardrobe,
-                assemblyKind: .slidingWardrobe
+                builderType: .recessBuiltIn,
+                assemblyKind: .recessBuiltIn
             )
         case .desk:
             return ParametricFurnitureBuilderV077(
@@ -3154,7 +5119,7 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
     ) -> FurnitureAssemblyKind {
         switch standardKind {
         case .slidingWardrobe:
-            return .slidingWardrobe
+            return .recessBuiltIn
         case .hingedWardrobe,
              .builtInWardrobe,
              .dressingRoom,
@@ -3254,6 +5219,106 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
         )
     }
 
+    private func placementForModuleV083(
+        data: KonfiguracjaModuluMeblowegoDane,
+        assembly: FurnitureAssembly,
+        wall: WallSegment,
+        room: RoomDefinition,
+        anchoringMode: FurnitureAnchoringMode,
+        existingPlacement: FurniturePlacement?
+    ) throws -> FurniturePlacement {
+        if anchoringMode == .freestanding {
+            let shouldUseEnteredPosition =
+                existingPlacement != nil
+                || data.offsetAlongWall > .zero
+                || data.offsetFromWall > .zero
+            let centered =
+                freestandingStartPositionV083(
+                    for: assembly,
+                    in: room
+                )
+
+            return try FurniturePlacement(
+                id: existingPlacement?.id
+                    ?? FurniturePlacementID(),
+                roomID: room.id,
+                wallID: nil,
+                assemblyID: assembly.id,
+                offsetAlongWall: shouldUseEnteredPosition
+                    ? data.offsetAlongWall
+                    : centered.x,
+                offsetFromWall: shouldUseEnteredPosition
+                    ? data.offsetFromWall
+                    : centered.y,
+                bottomOffset: data.bottomOffset,
+                rotationDegrees:
+                    existingPlacement?.rotationDegrees
+                    ?? 0,
+                anchoringMode: .freestanding
+            )
+        }
+
+        return try FurniturePlacement(
+            id: existingPlacement?.id
+                ?? FurniturePlacementID(),
+            roomID: room.id,
+            wallID: wall.id,
+            assemblyID: assembly.id,
+            offsetAlongWall: data.offsetAlongWall,
+            offsetFromWall: data.offsetFromWall,
+            bottomOffset: data.bottomOffset,
+            rotationDegrees:
+                existingPlacement?.rotationDegrees
+                ?? 0,
+            anchoringMode: anchoringMode
+        )
+    }
+
+    private func freestandingStartPositionV083(
+        for assembly: FurnitureAssembly,
+        in room: RoomDefinition
+    ) -> (
+        x: Millimeters,
+        y: Millimeters
+    ) {
+        let bounds = roomModelBoundsV083(room)
+        let lowerX = max(bounds.minX, 0)
+        let lowerY = max(bounds.minY, 0)
+        let availableX = max(
+            bounds.maxX - lowerX - assembly.size.width.rawValue,
+            0
+        )
+        let availableY = max(
+            bounds.maxY - lowerY - assembly.size.depth.rawValue,
+            0
+        )
+
+        return (
+            x: Millimeters(lowerX + availableX / 2),
+            y: Millimeters(lowerY + availableY / 2)
+        )
+    }
+
+    private func roomModelBoundsV083(
+        _ room: RoomDefinition
+    ) -> (
+        minX: Double,
+        maxX: Double,
+        minY: Double,
+        maxY: Double
+    ) {
+        let points = room.geometry.boundary.segments.flatMap {
+            Plan2DGeometryAdapter.sampledPoints(for: $0)
+        }
+
+        return (
+            minX: points.map(\.x.rawValue).min() ?? 0,
+            maxX: points.map(\.x.rawValue).max() ?? 0,
+            minY: points.map(\.y.rawValue).min() ?? 0,
+            maxY: points.map(\.y.rawValue).max() ?? 0
+        )
+    }
+
     private func overlaps(
         lhsStart: Millimeters,
         lhsLength: Millimeters,
@@ -3282,10 +5347,26 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
         among candidates: [FurnitureAssembly]? = nil
     ) throws {
         guard let placement = candidate.placement,
-              placement.roomID == room.id,
-              placement.wallID == wall.id else {
+              placement.roomID == room.id else {
             throw DomainError.invariantViolation(
                 "Moduł nie ma poprawnego osadzenia w wybranym pomieszczeniu."
+            )
+        }
+
+        if placement.anchoringMode == .freestanding
+            || placement.wallID == nil {
+            try validateFreestandingPlacementV083(
+                candidate: candidate,
+                room: room,
+                excluding: assemblyID,
+                among: candidates ?? assemblies
+            )
+            return
+        }
+
+        guard placement.wallID == wall.id else {
+            throw DomainError.invariantViolation(
+                "Moduł nie jest przypisany do wybranej ściany."
             )
         }
 
@@ -3323,6 +5404,48 @@ final class MeblePomieszczeniaViewModel: ObservableObject {
             candidate: candidate,
             room: room
         )
+    }
+
+    private func validateFreestandingPlacementV083(
+        candidate: FurnitureAssembly,
+        room: RoomDefinition,
+        excluding assemblyID: FurnitureAssemblyID?,
+        among candidates: [FurnitureAssembly]? = nil
+    ) throws {
+        guard let placement = candidate.placement,
+              placement.roomID == room.id else {
+            throw DomainError.invariantViolation(
+                "Moduł wolnostojący nie ma poprawnego położenia w pomieszczeniu."
+            )
+        }
+
+        let bounds = roomModelBoundsV083(room)
+        let lowerX = max(bounds.minX, 0)
+        let lowerY = max(bounds.minY, 0)
+        let left = placement.offsetAlongWall.rawValue
+        let bottom = placement.offsetFromWall.rawValue
+        let right = left + candidate.size.width.rawValue
+        let top = bottom + candidate.size.depth.rawValue
+        let tolerance = 0.5
+
+        guard left + tolerance >= lowerX,
+              bottom + tolerance >= lowerY,
+              right <= bounds.maxX + tolerance,
+              top <= bounds.maxY + tolerance else {
+            throw DomainError.invariantViolation(
+                "Wyspa wychodzi poza obrys pomieszczenia."
+            )
+        }
+
+        if let conflicting = MebelCollisionValidatorV0143.firstCollision(
+            for: candidate,
+            excluding: assemblyID,
+            among: candidates ?? assemblies
+        ) {
+            throw DomainError.invariantViolation(
+                "Wyspa koliduje z \(conflicting.name)."
+            )
+        }
     }
 
     private func validateArchitecturalClearance(

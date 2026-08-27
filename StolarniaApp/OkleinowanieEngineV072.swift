@@ -131,6 +131,11 @@ enum OkleinowanieEngineV072 {
             ]
         case .reinforcement, .rail:
             return [(.dlugaA, .abs08)]
+        // Skrzynka szuflady: obrzeże **tylko na górnej krawędzi** boków,
+        // tyłu i dna — to jedyna krawędź, której się dotyka przy wkładaniu
+        // rzeczy. Pozostałe są zakryte przez sąsiednie elementy skrzynki.
+        case .drawerBox:
+            return [(.dlugaA, .abs08)]
         case .back, .leg, .custom:
             return []
         }

@@ -4,6 +4,12 @@ import SwiftUI
 
 struct ProjektListaView: View {
     @ObservedObject var viewModel: ProjektListaViewModel
+    /// Żądanie otwarcia formularza nowego projektu **spoza tego widoku**.
+    ///
+    /// Pulpit ma własny przycisk „Nowy projekt" i musi móc otworzyć ten sam
+    /// formularz, zamiast dublować go u siebie. Wiązanie, a nie zdarzenie,
+    /// bo formularz zamyka się sam po zapisaniu i stan musi wrócić do rodzica.
+    var zadanieNowegoProjektuV0105: Binding<Bool>?
     @State private var isPresentingNewProject = false
 
     var body: some View {
@@ -73,6 +79,14 @@ struct ProjektListaView: View {
                 } label: {
                     Label("Nowy projekt", systemImage: "plus")
                 }
+                .keyboardShortcut("n", modifiers: [.command])
+                .help("Nowy projekt (⌘N)")
+            }
+        }
+        .onChange(of: zadanieNowegoProjektuV0105?.wrappedValue ?? false) { _, chce in
+            if chce {
+                isPresentingNewProject = true
+                zadanieNowegoProjektuV0105?.wrappedValue = false
             }
         }
         .sheet(isPresented: $isPresentingNewProject) {

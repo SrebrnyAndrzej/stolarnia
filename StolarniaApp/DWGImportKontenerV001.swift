@@ -24,6 +24,10 @@ struct DWGImportKontenerV001: View {
     @State private var bladWczytywania: String?
     @State private var wynikImportu: MeblePomieszczeniaViewModel.WynikImportuDWGV001?
     @State private var trwaImport: Bool = false
+    /// Opis aktualnego etapu importu — pokazywany w overlay z ProgressView.
+    /// Wartości wg fazy: "Wczytuję plik...", "Dopasowuję do biblioteki...",
+    /// "Zapisuję moduł N/M...", "Zapisywanie zakończone".
+    @State private var etapImportu: String = ""
 
     var body: some View {
         NavigationStack {
@@ -59,6 +63,11 @@ struct DWGImportKontenerV001: View {
                 allowsMultipleSelection: false
             ) { result in
                 obsluzWybor(result: result)
+            }
+            .overlay {
+                if trwaImport {
+                    postepImportuOverlay
+                }
             }
             .alert(
                 "Błąd wczytywania",
@@ -158,14 +167,18 @@ struct DWGImportKontenerV001: View {
 
     private func wczytajPlik(url: URL) {
         do {
+            etapImportu = "Wczytuję plik JSON…"
             let doc = try DWGImportParserV001.wczytaj(z: url)
             document = doc
+            etapImportu = "Dopasowuję \(doc.detectedItems.count) obiektów do biblioteki modułów…"
             matches = DWGImportMatcherV001.dopasuj(
                 document: doc,
                 dostepneTemplates: mebleViewModel.templates
             )
+            etapImportu = ""
         } catch {
             bladWczytywania = error.localizedDescription
+            etapImportu = ""
         }
     }
 
@@ -175,12 +188,18 @@ struct DWGImportKontenerV001: View {
         zaakceptowane: [DWGModuleMatchV001]
     ) async {
         trwaImport = true
-        defer { trwaImport = false }
+        etapImportu = "Przygotowuję plany importu…"
+        defer {
+            trwaImport = false
+            etapImportu = ""
+        }
 
         let plany = DWGImportAssemblyMapperV001.planyImportu(
             document: document,
             zaakceptowaneMatche: zaakceptowane
         )
+
+        etapImportu = "Zapisuję \(plany.count) \(plany.count == 1 ? "moduł" : "modułów") do pomieszczenia…"
 
         let wynik = await mebleViewModel.importujZDWG(
             plany: plany,
@@ -188,6 +207,30 @@ struct DWGImportKontenerV001: View {
             walls: walls
         )
         wynikImportu = wynik
+    }
+
+    /// Overlay pełnoekranowy pokazywany podczas trwającego importu.
+    /// Zawiera opis aktualnego etapu, żeby użytkownik miał feedback co się dzieje.
+    private var postepImportuOverlay: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(.white)
+
+            Text(etapImportu.isEmpty ? "Trwa import…" : etapImportu)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(.black.opacity(0.75))
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.25).ignoresSafeArea())
+        .transition(.opacity)
     }
 
     private var bindingBleduWczytywania: Binding<Bool> {

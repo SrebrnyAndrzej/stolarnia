@@ -1156,7 +1156,7 @@ private struct OperacjaCNCRowV073: View {
             Image(systemName: operation.typ.symbol)
                 .font(.title3)
                 .frame(width: 34, height: 34)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .stolarniaMaterial(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {

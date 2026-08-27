@@ -6,6 +6,7 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
     case wallFiller
     case tallFiller
     case topFiller
+    case topCrown
     case baseClosingPanel
     case wallClosingPanel
     case tallClosingPanel
@@ -20,12 +21,14 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             return "Blenda wysokiej zabudowy"
         case .topFiller:
             return "Blenda górna"
+        case .topCrown:
+            return "Wieniec górny ciągu"
         case .baseClosingPanel:
-            return "Wieniec boczny dolny"
+            return "Ścianka boczna dolna"
         case .wallClosingPanel:
-            return "Wieniec boczny wiszący"
+            return "Ścianka boczna wisząca"
         case .tallClosingPanel:
-            return "Wieniec boczny wysoki"
+            return "Ścianka boczna wysoka"
         }
     }
 
@@ -39,6 +42,8 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             return "SYS-KITCHEN-FINISH-TALL-V015"
         case .topFiller:
             return "SYS-KITCHEN-FINISH-TOP-V015"
+        case .topCrown:
+            return "SYS-KITCHEN-TOP-CROWN-V084"
         case .baseClosingPanel:
             return "SYS-KITCHEN-CLOSE-BASE-V080"
         case .wallClosingPanel:
@@ -60,6 +65,8 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             uuidString = "f1500000-0000-4000-8000-000000000003"
         case .topFiller:
             uuidString = "f1500000-0000-4000-8000-000000000004"
+        case .topCrown:
+            uuidString = "f1500000-0000-4000-8000-000000000008"
         case .baseClosingPanel:
             uuidString = "f1500000-0000-4000-8000-000000000005"
         case .wallClosingPanel:
@@ -77,7 +84,10 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
         switch self {
         case .baseFiller, .baseClosingPanel:
             return .floorStanding
-        case .wallFiller, .topFiller, .wallClosingPanel:
+        case .wallFiller,
+             .topFiller,
+             .topCrown,
+             .wallClosingPanel:
             return .wallMounted
         case .tallFiller, .tallClosingPanel:
             return .builtIn
@@ -88,8 +98,10 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
         switch self {
         case .baseFiller, .baseClosingPanel:
             return .base
-        case .wallFiller, .topFiller, .wallClosingPanel:
+        case .wallFiller, .wallClosingPanel:
             return .wall
+        case .topFiller, .topCrown:
+            return .upper
         case .tallFiller, .tallClosingPanel:
             return .tall
         }
@@ -101,7 +113,7 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             return .zero
         case .wallFiller, .wallClosingPanel:
             return 1_400
-        case .topFiller:
+        case .topFiller, .topCrown:
             return 2_200
         }
     }
@@ -116,6 +128,8 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             return 2_070
         case .topFiller:
             return 100
+        case .topCrown:
+            return 18
         }
     }
 
@@ -125,6 +139,8 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             return 560
         case .wallClosingPanel:
             return 350
+        case .topCrown:
+            return 560
         default:
             return 100
         }
@@ -139,6 +155,10 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
         }
     }
 
+    var isTopCrown: Bool {
+        self == .topCrown
+    }
+
     var category: FurnitureTemplateCategory {
         switch self {
         case .baseFiller, .baseClosingPanel:
@@ -147,7 +167,7 @@ nonisolated enum KitchenFinishingTemplateKindV015: String, CaseIterable, Hashabl
             return .kitchenWallCabinet
         case .tallFiller, .tallClosingPanel:
             return .kitchenTallCabinet
-        case .topFiller:
+        case .topFiller, .topCrown:
             return .custom
         }
     }
@@ -207,7 +227,10 @@ nonisolated enum StandardKitchenFinishingTemplatesV015 {
         let source: FurnitureTemplate
 
         switch kind {
-        case .wallFiller, .topFiller, .wallClosingPanel:
+        case .wallFiller,
+             .topFiller,
+             .topCrown,
+             .wallClosingPanel:
             source = try SystemFurnitureTemplates.wallCabinet()
         case .baseFiller, .tallFiller, .baseClosingPanel, .tallClosingPanel:
             source = try SystemFurnitureTemplates.baseCabinet()
@@ -287,19 +310,28 @@ nonisolated struct KitchenFillerBuilderV015: FurnitureBuilding {
         let assemblyID =
             existingAssembly?.id
             ?? FurnitureAssemblyID()
-        let isClosingPanel =
+        let finishingKind =
             StandardKitchenFinishingTemplatesV015.kind(
                 for: template
-            )?.isClosingPanel ?? false
+            )
+        let isClosingPanel =
+            finishingKind?.isClosingPanel ?? false
+        let isTopCrown =
+            finishingKind?.isTopCrown ?? false
         let componentRole: FurnitureComponentRole =
-            isClosingPanel ? .decorativeSide : .filler
+            isTopCrown
+            ? .top
+            : (isClosingPanel ? .decorativeSide : .filler)
         let componentCode =
-            isClosingPanel ? "WIENIEC-01" : "BLENDA-01"
+            isTopCrown
+            ? "WIENIEC-GORNY-CIAG-01"
+            : (isClosingPanel ? "SCIANKA-BOCZNA-01" : "BLENDA-01")
         let componentID =
             existingAssembly?.components.first(where: {
                 $0.role == .filler
                     || $0.role == .maskingPanel
                     || $0.role == .decorativeSide
+                    || $0.role == .top
             })?.id
             ?? ComponentID()
         let subassemblyID =
@@ -319,7 +351,10 @@ nonisolated struct KitchenFillerBuilderV015: FurnitureBuilding {
 
         let subassembly = try FurnitureSubassembly(
             id: subassemblyID,
-            name: "Wykończenie",
+            name:
+                isTopCrown
+                ? "Wieniec górny ciągu"
+                : "Wykończenie",
             componentIDs: [component.id]
         )
 

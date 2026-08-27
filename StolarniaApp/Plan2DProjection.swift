@@ -53,6 +53,27 @@ struct Plan2DProjection {
                 - (point.y.rawValue - modelCenterY) * scale
         )
     }
+
+    func modelPoint(_ point: CGPoint) -> Point2MM {
+        Point2MM(
+            x:
+                Millimeters(
+                    Double(
+                        (point.x - size.width / 2 - panOffset.width)
+                        / scale
+                    )
+                    + modelCenterX
+                ),
+            y:
+                Millimeters(
+                    modelCenterY
+                    - Double(
+                        (point.y - size.height / 2 - panOffset.height)
+                        / scale
+                    )
+                )
+        )
+    }
 }
 
 /// Wspólne operacje prezentacyjne dla geometrii planu 2D.

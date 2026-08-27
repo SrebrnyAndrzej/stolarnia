@@ -6,6 +6,8 @@ struct WykonczeniaKuchenneEditorV082: View {
     @ObservedObject var repo: WykonczeniaKuchenneRepositoryV082
     /// Suma długości ciągów dolnych w mm (do auto-przeliczania fartucha/listew).
     let bazowaDlugoscCiaguMM: Double
+    let ciagiDolneV087:
+        [KitchenRunFinishingSegmentV087]
 
     @State private var selectedTab = 0
     @Environment(\.dismiss) private var dismiss
@@ -65,6 +67,22 @@ struct WykonczeniaKuchenneEditorV082: View {
     private var blatyTab: some View {
         List {
             summarySection
+            ciagiDolneAutoSectionV087
+
+            if repo.blaty.isEmpty {
+                Section {
+                    StolarniaEmptyState(
+                        title: "Brak blatów",
+                        description: "Blat kuchenny jest elementem wykończeniowym — łączy szafki dolne i chroni je przed wilgocią. Dodaj pierwszy blat i wybierz kształt (prosty, L, U), materiał oraz wycięcia pod zlew i płytę.",
+                        systemImage: "rectangle.grid.1x2",
+                        actionTitle: "Dodaj blat",
+                        actionSystemImage: "plus.circle.fill",
+                        action: { repo.dodajBlat() }
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
 
             Section {
                 ForEach($repo.blaty) { $blat in
@@ -124,6 +142,9 @@ struct WykonczeniaKuchenneEditorV082: View {
 
     private var fartuchyTab: some View {
         List {
+            summarySection
+            ciagiDolneAutoSectionV087
+
             Section {
                 ForEach($repo.fartuchy) { $fartuch in
                     NavigationLink {
@@ -152,6 +173,67 @@ struct WykonczeniaKuchenneEditorV082: View {
                 Text("Fartuch to wykończenie ściany między blatem a szafkami. Standardowa wysokość 600 mm. Długość pobierana automatycznie z sumy ciągów dolnych projektu.")
                     .font(.caption2)
             }
+        }
+    }
+
+    private var ciagiDolneAutoSectionV087:
+        some View
+    {
+        Section {
+            Button {
+                repo.synchronizujZCiagamiDolnymiV087(
+                    ciagiDolneV087
+                )
+            } label: {
+                Label(
+                    "Zbuduj blaty i fartuchy z ciągów",
+                    systemImage:
+                        "wand.and.stars"
+                )
+            }
+            .disabled(
+                ciagiDolneV087.isEmpty
+            )
+
+            if ciagiDolneV087.isEmpty {
+                Text(
+                    "Brak wykrytych ciągów dolnych w tym pomieszczeniu."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                ForEach(ciagiDolneV087) { segment in
+                    VStack(
+                        alignment:
+                            .leading,
+                        spacing:
+                            3
+                    ) {
+                        Text(segment.label)
+                            .font(
+                                .subheadline
+                                    .weight(
+                                        .semibold
+                                    )
+                            )
+                        Text(
+                            "\(Int(segment.dlugoscMM.rounded())) mm · blat \(Int(max(segment.glebokoscMM + 40, 600).rounded())) mm · od \(Int(segment.startOffsetMM.rounded())) do \(Int(segment.koniecOffsetMM.rounded())) mm"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        } header: {
+            Text(
+                "Automatycznie z ciągów dolnych"
+            )
+        } footer: {
+            Text(
+                "Synchronizacja usuwa tylko poprzednie automatyczne pozycje. Ręcznie dodane blaty i fartuchy zostają bez zmian."
+            )
+            .font(.caption2)
         }
     }
 

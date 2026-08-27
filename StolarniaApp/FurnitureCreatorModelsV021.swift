@@ -52,7 +52,7 @@ enum FurnitureConstructionKindV021:
         case .hingedWardrobe:
             return "Szafa uchylna"
         case .slidingWardrobe:
-            return "Szafa przesuwna"
+            return "Szafa przesuwna (legacy)"
         case .dressingRoomOpen:
             return "Garderoba otwarta"
         case .customCarcass:
@@ -240,14 +240,57 @@ struct KitchenBaseHeightSystemV018:
     var countertopThicknessMM = 38.0
     var carcassHeightMM = 762.0
 
+    var finishedWorktopHeightMM: Double {
+        carcassHeightMM
+            + effectiveLegHeightMM
+            + countertopThicknessMM
+    }
+
+    var effectiveLegHeightMM: Double {
+        supportKind == .floorStanding
+            ? 0
+            : legHeightMM
+    }
+
     mutating func recalculate() {
         if supportKind == .floorStanding {
             legHeightMM = 0
         }
 
-        carcassHeightMM = max(
+        carcassHeightMM =
+            Self.carcassHeight(
+                targetWorktopHeightMM:
+                    targetWorktopHeightMM,
+                supportKind:
+                    supportKind,
+                legHeightMM:
+                    legHeightMM,
+                countertopThicknessMM:
+                    countertopThicknessMM
+            )
+    }
+
+    func recalculated() -> KitchenBaseHeightSystemV018 {
+        var copy = self
+        copy.recalculate()
+        return copy
+    }
+
+    static func carcassHeight(
+        targetWorktopHeightMM: Double,
+        supportKind:
+            CabinetBaseSupportKindV018,
+        legHeightMM: Double,
+        countertopThicknessMM: Double
+    ) -> Double {
+        let effectiveLegHeight =
+            supportKind == .floorStanding
+            ? 0
+            : legHeightMM
+
+        return max(
             targetWorktopHeightMM
-                - legHeightMM
+                - effectiveLegHeight
                 - countertopThicknessMM,
             100
         )
@@ -278,6 +321,105 @@ enum SpaceTowerUpperZoneV018:
     }
 }
 
+enum SpaceTowerCompartmentKindV083:
+    String,
+    Codable,
+    CaseIterable,
+    Identifiable
+{
+    case lower
+    case middle
+    case upper
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .lower:
+            return "Dolna"
+        case .middle:
+            return "Środkowa"
+        case .upper:
+            return "Górna"
+        }
+    }
+}
+
+enum SpaceTowerDrawerHeightKindV083:
+    String,
+    Codable,
+    CaseIterable,
+    Identifiable
+{
+    case low
+    case high
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .low:
+            return "Niska"
+        case .high:
+            return "Wysoka"
+        }
+    }
+
+    var heightMM: Double {
+        switch self {
+        case .low:
+            return 140
+        case .high:
+            return 280
+        }
+    }
+
+    static func nearest(
+        for heightMM: Double
+    ) -> Self {
+        abs(heightMM - low.heightMM)
+            <= abs(heightMM - high.heightMM)
+        ? .low
+        : .high
+    }
+}
+
+struct SpaceTowerCompartmentV083:
+    Identifiable,
+    Codable,
+    Hashable
+{
+    var id = UUID()
+    var kind:
+        SpaceTowerCompartmentKindV083
+    var heightMM: Double
+    var drawerHeightsMM: [Double]
+
+    var drawerSummary: String {
+        drawerHeightsMM
+            .map {
+                SpaceTowerDrawerHeightKindV083
+                    .nearest(for: $0)
+                    .title
+                    .lowercased()
+            }
+            .joined(separator: " + ")
+    }
+
+    var zoneKindV019:
+        SpaceTowerZoneV019.Kind
+    {
+        switch kind {
+        case .lower:
+            return .lowerDrawers
+        case .middle:
+            return .middleDrawers
+        case .upper:
+            return .upperDrawers
+        }
+    }
+}
+
 struct SpaceTowerDefinitionV018:
     Codable,
     Hashable
@@ -294,6 +436,11 @@ struct SpaceTowerDefinitionV018:
     var lowerZoneHeightMM: Double?
     var middleZoneHeightMM: Double?
     var upperZoneHeightMM: Double?
+
+    // v0.83: SPACE TOWER as 2-3 independent front compartments.
+    // Each compartment can have its own height and a high/low drawer scheme.
+    var compartmentsV083:
+        [SpaceTowerCompartmentV083]?
 
     mutating func normalize(
         totalHeightMM: Double = 2_070
@@ -340,11 +487,22 @@ struct SpaceTowerDefinitionV018:
         normalizeZoneHeights(
             totalHeightMM: totalHeightMM
         )
+
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
     }
 
     mutating func normalizeZoneHeights(
         totalHeightMM: Double
     ) {
+        if compartmentsV083 != nil {
+            normalizeCompartmentsV083(
+                totalHeightMM: totalHeightMM
+            )
+            return
+        }
+
         let usable = max(
             totalHeightMM - 36,
             600
@@ -381,9 +539,407 @@ struct SpaceTowerDefinitionV018:
     }
 
     var zoneHeightSumMM: Double {
-        (lowerZoneHeightMM ?? 0)
+        if let compartmentsV083,
+           !compartmentsV083.isEmpty {
+            return compartmentsV083.reduce(0) {
+                $0 + $1.heightMM
+            }
+        }
+
+        return (lowerZoneHeightMM ?? 0)
         + (middleZoneHeightMM ?? 0)
         + (upperZoneHeightMM ?? 0)
+    }
+
+    var compartmentCountV083: Int {
+        min(
+            max(
+                frontCount,
+                2
+            ),
+            3
+        )
+    }
+
+    func resolvedCompartmentsV083(
+        totalHeightMM: Double = 2_070
+    ) -> [SpaceTowerCompartmentV083] {
+        let count =
+            min(
+                max(
+                    frontCount,
+                    2
+                ),
+                3
+            )
+
+        let usable = max(
+            totalHeightMM - 36,
+            600
+        )
+
+        var base =
+            compartmentsV083
+            ?? legacyCompartmentsV083(
+                count: count,
+                usableHeightMM: usable
+            )
+
+        if base.count < count {
+            for index in base.count..<count {
+                base.append(
+                    Self.defaultCompartmentV083(
+                        index: index,
+                        count: count,
+                        heightMM:
+                            usable
+                            / Double(count)
+                    )
+                )
+            }
+        }
+
+        if base.count > count {
+            base = Array(base.prefix(count))
+        }
+
+        return base.enumerated().map {
+            index,
+            compartment in
+            var copy = compartment
+            copy.kind =
+                Self.compartmentKind(
+                    index: index,
+                    count: count
+                )
+            copy.drawerHeightsMM =
+                normalizedDrawerHeightsV083(
+                    copy.drawerHeightsMM
+                )
+            return copy
+        }
+    }
+
+    mutating func setCompartmentCountV083(
+        _ count: Int,
+        totalHeightMM: Double
+    ) {
+        frontCount = min(max(count, 2), 3)
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+    }
+
+    mutating func setCompartmentHeightV083(
+        at index: Int,
+        heightMM: Double,
+        totalHeightMM: Double
+    ) {
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+
+        guard compartmentsV083?.indices.contains(index)
+            == true else {
+            return
+        }
+
+        compartmentsV083?[index].heightMM =
+            max(heightMM, 220)
+
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+    }
+
+    mutating func setDrawerHeightKindV083(
+        compartmentIndex: Int,
+        drawerIndex: Int,
+        kind: SpaceTowerDrawerHeightKindV083,
+        totalHeightMM: Double
+    ) {
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+
+        guard compartmentsV083?.indices
+            .contains(compartmentIndex) == true,
+              compartmentsV083?[compartmentIndex]
+            .drawerHeightsMM.indices
+            .contains(drawerIndex) == true else {
+            return
+        }
+
+        compartmentsV083?[compartmentIndex]
+            .drawerHeightsMM[drawerIndex] =
+            kind.heightMM
+
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+    }
+
+    mutating func addDrawerV083(
+        compartmentIndex: Int,
+        kind: SpaceTowerDrawerHeightKindV083,
+        totalHeightMM: Double
+    ) {
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+
+        guard compartmentsV083?.indices
+            .contains(compartmentIndex) == true,
+              (compartmentsV083?[compartmentIndex]
+                .drawerHeightsMM.count ?? 0) < 4 else {
+            return
+        }
+
+        compartmentsV083?[compartmentIndex]
+            .drawerHeightsMM
+            .append(kind.heightMM)
+
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+    }
+
+    mutating func removeDrawerV083(
+        compartmentIndex: Int,
+        drawerIndex: Int,
+        totalHeightMM: Double
+    ) {
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+
+        guard compartmentsV083?.indices
+            .contains(compartmentIndex) == true,
+              (compartmentsV083?[compartmentIndex]
+                .drawerHeightsMM.count ?? 0) > 1,
+              compartmentsV083?[compartmentIndex]
+            .drawerHeightsMM.indices
+            .contains(drawerIndex) == true else {
+            return
+        }
+
+        compartmentsV083?[compartmentIndex]
+            .drawerHeightsMM
+            .remove(at: drawerIndex)
+
+        normalizeCompartmentsV083(
+            totalHeightMM: totalHeightMM
+        )
+    }
+
+    mutating func normalizeCompartmentsV083(
+        totalHeightMM: Double
+    ) {
+        let count =
+            min(
+                max(
+                    frontCount,
+                    2
+                ),
+                3
+            )
+        let usable = max(
+            totalHeightMM - 36,
+            600
+        )
+        var compartments =
+            resolvedCompartmentsV083(
+                totalHeightMM: totalHeightMM
+            )
+
+        var sum =
+            compartments
+                .reduce(0) {
+                    $0 + max($1.heightMM, 220)
+                }
+
+        if sum <= 0 {
+            sum = usable
+        }
+
+        if abs(sum - usable) > 0.5 {
+            let scale = usable / sum
+            compartments =
+                compartments.map {
+                    compartment in
+                    var copy = compartment
+                    copy.heightMM =
+                        max(
+                            compartment.heightMM
+                                * scale,
+                            220
+                        )
+                    return copy
+                }
+        }
+
+        let adjustedSum =
+            compartments.reduce(0) {
+                $0 + $1.heightMM
+            }
+
+        if let lastIndex = compartments.indices.last,
+           abs(adjustedSum - usable) > 0.5 {
+            compartments[lastIndex].heightMM =
+                max(
+                    compartments[lastIndex].heightMM
+                    + usable
+                    - adjustedSum,
+                    220
+                )
+        }
+
+        compartments = compartments.enumerated().map {
+            index,
+            compartment in
+            var copy = compartment
+            copy.kind =
+                Self.compartmentKind(
+                    index: index,
+                    count: count
+                )
+            copy.drawerHeightsMM =
+                normalizedDrawerHeightsV083(
+                    copy.drawerHeightsMM
+                )
+            return copy
+        }
+
+        compartmentsV083 = compartments
+        frontCount = count
+        totalDrawerCount =
+            compartments.reduce(0) {
+                $0 + $1.drawerHeightsMM.count
+            }
+        lowerZoneDrawerCount =
+            compartments.first?
+                .drawerHeightsMM.count
+            ?? 0
+        middleZoneDrawerCount =
+            compartments.dropFirst().first?
+                .drawerHeightsMM.count
+            ?? 0
+        lowerZoneHeightMM =
+            compartments.first?.heightMM
+        middleZoneHeightMM =
+            compartments.dropFirst().first?
+                .heightMM
+        upperZoneHeightMM =
+            count == 3
+            ? compartments.dropFirst(2).first?
+                .heightMM
+            : 0
+    }
+
+    private func legacyCompartmentsV083(
+        count: Int,
+        usableHeightMM: Double
+    ) -> [SpaceTowerCompartmentV083] {
+        (0..<count).map {
+            index in
+            let height =
+                heightForLegacyCompartmentV083(
+                    index: index,
+                    count: count,
+                    usableHeightMM:
+                        usableHeightMM
+                )
+
+            return Self.defaultCompartmentV083(
+                index: index,
+                count: count,
+                heightMM: height
+            )
+        }
+    }
+
+    private func heightForLegacyCompartmentV083(
+        index: Int,
+        count: Int,
+        usableHeightMM: Double
+    ) -> Double {
+        switch (count, index) {
+        case (3, 0):
+            return lowerZoneHeightMM
+                ?? usableHeightMM / 3
+        case (3, 1):
+            return middleZoneHeightMM
+                ?? usableHeightMM / 3
+        case (3, 2):
+            return upperZoneHeightMM
+                ?? usableHeightMM / 3
+        case (2, 0):
+            return lowerZoneHeightMM
+                ?? usableHeightMM / 2
+        case (2, 1):
+            return usableHeightMM
+                - (
+                    lowerZoneHeightMM
+                    ?? usableHeightMM / 2
+                )
+        default:
+            return usableHeightMM
+                / Double(max(count, 1))
+        }
+    }
+
+    private static func defaultCompartmentV083(
+        index: Int,
+        count: Int,
+        heightMM: Double
+    ) -> SpaceTowerCompartmentV083 {
+        SpaceTowerCompartmentV083(
+            kind:
+                compartmentKind(
+                    index: index,
+                    count: count
+                ),
+            heightMM: max(heightMM, 220),
+            drawerHeightsMM:
+                count == 3
+                ? [280, 140]
+                : [280, 140, 140]
+        )
+    }
+
+    private static func compartmentKind(
+        index: Int,
+        count: Int
+    ) -> SpaceTowerCompartmentKindV083 {
+        if count == 2 {
+            return index == 0 ? .lower : .upper
+        }
+
+        switch index {
+        case 0:
+            return .lower
+        case 1:
+            return .middle
+        default:
+            return .upper
+        }
+    }
+
+    private func normalizedDrawerHeightsV083(
+        _ heights: [Double]
+    ) -> [Double] {
+        let source =
+            heights.isEmpty
+            ? [280, 140]
+            : heights
+
+        return source
+            .prefix(4)
+            .map {
+                SpaceTowerDrawerHeightKindV083
+                    .nearest(for: $0)
+                    .heightMM
+            }
     }
 }
 
@@ -688,19 +1244,32 @@ struct FurnitureCreatorDraftV018:
 
         if effectiveConstructionKind
             == .spaceTower {
-            if !(5...7).contains(
-                spaceTower.totalDrawerCount
-            ) {
+            let compartments =
+                spaceTower
+                    .resolvedCompartmentsV083(
+                        totalHeightMM:
+                            heightMM
+                    )
+
+            if !(2...3).contains(compartments.count) {
                 result.append(
-                    "SPACE TOWER musi mieć 5–7 szuflad."
+                    "SPACE TOWER wymaga 2 lub 3 komór/frontów."
                 )
             }
 
-            if !(2...3).contains(
-                spaceTower.frontCount
-            ) {
+            if compartments.contains(where: {
+                $0.drawerHeightsMM.isEmpty
+            }) {
                 result.append(
-                    "SPACE TOWER wymaga 2 lub 3 frontów."
+                    "Każda komora SPACE TOWER musi mieć co najmniej jedną szufladę."
+                )
+            }
+
+            if compartments.contains(where: {
+                $0.drawerHeightsMM.count > 4
+            }) {
+                result.append(
+                    "Jedna komora SPACE TOWER może mieć maksymalnie 4 szuflady."
                 )
             }
 
@@ -714,7 +1283,7 @@ struct FurnitureCreatorDraftV018:
                 - usable
             ) > 1 {
                 result.append(
-                    "Suma wysokości trzech stref SPACE TOWER musi odpowiadać wysokości użytkowej korpusu."
+                    "Suma wysokości komór SPACE TOWER musi odpowiadać wysokości użytkowej korpusu."
                 )
             }
         }

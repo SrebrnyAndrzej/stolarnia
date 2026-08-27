@@ -27,6 +27,24 @@ enum OfertaKlientaPDFBuilder {
                 .missingVariant
         }
 
+        let selectedOfferSummary =
+            warunki
+                .podsumowanieHandlowe(
+                    dla: selected,
+                    ustawienia:
+                        ustawienia
+                )
+
+        let offerSummaries =
+            wyceny.map {
+                warunki
+                    .podsumowanieHandlowe(
+                        dla: $0,
+                        ustawienia:
+                            ustawienia
+                    )
+            }
+
         let pageBounds =
             CGRect(
                 x: 0,
@@ -60,6 +78,20 @@ enum OfertaKlientaPDFBuilder {
                     bounds:
                         pageBounds
                 )
+
+            if warunki
+                .trybDokumentu == .handlowy {
+                drawCommercialOffer(
+                    page: &page,
+                    projekt: projekt,
+                    selected:
+                        selectedOfferSummary,
+                    warunki: warunki,
+                    ustawienia:
+                        ustawienia
+                )
+                return
+            }
 
             page.beginPage()
             page.drawHeader(
@@ -124,7 +156,7 @@ enum OfertaKlientaPDFBuilder {
             )
 
             page.drawVariantCard(
-                selected,
+                selectedOfferSummary,
                 highlighted: true,
                 showNet:
                     warunki
@@ -132,14 +164,18 @@ enum OfertaKlientaPDFBuilder {
                 showVAT:
                     warunki
                         .pokazVAT
+                    && warunki
+                        .doliczVAT
             )
 
-            if warunki.pokazWszystkieWarianty {
+            if warunki.pokazWszystkieWarianty
+                && !warunki
+                    .uzyjCenyRecznej {
                 page.drawSectionTitle(
                     "Porównanie wariantów"
                 )
 
-                for summary in wyceny {
+                for summary in offerSummaries {
                     page.drawVariantCard(
                         summary,
                         highlighted:
@@ -147,10 +183,12 @@ enum OfertaKlientaPDFBuilder {
                             == wybranyWariant,
                         showNet:
                             warunki
-                                .pokazCenyNetto,
+                        .pokazCenyNetto,
                         showVAT:
                             warunki
                                 .pokazVAT
+                            && warunki
+                                .doliczVAT
                     )
                 }
             }
@@ -278,10 +316,10 @@ enum OfertaKlientaPDFBuilder {
 
             page.drawAcceptanceBlock(
                 grossPrice:
-                    selected
+                    selectedOfferSummary
                         .cenaBrutto,
                 variant:
-                    selected
+                    selectedOfferSummary
                         .wariant
                         .nazwa
             )
@@ -290,6 +328,179 @@ enum OfertaKlientaPDFBuilder {
         }
 
         return url
+    }
+
+    private static func drawCommercialOffer(
+        page:
+            inout OfertaPDFPage,
+        projekt:
+            ProjektWyceny,
+        selected:
+            PodsumowanieWariantuWyceny,
+        warunki:
+            WarunkiOfertyKlienta,
+        ustawienia:
+            UstawieniaStolarni
+    ) {
+        page.beginPage()
+        page.drawHeader(
+            company:
+                ustawienia.daneFirmy,
+            title:
+                warunki.tytulOferty,
+            project:
+                projekt.nazwaProjektu
+        )
+
+        page.drawSectionTitle(
+            "Dane oferty"
+        )
+        if !warunki.numerOferty.isEmpty {
+            page.drawKeyValue(
+                key: "Nr oferty",
+                value:
+                    warunki.numerOferty
+            )
+        }
+        page.drawKeyValue(
+            key: "Klient",
+            value:
+                warunki.klient.isEmpty
+                ? "Do uzupełnienia"
+                : warunki.klient
+        )
+        page.drawKeyValue(
+            key: "Data",
+            value:
+                Date().formatted(
+                    date: .long,
+                    time: .omitted
+                )
+        )
+        page.drawKeyValue(
+            key: "Ważność",
+            value:
+                "\(warunki.waznoscOfertyDni) dni od daty wystawienia"
+        )
+
+        page.drawSectionTitle(
+            "Cena oferty"
+        )
+        page.drawVariantCard(
+            selected,
+            highlighted: true,
+            showNet:
+                warunki
+                    .pokazCenyNetto,
+            showVAT:
+                warunki
+                    .pokazVAT
+                && warunki
+                    .doliczVAT
+        )
+
+        if !warunki
+            .doliczVAT {
+            page.drawBodyText(
+                "Cena ryczałtowa za opisany zakres. Oferta bez VAT."
+            )
+        }
+
+        page.drawSectionTitle(
+            "Zakres ujęty w cenie"
+        )
+        page.drawBodyText(
+            warunki.zakresPrac
+        )
+        page.drawBullet(
+            "Projekt, wykonanie, dostawa oraz montaż zabudowy w uzgodnionym zakresie."
+        )
+        page.drawBullet(
+            "Dobór materiałów, okuć, elementów montażowych i regulacja frontów po montażu."
+        )
+        page.drawBullet(
+            "Ujęcie elementów wykończeniowych i montażowych potrzebnych do oddania gotowej zabudowy."
+        )
+
+        page.drawSectionTitle(
+            "Poza zakresem"
+        )
+        page.drawBodyText(
+            warunki.uwagi
+        )
+
+        page.drawFooter()
+
+        page.beginPage()
+        page.drawSectionTitle(
+            "Warunki realizacji"
+        )
+        page.drawKeyValue(
+            key: "Termin realizacji",
+            value:
+                "około \(warunki.terminRealizacjiDni) dni"
+        )
+        page.drawKeyValue(
+            key: "Płatność",
+            value:
+                "według harmonogramu oferty"
+        )
+        page.drawBullet(
+            "Zaliczka po akceptacji: \(percent(warunki.zaliczkaProcent))"
+        )
+        page.drawBullet(
+            "Płatność przed montażem: \(percent(warunki.platnoscPrzedMontazemProcent))"
+        )
+        page.drawBullet(
+            "Płatność po zakończeniu montażu: \(percent(warunki.platnoscPoMontazuProcent))"
+        )
+        page.drawKeyValue(
+            key: "VAT",
+            value:
+                warunki.doliczVAT
+                ? "\(percent(warunki.vatProcent))"
+                : "bez VAT"
+        )
+
+        page.drawSectionTitle(
+            "Kolejny krok"
+        )
+        page.drawBodyText(
+            "Po akceptacji oferty rekomendowane jest spotkanie pomiarowe i techniczne potwierdzenie projektu. Na tym etapie domykane są finalne podziały frontów, kierunki otwierania, przebieg oświetlenia oraz kolizje z instalacjami."
+        )
+
+        if warunki.gwarancjaMiesiecy > 0 {
+            page.drawSectionTitle(
+                "Gwarancja"
+            )
+            page.drawKeyValue(
+                key: "Okres gwarancji",
+                value:
+                    "\(warunki.gwarancjaMiesiecy) miesięcy"
+            )
+            if !warunki
+                .opisGwarancji
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+                .isEmpty {
+                page.drawBodyText(
+                    warunki.opisGwarancji
+                )
+            }
+        }
+
+        page.drawSectionTitle(
+            "Akceptacja oferty"
+        )
+        page.drawAcceptanceBlock(
+            grossPrice:
+                selected.cenaBrutto,
+            variant:
+                selected.wariant.nazwa
+        )
+        page.drawFooter()
     }
 
     private static func fileName(
@@ -387,17 +598,17 @@ private struct OfertaPDFPage {
 
     private let anthracite =
         UIColor(
-            red: 0.13,
-            green: 0.15,
-            blue: 0.17,
+            red: 0.067,
+            green: 0.090,
+            blue: 0.094,
             alpha: 1
         )
 
     private let accent =
         UIColor(
-            red: 0.10,
-            green: 0.56,
-            blue: 0.66,
+            red: 0.647,
+            green: 0.722,
+            blue: 0.353,
             alpha: 1
         )
 

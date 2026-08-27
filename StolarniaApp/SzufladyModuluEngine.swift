@@ -1,9 +1,14 @@
 import Foundation
+import DomainCore
 
 enum SzufladyModuluEngine {
     private static let domyslnaGruboscFrontuMM = 18.0
     private static let minimalneCofniecieSzufladyWewnetrznejMM = 42.0
     private static let luzTechnologicznyZaFrontemMM = 24.0
+    private static let autoDrawerMarker = "AUTO-SZUFLADA:"
+    private static let autoDrawerBlockStart = "[AUTO_SZUFLADY_START]"
+    private static let autoDrawerBlockEnd = "[AUTO_SZUFLADY_END]"
+    private static let minimalnaSzerokoscListwyDystansowejMM = 60.0
 
     static func geometria(
         karty card:
@@ -146,6 +151,10 @@ enum SzufladyModuluEngine {
                     id:
                         parametry.profilID
                 )
+        let doborProwadnicy = doborProwadnicy(
+            profil: profile,
+            w: card
+        )
 
         var currentY =
             parametry.marginesDolnyMM
@@ -172,8 +181,8 @@ enum SzufladyModuluEngine {
                         parametry
                             .wysokoscSkrzynkiMM,
                     nominalnaDlugoscMM:
-                        parametry
-                            .nominalnaDlugoscMM,
+                        doborProwadnicy?.nominalLength.rawValue
+                        ?? parametry.nominalnaDlugoscMM,
                     luzDolnyMM:
                         index == 0
                         ? parametry
@@ -190,8 +199,18 @@ enum SzufladyModuluEngine {
                             .szczelinaMiedzyFrontamiMM
                             / 2
                 )
+            drawer.niewykorzystanaGlebokoscMM =
+                doborProwadnicy?.unusedDepth.rawValue
+            drawer.wymagaPotwierdzeniaSKUProwadnicy =
+                doborProwadnicy?.requiresSKUConfirmation
             drawer.cofniecieOdFrontuMM =
                 cofniecieOdFrontuMM(
+                    dla: drawer,
+                    profil: profile,
+                    w: card
+                )
+            drawer.odsuniecieOdScianBocznychMM =
+                odsuniecieOdScianBocznychMM(
                     dla: drawer,
                     profil: profile,
                     w: card
@@ -208,6 +227,260 @@ enum SzufladyModuluEngine {
         }
 
         return drawers
+    }
+
+    /// Generuje układ szuflad na podstawie presetu.
+    /// Dla `.rowne(N)` deleguje do klasycznego `generuj(...)`.
+    /// Dla wariantów niestandardowych oblicza wysokości frontów i rozmieszcza je od dołu.
+    /// Dla `.cargo` zwraca pojedynczą szufladę Cargo pełnej użytecznej wysokości.
+    static func generujZPresetu(
+        preset: PresetUkladuSzuflad,
+        parametryBazowe: ParametryAutomatycznegoUkladuSzuflad,
+        dla card: KartaTechnicznaSzafki
+    ) -> [SzufladaModulu] {
+        switch preset {
+        case .rowne(let liczba):
+            var p = parametryBazowe
+            p.liczba = max(liczba, 0)
+            return generuj(parametry: p, dla: card)
+
+        case .cargo:
+            return generujCargo(
+                parametry: parametryBazowe,
+                dla: card
+            )
+
+        case .jednaWysokaDwieNiskie(let wysokaMM):
+            let uzyteczna = uzytecznaWysokosc(
+                parametry: parametryBazowe,
+                dla: card
+            )
+            let wysoka = max(min(wysokaMM, uzyteczna), 0)
+            let pozostala = max(
+                uzyteczna
+                - wysoka
+                - parametryBazowe.szczelinaMiedzyFrontamiMM * 2,
+                0
+            )
+            let niska = pozostala / 2
+            return generujZWysokosciami(
+                wysokosci: [niska, niska, wysoka],
+                parametry: parametryBazowe,
+                dla: card
+            )
+
+        case .wysokaNaDoleDwieNiskie(let wysokaMM):
+            let uzyteczna = uzytecznaWysokosc(
+                parametry: parametryBazowe,
+                dla: card
+            )
+            let wysoka = max(min(wysokaMM, uzyteczna), 0)
+            let pozostala = max(
+                uzyteczna
+                - wysoka
+                - parametryBazowe.szczelinaMiedzyFrontamiMM * 2,
+                0
+            )
+            let niska = pozostala / 2
+            return generujZWysokosciami(
+                wysokosci: [wysoka, niska, niska],
+                parametry: parametryBazowe,
+                dla: card
+            )
+
+        case .dwieWysokie:
+            let uzyteczna = uzytecznaWysokosc(
+                parametry: parametryBazowe,
+                dla: card
+            )
+            let wysokoscFrontu = max(
+                (uzyteczna
+                 - parametryBazowe.szczelinaMiedzyFrontamiMM)
+                / 2,
+                0
+            )
+            return generujZWysokosciami(
+                wysokosci: [wysokoscFrontu, wysokoscFrontu],
+                parametry: parametryBazowe,
+                dla: card
+            )
+
+        case .wysokosciNiestandardowe(let wysokosci):
+            return generujZWysokosciami(
+                wysokosci: wysokosci,
+                parametry: parametryBazowe,
+                dla: card
+            )
+        }
+    }
+
+    private static func uzytecznaWysokosc(
+        parametry: ParametryAutomatycznegoUkladuSzuflad,
+        dla card: KartaTechnicznaSzafki
+    ) -> Double {
+        let geometry = geometria(karty: card)
+        return max(
+            geometry.wysokoscMM
+            - parametry.marginesDolnyMM
+            - parametry.marginesGornyMM,
+            0
+        )
+    }
+
+    private static func generujZWysokosciami(
+        wysokosci: [Double],
+        parametry: ParametryAutomatycznegoUkladuSzuflad,
+        dla card: KartaTechnicznaSzafki
+    ) -> [SzufladaModulu] {
+        let odfiltrowane = wysokosci.filter { $0 > 0 }
+        guard !odfiltrowane.isEmpty else { return [] }
+
+        // **Fronty muszą wypełnić szafkę co do milimetra.**
+        //
+        // Wcześniej ta funkcja układała podane wysokości od dolnego marginesu
+        // w górę i na tym kończyła — nic ich nie skalowało. Układ 140/140/280
+        // w szafce 900 mm zostawiał ponad 300 mm korpusu bez frontu, a UI
+        // pokazywało tylko etykietę „Suma wysokości", której nic nie
+        // egzekwowało.
+        //
+        // Reguła i jej uzasadnienie siedzą w `DrawerFrontStack` (DomainCore)
+        // i tą samą drogą idzie już kreator rysunkowy przez `ElevationModule`.
+        // **To jest jedyne miejsce, w którym wolno liczyć wysokości frontów** —
+        // dwa silniki z własną arytmetyką dawały ten sam mebel policzony
+        // dwiema metodami, zależnie od tego, którym oknem się do niego weszło.
+        //
+        // Tryb `.proportional` traktuje podane wysokości jako **proporcje**,
+        // więc zamysł projektanta („dwie płytkie u góry, jedna głęboka na
+        // dole") przeżywa zmianę gabarytu szafki. Presety wyżej liczą sumę
+        // dokładnie, więc dla nich skalowanie jest tożsamością.
+        let geometria = geometria(karty: card)
+        let stos = DrawerFrontStack.heights(
+            zoneHeight: Millimeters(geometria.wysokoscMM),
+            count: odfiltrowane.count,
+            mode: .proportional(odfiltrowane.map(Millimeters.init(_:))),
+            gap: Millimeters(parametry.szczelinaMiedzyFrontamiMM),
+            bottomMargin: Millimeters(parametry.marginesDolnyMM),
+            topMargin: Millimeters(parametry.marginesGornyMM)
+        )
+        // Pusty wynik oznacza strefę, która nie pomieści tylu frontów.
+        // Zostawiamy wtedy wysokości podane przez projektanta — walidacja
+        // (`waliduj(szuflady:...)`) i tak to zgłosi, a ciche wyrzucenie układu
+        // odbierałoby mu to, co ustawił.
+        let wysokosciFrontow = stos.heights.isEmpty
+            ? odfiltrowane
+            : stos.heights.map(\.rawValue)
+
+        let profile = KatalogRegulAkcesoriow.profil(
+            id: parametry.profilID
+        )
+        let doborProwadnicy = doborProwadnicy(
+            profil: profile,
+            w: card
+        )
+
+        var drawers: [SzufladaModulu] = []
+        var currentY = parametry.marginesDolnyMM
+        let ostatniIndeks = wysokosciFrontow.count - 1
+
+        for (index, wysokoscFrontu) in wysokosciFrontow.enumerated() {
+            let label = "\(card.numerSzafki)_SZ_\(index + 1)"
+
+            var drawer = SzufladaModulu(
+                etykieta: label,
+                nazwa: "Szuflada \(index + 1)",
+                profilID: parametry.profilID,
+                typFrontu: parametry.typFrontu,
+                pozycjaDolnaYMM: currentY,
+                wysokoscFrontuMM: wysokoscFrontu,
+                wysokoscSkrzynkiMM: parametry.wysokoscSkrzynkiMM,
+                nominalnaDlugoscMM: doborProwadnicy?.nominalLength.rawValue
+                    ?? parametry.nominalnaDlugoscMM,
+                luzDolnyMM: index == 0
+                    ? parametry.marginesDolnyMM
+                    : parametry.szczelinaMiedzyFrontamiMM / 2,
+                luzGornyMM: index == ostatniIndeks
+                    ? parametry.marginesGornyMM
+                    : parametry.szczelinaMiedzyFrontamiMM / 2
+            )
+            drawer.niewykorzystanaGlebokoscMM =
+                doborProwadnicy?.unusedDepth.rawValue
+            drawer.wymagaPotwierdzeniaSKUProwadnicy =
+                doborProwadnicy?.requiresSKUConfirmation
+            drawer.wariantSzuflady = .standardowa
+            drawer.cofniecieOdFrontuMM = cofniecieOdFrontuMM(
+                dla: drawer,
+                profil: profile,
+                w: card
+            )
+            drawer.odsuniecieOdScianBocznychMM =
+                odsuniecieOdScianBocznychMM(
+                    dla: drawer,
+                    profil: profile,
+                    w: card
+                )
+            if let asymetryczne = odsunieciaAsymetryczneV0104(
+                dla: drawer, profil: profile, w: card
+            ) {
+                drawer.odsuniecieStronaZawiasuMM = asymetryczne.zawias
+                drawer.odsuniecieStronaWolnaMM = asymetryczne.wolna
+            }
+            drawers.append(drawer)
+
+            currentY += wysokoscFrontu
+                + parametry.szczelinaMiedzyFrontamiMM
+        }
+
+        return drawers
+    }
+
+    private static func generujCargo(
+        parametry: ParametryAutomatycznegoUkladuSzuflad,
+        dla card: KartaTechnicznaSzafki
+    ) -> [SzufladaModulu] {
+        let uzyteczna = uzytecznaWysokosc(
+            parametry: parametry,
+            dla: card
+        )
+        guard uzyteczna > 0 else { return [] }
+
+        let profile = KatalogRegulAkcesoriow.profil(
+            id: parametry.profilID
+        )
+        let doborProwadnicy = doborProwadnicy(
+            profil: profile,
+            w: card
+        )
+
+        var drawer = SzufladaModulu(
+            etykieta: "\(card.numerSzafki)_CARGO",
+            nazwa: "Cargo",
+            profilID: parametry.profilID,
+            typFrontu: .zewnetrzny,
+            pozycjaDolnaYMM: parametry.marginesDolnyMM,
+            wysokoscFrontuMM: uzyteczna,
+            wysokoscSkrzynkiMM: parametry.wysokoscSkrzynkiMM,
+            nominalnaDlugoscMM: doborProwadnicy?.nominalLength.rawValue
+                ?? parametry.nominalnaDlugoscMM,
+            luzDolnyMM: parametry.marginesDolnyMM,
+            luzGornyMM: parametry.marginesGornyMM
+        )
+        drawer.niewykorzystanaGlebokoscMM =
+            doborProwadnicy?.unusedDepth.rawValue
+        drawer.wymagaPotwierdzeniaSKUProwadnicy =
+            doborProwadnicy?.requiresSKUConfirmation
+        drawer.wariantSzuflady = .cargo
+        drawer.cofniecieOdFrontuMM = cofniecieOdFrontuMM(
+            dla: drawer,
+            profil: profile,
+            w: card
+        )
+        drawer.odsuniecieOdScianBocznychMM =
+            odsuniecieOdScianBocznychMM(
+                dla: drawer,
+                profil: profile,
+                w: card
+            )
+        return [drawer]
     }
 
     static func waliduj(
@@ -308,6 +581,12 @@ enum SzufladyModuluEngine {
                     profil: profile,
                     w: card
                 )
+            let sideInset =
+                odsuniecieOdScianBocznychMM(
+                    dla: drawer,
+                    profil: profile,
+                    w: card
+                )
 
             let requiredDepth =
                 drawer.nominalnaDlugoscMM
@@ -333,11 +612,25 @@ enum SzufladyModuluEngine {
                let reduction =
                     formula
                         .redukcjaSzerokosciDnaMM {
-                let bottomWidth =
+                let availableWidth =
                     geometry.szerokoscMM
+                    - sideInset * 2
+                let bottomWidth =
+                    availableWidth
                     - reduction
 
-                if bottomWidth <= 0 {
+                if availableWidth <= 0 {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .szerokosc,
+                            poziom: .blad,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): boczne odsunięcia \(format(sideInset)) mm/strona zabierają całe światło korpusu."
+                        )
+                    )
+                } else if bottomWidth <= 0 {
                     collisions.append(
                         KolizjaSzuflady(
                             typ: .szerokosc,
@@ -363,22 +656,137 @@ enum SzufladyModuluEngine {
                 }
             }
 
-            if drawer.typFrontu
-                == .wewnetrzny,
-               !maZawiasZeroUskoku(
-                    card
-               ) {
+            if drawer.typFrontu == .wewnetrzny,
+               sideInset > 0 {
                 collisions.append(
                     KolizjaSzuflady(
-                        typ: .zawias,
-                        poziom:
-                            .ostrzezenie,
+                        typ: .szerokosc,
+                        poziom: .informacja,
                         etykietaSzuflady:
                             drawer.etykieta,
                         komunikat:
-                            "\(drawer.etykieta): szuflada wewnętrzna jest cofnięta o \(format(frontSetback)) mm. Dodaj zawias 155° z zerowym uskokiem albo potwierdź brak kolizji toru frontu."
+                            "\(drawer.etykieta): szuflada wewnętrzna ma boczne odsunięcie \(format(sideInset)) mm na stronę; światło robocze jest pomniejszone o \(format(sideInset * 2)) mm."
                     )
                 )
+            }
+
+            if drawer.typFrontu
+                == .wewnetrzny {
+                let frontRule =
+                    regulaSzufladyZaFrontem(
+                        w: card
+                    )
+                let requiredSetback =
+                    wymaganeCofniecieSzufladyWewnetrznejMM(
+                        profil:
+                            profile,
+                        w:
+                            card
+                    )
+                let requiredSideInset =
+                    wymaganeOdsuniecieSzufladyWewnetrznejMM(
+                        profil:
+                            profile,
+                        rule:
+                            frontRule
+                    )
+                let isRollOut =
+                    drawer
+                        .efektywnyWariant
+                    == .cargo
+                let isAllowed =
+                    frontRule
+                        .dopuszczaSzufladyWewnetrzne
+                    || (
+                        isRollOut
+                        && frontRule
+                            .dopuszczaRollOut
+                    )
+
+                if !isAllowed {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .zawias,
+                            poziom:
+                                .blad,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): szuflada za frontem wymaga zawiasu zero-protrusion min. \(format(frontRule.minimalnyKatOtwarciaStopnie))° albo potwierdzonego dystansu po stronie zawiasu. Obecna reguła odsuwa skrzynkę o \(format(frontRule.wymaganySymetrycznyDystansMM)) mm/strona."
+                        )
+                    )
+                } else if frontRule
+                    .wymagaPotwierdzeniaSKU {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .zawias,
+                            poziom:
+                                .ostrzezenie,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): zawias dopuszcza ten układ tylko po potwierdzeniu konkretnego SKU. Cofnięcie: \(format(frontSetback)) mm, dystans boczny: \(format(sideInset)) mm/strona."
+                        )
+                    )
+                } else if maZawiasZeroUskoku(
+                    card
+                ) {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .zawias,
+                            poziom:
+                                .informacja,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): układ zgodny z regułą zero-protrusion; zostawiono \(format(frontRule.dodatkowyLuzBezpieczenstwaMM)) mm luzu bezpieczeństwa na stronę."
+                        )
+                    )
+                }
+
+                if profilZawiasuFrontu(card) == nil {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .zawias,
+                            poziom:
+                                .ostrzezenie,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): brak wybranego zawiasu frontu z regułą zero-protrusion. System przyjmuje regułę domyślną, ale przed produkcją trzeba wskazać konkretny SKU zawiasu/prowadnika."
+                        )
+                    )
+                }
+
+                if frontSetback + 0.5
+                    < requiredSetback {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .zawias,
+                            poziom:
+                                .blad,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): cofnięcie \(format(frontSetback)) mm jest za małe dla szuflady za frontem. Minimum: \(format(requiredSetback)) mm od płaszczyzny frontu."
+                        )
+                    )
+                }
+
+                if sideInset + 0.5
+                    < requiredSideInset {
+                    collisions.append(
+                        KolizjaSzuflady(
+                            typ: .zawias,
+                            poziom:
+                                .blad,
+                            etykietaSzuflady:
+                                drawer.etykieta,
+                            komunikat:
+                                "\(drawer.etykieta): boczny dystans \(format(sideInset)) mm/strona jest za mały. Minimum z reguły zawiasu/prowadnicy: \(format(requiredSideInset)) mm/strona."
+                        )
+                    )
+                }
             }
         }
 
@@ -508,13 +916,17 @@ enum SzufladyModuluEngine {
         card.efektywneElementy
             .removeAll {
                 $0.typ == .szuflada
+                || $0.uwagi
+                    .hasPrefix(
+                        autoDrawerMarker
+                    )
             }
 
         card.efektywneAkcesoria
             .removeAll {
                 $0.uwagi
                     .hasPrefix(
-                        "AUTO-SZUFLADA:"
+                        autoDrawerMarker
                     )
             }
 
@@ -529,7 +941,19 @@ enum SzufladyModuluEngine {
                 .removeAll {
                     $0.opis
                         .hasPrefix(
-                            "AUTO-SZUFLADA:"
+                            autoDrawerMarker
+                        )
+                }
+
+            card
+                .efektywneElementy[
+                    index
+                ]
+                .efektywneLinieWiercenia
+                .removeAll {
+                    $0.opis
+                        .hasPrefix(
+                            autoDrawerMarker
                         )
                 }
         }
@@ -538,6 +962,10 @@ enum SzufladyModuluEngine {
             geometria(
                 karty: card
             )
+        let doborProwadnicy = doborProwadnicy(
+            profil: profil,
+            w: card
+        )
 
         let effectiveDrawers =
             szuflady.map {
@@ -545,6 +973,14 @@ enum SzufladyModuluEngine {
 
                 var resolvedDrawer =
                     drawer
+                if let doborProwadnicy {
+                    resolvedDrawer.nominalnaDlugoscMM =
+                        doborProwadnicy.nominalLength.rawValue
+                    resolvedDrawer.niewykorzystanaGlebokoscMM =
+                        doborProwadnicy.unusedDepth.rawValue
+                    resolvedDrawer.wymagaPotwierdzeniaSKUProwadnicy =
+                        doborProwadnicy.requiresSKUConfirmation
+                }
                 if resolvedDrawer
                     .cofniecieOdFrontuMM
                     == nil {
@@ -556,10 +992,35 @@ enum SzufladyModuluEngine {
                             w: card
                         )
                 }
+                if resolvedDrawer
+                    .odsuniecieOdScianBocznychMM
+                    == nil {
+                    resolvedDrawer
+                        .odsuniecieOdScianBocznychMM =
+                        odsuniecieOdScianBocznychMM(
+                            dla: resolvedDrawer,
+                            profil: profil,
+                            w: card
+                        )
+                }
                 return resolvedDrawer
             }
 
         for drawer in effectiveDrawers {
+            // Suma obu odsunięć, nie „jedno razy dwa".
+            //
+            // Front uchylny wystaje w światło **tylko po stronie zawiasu**,
+            // więc mnożenie przez dwa oddawało szerokość skrzynki po stronie,
+            // gdzie nic nie przeszkadza. Przy nieznanej stronie zawiasu
+            // `lacznaSzerokoscOdsunieciaV0104` sama wraca do wariantu
+            // symetrycznego.
+            let elementWidth =
+                max(
+                    geometry.szerokoscMM
+                    - drawer.lacznaSzerokoscOdsunieciaV0104,
+                    0
+                )
+
             let element =
                 ElementTechnicznySzafki(
                     etykieta:
@@ -571,7 +1032,7 @@ enum SzufladyModuluEngine {
                         drawer
                             .wysokoscSkrzynkiMM,
                     szerokoscMM:
-                        geometry.szerokoscMM,
+                        elementWidth,
                     gruboscMM:
                         16,
                     ilosc: 1,
@@ -580,7 +1041,7 @@ enum SzufladyModuluEngine {
                     kierunek:
                         .poziomy,
                     uwagi:
-                        "Pozycja Y: \(format(drawer.pozycjaDolnaYMM)) mm; front: \(format(drawer.wysokoscFrontuMM)) mm; długość nominalna: \(format(drawer.nominalnaDlugoscMM)) mm; cofnięcie od frontu: \(format(drawer.efektywneCofniecieOdFrontuMM)) mm.",
+                        "\(autoDrawerMarker) \(drawer.id.uuidString) • Pozycja Y: \(format(drawer.pozycjaDolnaYMM)) mm; front: \(format(drawer.wysokoscFrontuMM)) mm; długość nominalna: \(format(drawer.nominalnaDlugoscMM)) mm; cofnięcie od frontu: \(format(drawer.efektywneCofniecieOdFrontuMM)) mm; odsunięcie od ścian bocznych: \(drawer.opisOdsunieciaV0104).",
                     punktyWiercenia: []
                 )
 
@@ -633,6 +1094,10 @@ enum SzufladyModuluEngine {
                         wysokoscFrontuMM:
                             drawer
                                 .wysokoscFrontuMM,
+                        niewykorzystanaGlebokoscMM:
+                            drawer.niewykorzystanaGlebokoscMM,
+                        wymagaPotwierdzeniaSKU:
+                            drawer.wymagaPotwierdzeniaSKUProwadnicy,
                         cenaJednostkowaNettoPLN:
                             marketPrice?
                                 .cenaSredniaNettoPLN,
@@ -650,7 +1115,7 @@ enum SzufladyModuluEngine {
                             marketPrice?
                                 .liczbaProbek,
                         uwagi:
-                            "AUTO-SZUFLADA:\(drawer.id.uuidString)"
+                            "\(autoDrawerMarker)\(drawer.id.uuidString)"
                     )
                 )
 
@@ -659,10 +1124,30 @@ enum SzufladyModuluEngine {
                 profil: profil,
                 do: &card
             )
+
+            dodajListwyDystansoweSzufladyWewnetrznej(
+                dla:
+                    drawer,
+                profil:
+                    profil,
+                geometry:
+                    geometry,
+                do:
+                    &card
+            )
         }
 
         card.efektywneSzuflady =
             effectiveDrawers
+        card.uwagi =
+            replacingAutoDrawerBlock(
+                in:
+                    card.uwagi,
+                drawers:
+                    effectiveDrawers,
+                profile:
+                    profil
+            )
         card.dataAktualizacji =
             Date()
     }
@@ -701,12 +1186,262 @@ enum SzufladyModuluEngine {
             ? 10.0
             : 0.0
 
+        return wymaganeCofniecieSzufladyWewnetrznejMM(
+            frontThickness:
+                frontThickness,
+            pushReserve:
+                pushReserve
+        )
+    }
+
+    private static func wymaganeCofniecieSzufladyWewnetrznejMM(
+        profil:
+            ProfilAkcesoriumMeblowego?,
+        w card:
+            KartaTechnicznaSzafki
+    ) -> Double {
+        wymaganeCofniecieSzufladyWewnetrznejMM(
+            frontThickness:
+                gruboscFrontuZewnetrznegoMM(
+                    w: card
+                ),
+            pushReserve:
+                wymagaRezerwyPushToOpen(
+                    profil
+                )
+                ? 10.0
+                : 0.0
+        )
+    }
+
+    private static func wymaganeCofniecieSzufladyWewnetrznejMM(
+        frontThickness:
+            Double,
+        pushReserve:
+            Double
+    ) -> Double {
         return max(
             minimalneCofniecieSzufladyWewnetrznejMM,
             frontThickness
             + luzTechnologicznyZaFrontemMM
             + pushReserve
         )
+    }
+
+    /// Odsunięcia skrzynki **osobno dla strony zawiasu i strony wolnej**.
+    ///
+    /// Zwraca `nil`, gdy karta nie zna strony zawiasu — wtedy wołający zostaje
+    /// przy wartości symetrycznej. Zgadywanie strony byłoby gorsze niż jej
+    /// brak: skrzynka wyszłaby odsunięta w złą stronę i nie zmieściłaby się
+    /// przy zawiasie.
+    static func odsunieciaAsymetryczneV0104(
+        dla drawer: SzufladaModulu,
+        profil: ProfilAkcesoriumMeblowego?,
+        w card: KartaTechnicznaSzafki
+    ) -> (zawias: Double, wolna: Double)? {
+        guard drawer.typFrontu == .wewnetrzny,
+              drawer.odsuniecieOdScianBocznychMM == nil,
+              let strona = card.stronaZawiasuV0104,
+              strona == .leftHinged || strona == .rightHinged
+        else {
+            return nil
+        }
+
+        let rule = regulaSzufladyZaFrontem(w: card)
+        let zachowanie: DrawerBehindDoorPlanner.HingeBehaviour
+        if rule.zeroProtrusion {
+            zachowanie = rule.minimalnyKatOtwarciaStopnie >= 150
+                ? .zeroProtrusion155
+                : .zeroProtrusion125
+        } else {
+            zachowanie = .standard
+        }
+
+        let plan = DrawerBehindDoorPlanner.plan(
+            .init(
+                innerWidth: 600,
+                hinge: zachowanie,
+                doorThickness: 18
+            )
+        )
+
+        // Minimum z formuły profilu obowiązuje po obu stronach — to jest
+        // wymóg systemu prowadnic, niezależny od zawiasu.
+        let minimumProfilu =
+            profil?.formulaSzuflady?.minimalneOdsuniecieOdScianBocznychMM ?? 0
+
+        return (
+            zawias: max(plan.hingeSideInset.rawValue, minimumProfilu),
+            wolna: max(plan.freeSideInset.rawValue, minimumProfilu)
+        )
+    }
+
+    static func odsuniecieOdScianBocznychMM(
+        dla drawer:
+            SzufladaModulu,
+        profil:
+            ProfilAkcesoriumMeblowego?,
+        w card:
+            KartaTechnicznaSzafki
+    ) -> Double {
+        if let explicit =
+            drawer
+                .odsuniecieOdScianBocznychMM {
+            return max(
+                explicit,
+                0
+            )
+        }
+
+        guard drawer.typFrontu
+            == .wewnetrzny
+        else {
+            return 0
+        }
+
+        let frontRule =
+            regulaSzufladyZaFrontem(
+                w: card
+            )
+
+        return wymaganeOdsuniecieSzufladyWewnetrznejMM(
+            profil:
+                profil,
+            rule:
+                frontRule
+        )
+    }
+
+    /// Odsunięcie skrzynki od boków dla szuflady schowanej za frontem.
+    ///
+    /// Liczbę podaje `DrawerBehindDoorPlanner` (DomainCore), zbudowany na danych
+    /// producentów: zwykły zawias zostaje w świetle i zabiera pas grubości
+    /// frontu plus luz (18 + 3 = 21 mm), zawias zero-protrusion odrzuca skrzydło
+    /// poza światło i zostaje sam luz (3 mm). Wcześniej reguła stosowała
+    /// ryczałtowe 50 mm na stronę — w korpusie 600 oddawało to prawie 10 cm
+    /// szerokości skrzynki bez podstawy technicznej.
+    ///
+    /// **Zwraca wartość dla strony zawiasu** — czyli tę większą z dwóch.
+    ///
+    /// Do 2026-08-27 była stosowana po obu stronach, bo strona zawiasu nie
+    /// docierała do karty. Teraz dociera (`KartaTechnicznaSzafki.stronaZawiasuV0104`,
+    /// wypełniane z `FurnitureComponent.opening`), więc rozkładem po stronach
+    /// zajmuje się `odsunieciaAsymetryczneV0104`.
+    ///
+    /// Ta funkcja zostaje jako **wartość zachowawcza dla nieznanej strony
+    /// zawiasu**: front szufladowy, przesuwny albo stary zapis bez kierunku.
+    /// Wtedy odsuwamy obie strony po tyle, ile wymaga strona zawiasu — węższa
+    /// skrzynka jest wykonalna, odsunięta w złą stronę nie jest.
+    private static func wymaganeOdsuniecieSzufladyWewnetrznejMM(
+        profil:
+            ProfilAkcesoriumMeblowego?,
+        rule:
+            RegulaSzufladyZaFrontem
+    ) -> Double {
+        let zachowanie: DrawerBehindDoorPlanner.HingeBehaviour
+        if rule.zeroProtrusion {
+            zachowanie = rule.minimalnyKatOtwarciaStopnie >= 150
+                ? .zeroProtrusion155
+                : .zeroProtrusion125
+        } else {
+            zachowanie = .standard
+        }
+
+        let plan = DrawerBehindDoorPlanner.plan(
+            .init(
+                // Szerokość nie wpływa na samo wcięcie — liczy się zachowanie
+                // zawiasu. Podajemy wartość roboczą, żeby nie zgłaszał „za wąski".
+                innerWidth: 600,
+                hinge: zachowanie,
+                doorThickness: 18
+            )
+        )
+
+        return max(
+            profil?
+                .formulaSzuflady?
+                .minimalneOdsuniecieOdScianBocznychMM
+            ?? 0,
+            plan.hingeSideInset.rawValue
+        )
+    }
+
+    private static func dodajListwyDystansoweSzufladyWewnetrznej(
+        dla drawer:
+            SzufladaModulu,
+        profil:
+            ProfilAkcesoriumMeblowego,
+        geometry:
+            GeometriaWnetrzaSzafki,
+        do card:
+            inout KartaTechnicznaSzafki
+    ) {
+        guard drawer.typFrontu == .wewnetrzny else {
+            return
+        }
+
+        let sideInset =
+            drawer.efektywneOdsuniecieOdScianBocznychMM
+
+        guard sideInset > 0.5 else {
+            return
+        }
+
+        let railLength =
+            min(
+                drawer.nominalnaDlugoscMM,
+                max(
+                    geometry.glebokoscMM
+                    - drawer.efektywneCofniecieOdFrontuMM,
+                    0
+                )
+            )
+        let stripWidth =
+            minimalnaSzerokoscListwyDystansowejMM
+        let material =
+            card.materialKorpusu
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+                .isEmpty
+            ? "Materiał korpusu"
+            : card.materialKorpusu
+
+        for side in [
+            "lewa",
+            "prawa"
+        ] {
+            card
+                .efektywneElementy
+                .append(
+                    ElementTechnicznySzafki(
+                        etykieta:
+                            "\(drawer.etykieta)-DST-\(side.uppercased())",
+                        typ:
+                            .listwa,
+                        nazwa:
+                            "Listwa dystansowa prowadnicy \(side)",
+                        dlugoscMM:
+                            max(
+                                railLength,
+                                120
+                            ),
+                        szerokoscMM:
+                            stripWidth,
+                        gruboscMM:
+                            sideInset,
+                        ilosc:
+                            1,
+                        material:
+                            material,
+                        kierunek:
+                            .poziomy,
+                        uwagi:
+                            "\(autoDrawerMarker) \(drawer.id.uuidString) • Szuflada wewnętrzna za frontem. Listwa odsuwa prowadnicę o \(format(sideInset)) mm od boku; pierwszy otwór prowadnicy wg rysunku montażowego. Przy dystansie >18 mm wykonać pakiet dystansowy albo użyć dedykowanego adaptera producenta."
+                    )
+                )
+        }
     }
 
     private static func dodajPunktyProwadnic(
@@ -743,59 +1478,298 @@ enum SzufladyModuluEngine {
             let setback =
                 drawer
                     .efektywneCofniecieOdFrontuMM
+            let sideInset =
+                drawer
+                    .efektywneOdsuniecieOdScianBocznychMM
 
-            let baseX =
+            let railLength =
+                min(
+                    max(
+                        drawer
+                            .nominalnaDlugoscMM,
+                        0
+                    ),
+                    max(
+                        side.szerokoscMM
+                        - setback,
+                        0
+                    )
+                )
+            let lineA =
                 isRight
                 ? max(
                     side.szerokoscMM
-                    - 37,
-                    0
-                )
-                : 37
-            let x =
-                isRight
-                ? max(
-                    baseX - setback,
+                    - setback
+                    - railLength,
                     0
                 )
                 : min(
-                    baseX + setback,
-                    max(
-                        side.szerokoscMM,
-                        0
-                    )
+                    setback,
+                    side.szerokoscMM
+                )
+            let lineB =
+                isRight
+                ? max(
+                    side.szerokoscMM
+                    - setback,
+                    0
+                )
+                : min(
+                    setback
+                    + railLength,
+                    side.szerokoscMM
                 )
 
             card
                 .efektywneElementy[
                     index
                 ]
-                .punktyWiercenia
+                .efektywneLinieWiercenia
                 .append(
-                    PunktWierceniaSzafki(
+                    LiniaWierceniaSzafki(
                         element:
                             side.nazwa,
                         typ:
-                            .prowadnica,
+                            .osProwadnicySzuflady,
                         strona:
                             .wewnetrzna,
-                        xMM: x,
+                        xStartMM:
+                            min(lineA, lineB),
+                        xEndMM:
+                            max(lineA, lineB),
                         yMM: y,
-                        srednicaMM: 5,
-                        glebokoscMM:
-                            min(
-                                12,
-                                max(
-                                    side.gruboscMM
-                                    - 2,
-                                    0
-                                )
-                            ),
+                        etykieta:
+                            drawer.etykieta,
                         opis:
-                            "AUTO-SZUFLADA: \(drawer.etykieta) • \(profil.producent) \(profil.rodzina) • oś montażowa prowadnicy • cofnięcie od frontu \(format(setback)) mm"
+                            "AUTO-SZUFLADA: \(drawer.etykieta) • \(profil.producent) \(profil.rodzina) • linia prowadnicy L=\(format(drawer.nominalnaDlugoscMM)) mm • cofnięcie od frontu \(format(setback)) mm • odsunięcie od boku \(format(sideInset)) mm"
                     )
                 )
+
+            let holeOffsets =
+                otworyBazoweProwadnicyMM(
+                    nominalnaDlugoscMM:
+                        drawer
+                            .nominalnaDlugoscMM,
+                    glebokoscBokuMM:
+                        side
+                            .szerokoscMM,
+                    cofniecieOdFrontuMM:
+                        setback
+                )
+
+            for (
+                holeIndex,
+                offset
+            ) in holeOffsets
+                .enumerated()
+            {
+                let x =
+                    isRight
+                    ? max(
+                        side.szerokoscMM
+                        - setback
+                        - offset,
+                        0
+                    )
+                    : min(
+                        setback
+                        + offset,
+                        max(
+                            side.szerokoscMM,
+                            0
+                        )
+                    )
+
+                card
+                    .efektywneElementy[
+                        index
+                    ]
+                    .punktyWiercenia
+                    .append(
+                        PunktWierceniaSzafki(
+                            element:
+                                side.nazwa,
+                            typ:
+                                .prowadnica,
+                            strona:
+                                .wewnetrzna,
+                            xMM: x,
+                            yMM: y,
+                            srednicaMM: 2.5,
+                            glebokoscMM:
+                                min(
+                                    12,
+                                    max(
+                                        side.gruboscMM
+                                        - 2,
+                                        0
+                                    )
+                                ),
+                            opis:
+                                "AUTO-SZUFLADA: \(drawer.etykieta) • \(profil.producent) \(profil.rodzina) • punkt bazowy prowadnicy H\(holeIndex + 1), X=\(format(offset)) mm od frontu prowadnicy • potwierdzić z konkretnym SKU"
+                        )
+                    )
+            }
         }
+    }
+
+    private static func replacingAutoDrawerBlock(
+        in text: String,
+        drawers:
+            [SzufladaModulu],
+        profile:
+            ProfilAkcesoriumMeblowego
+    ) -> String {
+        var result =
+            text
+
+        while let start =
+            result.range(
+                of:
+                    autoDrawerBlockStart
+            ),
+              let end =
+                result.range(
+                    of:
+                        autoDrawerBlockEnd,
+                    range:
+                        start.upperBound
+                        ..< result.endIndex
+                ) {
+            result.removeSubrange(
+                start.lowerBound
+                ..< end.upperBound
+            )
+        }
+
+        let active =
+            drawers
+                .filter(\.aktywna)
+
+        guard !active.isEmpty else {
+            return result
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+        }
+
+        let internalDrawers =
+            active
+                .filter {
+                    $0.typFrontu
+                    == .wewnetrzny
+                }
+        var lines = [
+            autoDrawerBlockStart,
+            "Szuflady: \(active.count) × \(profile.producent) \(profile.rodzina) \(profile.model)"
+        ]
+
+        if let first = active.first {
+            lines.append(
+                "Prowadnica: NL \(format(first.nominalnaDlugoscMM)) mm"
+                    + (first.niewykorzystanaGlebokoscMM.map {
+                        "; niewykorzystana głębokość \(format($0)) mm"
+                    } ?? "")
+            )
+            if first.wymagaPotwierdzeniaSKUProwadnicy == true {
+                lines.append(
+                    "Prowadnica: konkretny SKU potwierdzić w tabeli producenta; kalkulator wskazuje wymiar, nie model."
+                )
+            }
+        }
+
+        if !internalDrawers.isEmpty {
+            let spacerCount =
+                internalDrawers
+                    .filter {
+                        $0.efektywneOdsuniecieOdScianBocznychMM > 0.5
+                    }
+                    .count * 2
+            lines.append(
+                "Szuflady za frontem: \(internalDrawers.count) szt.; listwy dystansowe L/P: \(spacerCount) szt."
+            )
+            lines.append(
+                "Montaż: pierwszy otwór prowadnicy według rysunku, dalsze otwory według szablonu/SKU producenta."
+            )
+
+            for drawer in internalDrawers {
+                lines.append(
+                    "- \(drawer.etykieta): cofnięcie \(format(drawer.efektywneCofniecieOdFrontuMM)) mm, dystans boczny \(format(drawer.efektywneOdsuniecieOdScianBocznychMM)) mm/strona."
+                )
+            }
+        }
+
+        lines.append(autoDrawerBlockEnd)
+
+        let trimmed =
+            result
+                .trimmingCharacters(
+                    in:
+                        .whitespacesAndNewlines
+                )
+        let block =
+            lines.joined(
+                separator:
+                    "\n"
+            )
+
+        if trimmed.isEmpty {
+            return block
+        }
+
+        return [
+            trimmed,
+            block
+        ]
+        .joined(separator: "\n\n")
+    }
+
+    private static func otworyBazoweProwadnicyMM(
+        nominalnaDlugoscMM:
+            Double,
+        glebokoscBokuMM:
+            Double,
+        cofniecieOdFrontuMM:
+            Double
+    ) -> [Double] {
+        let dostepnaDlugosc =
+            min(
+                max(
+                    nominalnaDlugoscMM,
+                    0
+                ),
+                max(
+                    glebokoscBokuMM
+                    - cofniecieOdFrontuMM,
+                    0
+                )
+            )
+        let roboczeX =
+            [
+                37.0,
+                128.0,
+                256.0,
+                448.0
+            ]
+
+        let wynik =
+            roboczeX
+                .filter {
+                    $0 <= dostepnaDlugosc - 12
+                }
+
+        return wynik.isEmpty
+            ? [
+                min(
+                    37,
+                    max(
+                        dostepnaDlugosc / 2,
+                        0
+                    )
+                )
+            ]
+            : wynik
     }
 
     private static func pozycjePolek(
@@ -843,12 +1817,57 @@ enum SzufladyModuluEngine {
         _ card:
             KartaTechnicznaSzafki
     ) -> Bool {
+        regulaSzufladyZaFrontem(
+            w: card
+        )
+        .zeroProtrusion
+    }
+
+    private static func regulaSzufladyZaFrontem(
+        w card:
+            KartaTechnicznaSzafki
+    ) -> RegulaSzufladyZaFrontem {
+        profilZawiasuFrontu(
+            card
+        )?
+        .regulaSzufladyZaFrontem
+        ?? .standard110
+    }
+
+    private static func profilZawiasuFrontu(
+        _ card:
+            KartaTechnicznaSzafki
+    ) -> ProfilAkcesoriumMeblowego? {
         card
             .efektywneAkcesoria
-            .contains {
-                $0.profilID
-                == "blum.cliptop.155.zero"
+            .compactMap {
+                accessory
+                    -> ProfilAkcesoriumMeblowego? in
+
+                if let profile =
+                    KatalogRegulAkcesoriow
+                        .profil(
+                            id: accessory
+                                .profilID
+                        ),
+                   profile
+                    .kategoria == .zawias {
+                    return profile
+                }
+
+                guard accessory
+                    .kategoria == .zawias
+                else {
+                    return nil
+                }
+
+                return KatalogRegulAkcesoriow
+                    .profil(
+                        id: accessory
+                            .profilID
+                    )
             }
+            .first
     }
 
     private static func domyslnaGrubosc(
@@ -867,6 +1886,29 @@ enum SzufladyModuluEngine {
              .wymagaPotwierdzenia:
             return nil
         }
+    }
+
+    /// Dobór wymiaru wynika z geometrii karty. Profil dostarcza wyłącznie
+    /// drabinkę dostępnych długości; wynik nadal wymaga potwierdzenia
+    /// konkretnego SKU, bo kalkulator nie wybiera modelu producenta.
+    private static func doborProwadnicy(
+        profil: ProfilAkcesoriumMeblowego?,
+        w card: KartaTechnicznaSzafki
+    ) -> FrontHardwareCalculator.RunnerSelection? {
+        let drabinka = profil?.dozwoloneDlugosciMM
+            .filter { $0 > 0 }
+            .map(Millimeters.init(_:))
+        let dostepneDlugosci: [Millimeters]
+        if let drabinka, !drabinka.isEmpty {
+            dostepneDlugosci = drabinka
+        } else {
+            dostepneDlugosci = FrontHardwareCalculator.runnerLengths
+        }
+
+        return FrontHardwareCalculator.selectRunner(
+            forCabinetDepth: Millimeters(card.glebokoscMM),
+            availableLengths: dostepneDlugosci
+        )
     }
 
     private static func gruboscFrontuZewnetrznegoMM(

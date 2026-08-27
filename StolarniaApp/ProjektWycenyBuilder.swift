@@ -707,7 +707,13 @@ enum ProjektWycenyBuilder {
                                 price > 0
                                 ? "katalog-regul"
                                 : "brak-ceny"
-                            )
+                            ),
+                        nominalnaDlugoscMM:
+                            accessory
+                                .nominalnaDlugoscMM,
+                        wariantWysokosciMM:
+                            accessory
+                                .wariantWysokosciMM
                     )
 
                 if var existing =

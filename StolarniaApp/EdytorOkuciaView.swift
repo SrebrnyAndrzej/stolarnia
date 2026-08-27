@@ -293,6 +293,7 @@ struct EdytorOkuciaView:
                     .buttonStyle(
                         .borderedProminent
                     )
+                    .keyboardShortcut("s", modifiers: [.command])
                 }
             }
         }

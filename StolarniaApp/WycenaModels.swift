@@ -90,6 +90,7 @@ enum KategoriaKosztuWyceny:
     case blaty
     case okucia
     case akcesoria
+    case oswietlenie
     case robocizna
     case montaz
     case transport
@@ -109,6 +110,8 @@ enum KategoriaKosztuWyceny:
             return "Okucia"
         case .akcesoria:
             return "Akcesoria"
+        case .oswietlenie:
+            return "Oświetlenie"
         case .robocizna:
             return "Robocizna"
         case .montaz:
@@ -212,6 +215,33 @@ struct PozycjaOkuciaProjektuV068:
     var jednostka: String
     var cenaJednostkowaNetto: Double
     var zrodlo: String
+    /// Długość nominalna prowadnicy w mm.
+    ///
+    /// **Bez tego okucia nie da się zamówić.** „GTV • AXIS PRO • H120" mówi,
+    /// jaki system, ale nie mówi, jaką sztukę wysłać — a prowadnica 450 i 500
+    /// to dwa różne indeksy w hurtowni.
+    ///
+    /// Wartość istniała w karcie technicznej (`nominalnaDlugoscMM`) i była
+    /// nawet używana do grupowania pozycji, ale **gubiła się przy budowaniu
+    /// wyceny**, bo ten typ nie miał na nią pola.
+    ///
+    /// `Optional` celowo: archiwa ofert sprzed tej zmiany nie mają tego klucza,
+    /// a syntezowany dekoder wymagałby go dla pola nieopcjonalnego.
+    var nominalnaDlugoscMM: Double?
+    /// Wariant wysokości boku (np. H120 dla GTV AXIS PRO) w mm.
+    var wariantWysokosciMM: Double?
+
+    /// Wymiar dopisywany do nazwy pozycji na liście do hurtowni.
+    var opisWymiaruV0103: String? {
+        var czesci: [String] = []
+        if let dlugosc = nominalnaDlugoscMM, dlugosc > 0 {
+            czesci.append("NL \(Int(dlugosc.rounded())) mm")
+        }
+        if let wysokosc = wariantWysokosciMM, wysokosc > 0 {
+            czesci.append("H\(Int(wysokosc.rounded()))")
+        }
+        return czesci.isEmpty ? nil : czesci.joined(separator: " · ")
+    }
 }
 
 struct ProjektWyceny:
@@ -240,6 +270,19 @@ struct ProjektWyceny:
     // v0.70.0: obrzeże i uchwyty
     var metryKrawedziBanding: Double = 0
     var liczbaFrontow: Int = 0
+
+    // MARK: - v0.28.0 Dodatki projektu (LED, blendy, oblożenie ścian)
+    /// Sumaryczna długość listew LED montowanych pod szafkami wiszącymi.
+    /// Zwykle równa sumie szerokości modułów wiszących minus przerwy.
+    var metryBiezaceListewLED: Double = 0
+    /// Liczba blend domykających ciąg — wąskie panele w lukach między
+    /// modułami a ścianą albo między dwoma ciągami.
+    var liczbaBlendDomykajacych: Int = 0
+    /// Szerokość pojedynczej blendy w mm — wpływa na koszt m² (blenda × wysokość × szerokość).
+    var szerokoscBlendyMM: Double = 50
+    /// Powierzchnia ściany oklejona płytą meblową (fartuch/panele ścienne).
+    /// Cena bazowana na cenie wybranej płyty korpusu w danym wariancie.
+    var powierzchniaOblozeniaScianM2: Double = 0
 
     // v0.68.0: dokładne powiązanie powierzchni z materiałem wybranym
     // w konkretnym pomieszczeniu. Pusta tablica oznacza projekt legacy.
@@ -287,9 +330,20 @@ extension ProjektWyceny {
         case liczbaGodzinProdukcji
         case liczbaGodzinMontazu
         case liczbaTransportow
+        case liczbaModulowDolnych
+        case liczbaModulowWiszacych
+        case liczbaPólekWewnetrznych
+        case dlugoscCokuluM
+        case metryKrawedziBanding
+        case liczbaFrontow
         case uzyciaMaterialowV068
         case ostrzezeniaV068
         case okuciaV068
+        // v0.28.0 Dodatki projektu
+        case metryBiezaceListewLED
+        case liczbaBlendDomykajacych
+        case szerokoscBlendyMM
+        case powierzchniaOblozeniaScianM2
     }
 
     init(
@@ -375,6 +429,49 @@ extension ProjektWyceny {
                     .liczbaTransportow
             )
 
+        liczbaModulowDolnych =
+            try container.decodeIfPresent(
+                Int.self,
+                forKey:
+                    .liczbaModulowDolnych
+            )
+            ?? 0
+        liczbaModulowWiszacych =
+            try container.decodeIfPresent(
+                Int.self,
+                forKey:
+                    .liczbaModulowWiszacych
+            )
+            ?? 0
+        liczbaPólekWewnetrznych =
+            try container.decodeIfPresent(
+                Int.self,
+                forKey:
+                    .liczbaPólekWewnetrznych
+            )
+            ?? 0
+        dlugoscCokuluM =
+            try container.decodeIfPresent(
+                Double.self,
+                forKey:
+                    .dlugoscCokuluM
+            )
+            ?? 0
+        metryKrawedziBanding =
+            try container.decodeIfPresent(
+                Double.self,
+                forKey:
+                    .metryKrawedziBanding
+            )
+            ?? 0
+        liczbaFrontow =
+            try container.decodeIfPresent(
+                Int.self,
+                forKey:
+                    .liczbaFrontow
+            )
+            ?? 0
+
         uzyciaMaterialowV068 =
             try container.decodeIfPresent(
                 [UzycieMaterialuWycenyV068].self,
@@ -396,6 +493,28 @@ extension ProjektWyceny {
                     .okuciaV068
             )
             ?? []
+
+        // v0.28.0 Dodatki projektu — fallback 0 dla starszych archiwów.
+        metryBiezaceListewLED =
+            try container.decodeIfPresent(
+                Double.self,
+                forKey: .metryBiezaceListewLED
+            ) ?? 0
+        liczbaBlendDomykajacych =
+            try container.decodeIfPresent(
+                Int.self,
+                forKey: .liczbaBlendDomykajacych
+            ) ?? 0
+        szerokoscBlendyMM =
+            try container.decodeIfPresent(
+                Double.self,
+                forKey: .szerokoscBlendyMM
+            ) ?? 50
+        powierzchniaOblozeniaScianM2 =
+            try container.decodeIfPresent(
+                Double.self,
+                forKey: .powierzchniaOblozeniaScianM2
+            ) ?? 0
     }
 
     func encode(
@@ -469,6 +588,36 @@ extension ProjektWyceny {
                 .liczbaTransportow
         )
         try container.encode(
+            liczbaModulowDolnych,
+            forKey:
+                .liczbaModulowDolnych
+        )
+        try container.encode(
+            liczbaModulowWiszacych,
+            forKey:
+                .liczbaModulowWiszacych
+        )
+        try container.encode(
+            liczbaPólekWewnetrznych,
+            forKey:
+                .liczbaPólekWewnetrznych
+        )
+        try container.encode(
+            dlugoscCokuluM,
+            forKey:
+                .dlugoscCokuluM
+        )
+        try container.encode(
+            metryKrawedziBanding,
+            forKey:
+                .metryKrawedziBanding
+        )
+        try container.encode(
+            liczbaFrontow,
+            forKey:
+                .liczbaFrontow
+        )
+        try container.encode(
             uzyciaMaterialowV068,
             forKey:
                 .uzyciaMaterialowV068
@@ -483,6 +632,23 @@ extension ProjektWyceny {
             forKey:
                 .okuciaV068
         )
+
+        // v0.28.0 Dodatki projektu
+        try container.encode(
+            metryBiezaceListewLED,
+            forKey: .metryBiezaceListewLED
+        )
+        try container.encode(
+            liczbaBlendDomykajacych,
+            forKey: .liczbaBlendDomykajacych
+        )
+        try container.encode(
+            szerokoscBlendyMM,
+            forKey: .szerokoscBlendyMM
+        )
+        try container.encode(
+            powierzchniaOblozeniaScianM2,
+            forKey: .powierzchniaOblozeniaScianM2
+        )
     }
 }
-

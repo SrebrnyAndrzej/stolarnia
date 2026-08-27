@@ -200,13 +200,10 @@ struct PanelGlownyView: View {
                 zadanieNowegoProjektuV0105:
                     $nowyProjektZPulpituV0105
             )
-            .navigationTitle("Projekty")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    przyciskPulpituV0105
-                }
-            }
+            // Bez przycisku pulpitu: przy otwartych obu kolumnach stałby
+            // obok tego samego przycisku w karcie projektu, czyli dwa
+            // różnie nazwane wejścia do jednego miejsca. Tytuł kolumny
+            // ustawia sam `ProjektListaView`.
             .navigationSplitViewColumnWidth(
                 min: 260,
                 ideal: 300,

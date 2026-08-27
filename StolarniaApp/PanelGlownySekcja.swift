@@ -1,5 +1,16 @@
 import Foundation
 
+/// Która połowa aplikacji jest otwarta: projekty czy bazy.
+///
+/// **Sam rozróżnik, bez opisu.** Do 2026-08-27 ten typ niósł też `title`,
+/// `subtitle` i `systemImage` — teksty dwóch wierszy dawnego paska bocznego
+/// („Klienci i projekty", „Firma i bazy"). Pasek zastąpił pulpit kaflowy,
+/// który ma własne nazwy przy kaflach, a stare zostały w typie i wracały
+/// jako tytuł kolumny listy projektów.
+///
+/// Jeśli potrzebujesz podpisu sekcji, weź go z miejsca, które go pokazuje —
+/// nie odtwarzaj tu słownika, bo wtedy dwa ekrany znów zaczną nazywać to
+/// samo inaczej.
 enum PanelGlownySekcja:
     String,
     CaseIterable,
@@ -10,31 +21,4 @@ enum PanelGlownySekcja:
     case firma
 
     var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .projekty:
-            return "Klienci i projekty"
-        case .firma:
-            return "Firma i bazy"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .projekty:
-            return "Zlecenia, pomieszczenia i projekty mebli"
-        case .firma:
-            return "Dane firmy, materiały, okucia i stawki"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .projekty:
-            return "folder"
-        case .firma:
-            return "building.2"
-        }
-    }
 }

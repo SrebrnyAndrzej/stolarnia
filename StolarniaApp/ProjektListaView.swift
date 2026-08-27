@@ -66,7 +66,11 @@ struct ProjektListaView: View {
                 }
             }
         }
-        .navigationTitle("Klienci i projekty")
+        // Kolumna nazywa się „Projekty", nie „Klienci i projekty".
+        // Ta druga nazwa opisywała **pozycję dawnego paska bocznego**, który
+        // stał obok „Firma i bazy" — pasek wygasiliśmy razem z menu firmy,
+        // a nazwa została i przebijała się jako tytuł kolumny.
+        .navigationTitle("Projekty")
         .environment(\.colorScheme, .dark)
         .stolarniaScreenSurface(
             .content

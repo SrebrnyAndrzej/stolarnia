@@ -1281,14 +1281,19 @@ struct ProjektSzczegolyView: View {
             ToolbarItem(
                 placement: .topBarLeading
             ) {
+                // Ten przycisk od zmiany nawigacji wraca **na pulpit**,
+                // a nie do dawnej listy „Klienci i projekty" — nazwa i ikona
+                // obiecywały ekran, którego już nie ma. Nazywa się tak samo
+                // jak wszędzie indziej, bo prowadzi w to samo miejsce.
                 Button {
                     onReturnToProjectList()
                 } label: {
                     Label(
-                        "Klienci i projekty",
-                        systemImage: "person.2"
+                        "Pulpit",
+                        systemImage: "square.grid.2x2"
                     )
                 }
+                .stolarniaPressable()
             }
         }
 

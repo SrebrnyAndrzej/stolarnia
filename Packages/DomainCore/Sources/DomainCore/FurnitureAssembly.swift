@@ -27,6 +27,18 @@ public enum FurnitureComponentRole: String, Codable, CaseIterable, Sendable {
     case reinforcement
     case rail
     case leg
+    /// Element skrzynki szuflady: dno, boki i tył.
+    ///
+    /// Miały rolę `.custom`, więc w rozkroju i BOM nie różniły się od dowolnej
+    /// listwy — nie dało się ich ani odfiltrować, ani policzyć osobno.
+    /// A skrzynka rządzi się innymi regułami niż korpus: inna grubość płyty,
+    /// inne obrzeże, i **nie zawsze robi się ją samemu** — przy systemach
+    /// z gotową skrzynką (Amix Slim Box, Blum LEGRABOX) te formatki w ogóle
+    /// nie idą na piłę.
+    ///
+    /// Nowy przypadek jest bezpieczny dla zapisanych danych: stare rekordy
+    /// nie mają tej wartości, więc dekodują się jak dotąd.
+    case drawerBox
     case custom
 }
 
@@ -38,6 +50,17 @@ public struct FurnitureComponent: Identifiable, Codable, Hashable, Sendable {
     public var localPosition: Point3MM
     public var rotationDegrees: Double
     public var isShared: Bool
+    /// Sposób otwierania — tylko dla komponentów o roli `.front`.
+    ///
+    /// **Bez tego strona zawiasu nie dociera nigdzie poza edytor.** Kierunek
+    /// mieszka w `ElevationFrontSpan.opening`, ale zespół go nie niósł, więc
+    /// karta techniczna i silnik szuflad nie miały skąd wiedzieć, po której
+    /// stronie front wystaje w światło. Skutkowało to symetrycznym odsunięciem
+    /// skrzynki szuflady — po obu stronach, choć zawias jest po jednej.
+    ///
+    /// `Optional`, bo dla płyt, półek i pleców pytanie nie ma sensu, a starsze
+    /// zapisy nie mają tego klucza.
+    public var opening: FurnitureFrontOpeningV020?
 
     public init(
         id: ComponentID = ComponentID(),
@@ -46,7 +69,8 @@ public struct FurnitureComponent: Identifiable, Codable, Hashable, Sendable {
         size: Size3MM,
         localPosition: Point3MM = .zero,
         rotationDegrees: Double = 0,
-        isShared: Bool = false
+        isShared: Bool = false,
+        opening: FurnitureFrontOpeningV020? = nil
     ) throws {
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DomainError.invariantViolation("Kod komponentu nie może być pusty.")
@@ -65,6 +89,7 @@ public struct FurnitureComponent: Identifiable, Codable, Hashable, Sendable {
         self.localPosition = localPosition
         self.rotationDegrees = rotationDegrees
         self.isShared = isShared
+        self.opening = opening
     }
 }
 
@@ -112,6 +137,15 @@ public struct FurnitureAssembly: Identifiable, Codable, Hashable, Sendable {
     public var name: String
     public var kind: FurnitureAssemblyKind
     public var size: Size3MM
+    /// Dobrana długość nominalna prowadnicy szuflady.
+    ///
+    /// To jest wymiar zamówieniowy, nie głębokość skrzynki ani korpusu.
+    /// `Optional` zachowuje zgodność ze starszymi zapisami oraz rozróżnia
+    /// zespół bez szuflad od zespołu z dobraną prowadnicą. `nil` oznacza
+    /// również zespół niejednoznaczny: jego strefy używają różnych systemów
+    /// albo różnych długości. Pole opisuje cały mebel, więc nie może wtedy
+    /// udawać wartości pierwszej strefy.
+    public var drawerRunnerNominalLength: Millimeters?
     public var components: [FurnitureComponent]
     public var subassemblies: [FurnitureSubassembly]
     public var constraints: [FurnitureConstraint]
@@ -123,6 +157,7 @@ public struct FurnitureAssembly: Identifiable, Codable, Hashable, Sendable {
         name: String,
         kind: FurnitureAssemblyKind,
         size: Size3MM,
+        drawerRunnerNominalLength: Millimeters? = nil,
         components: [FurnitureComponent] = [],
         subassemblies: [FurnitureSubassembly] = [],
         constraints: [FurnitureConstraint] = [],
@@ -133,6 +168,12 @@ public struct FurnitureAssembly: Identifiable, Codable, Hashable, Sendable {
         }
         guard size.isValid else {
             throw DomainError.invariantViolation("Zespół meblowy musi mieć dodatni gabaryt 3D.")
+        }
+        if let drawerRunnerNominalLength,
+           drawerRunnerNominalLength <= .zero {
+            throw DomainError.invariantViolation(
+                "Długość nominalna prowadnicy musi być dodatnia."
+            )
         }
         guard Set(components.map(\.id)).count == components.count else {
             throw DomainError.invariantViolation("Zespół nie może zawierać powtórzonych ComponentID.")
@@ -161,6 +202,7 @@ public struct FurnitureAssembly: Identifiable, Codable, Hashable, Sendable {
         self.name = name
         self.kind = kind
         self.size = size
+        self.drawerRunnerNominalLength = drawerRunnerNominalLength
         self.components = components
         self.subassemblies = subassemblies
         self.constraints = constraints

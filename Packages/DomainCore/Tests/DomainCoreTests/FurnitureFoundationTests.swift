@@ -1,7 +1,41 @@
+import Foundation
 import Testing
 @testable import DomainCore
 
 struct FurnitureFoundationTests {
+    @Test
+    func assemblyRunnerLengthRoundTripsAndOldPayloadDefaultsToNil() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let withRunner = try FurnitureAssembly(
+            name: "Szafka z szufladami",
+            kind: .cabinet,
+            size: Size3MM(width: 600, height: 720, depth: 522),
+            drawerRunnerNominalLength: 450
+        )
+
+        let decodedWithRunner = try decoder.decode(
+            FurnitureAssembly.self,
+            from: encoder.encode(withRunner)
+        )
+        #expect(decodedWithRunner.drawerRunnerNominalLength == 450)
+
+        let oldAssembly = try FurnitureAssembly(
+            name: "Starszy zapis",
+            kind: .cabinet,
+            size: Size3MM(width: 600, height: 720, depth: 522)
+        )
+        let oldData = try encoder.encode(oldAssembly)
+        let oldJSON = try #require(String(data: oldData, encoding: .utf8))
+        #expect(!oldJSON.contains("drawerRunnerNominalLength"))
+
+        let decodedOldAssembly = try decoder.decode(
+            FurnitureAssembly.self,
+            from: oldData
+        )
+        #expect(decodedOldAssembly.drawerRunnerNominalLength == nil)
+    }
+
     @Test
     func placementKeepsStableIDsAndWallReference() throws {
         let roomID = RoomID()

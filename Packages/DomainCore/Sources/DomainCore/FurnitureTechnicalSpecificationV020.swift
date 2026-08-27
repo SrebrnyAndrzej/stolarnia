@@ -78,6 +78,7 @@ public struct SpaceTowerZoneSpecificationV020:
     {
         case lowerDrawers
         case middleDrawers
+        case upperDrawers
         case upperOpen
         case upperShelves
         case upperClosed
@@ -88,19 +89,25 @@ public struct SpaceTowerZoneSpecificationV020:
     public var heightMM: Double
     public var drawerCount: Int
     public var shelfCount: Int
+    public var drawerFrontHeightsMM:
+        [Double]?
 
     public init(
         id: UUID = UUID(),
         kind: Kind,
         heightMM: Double,
         drawerCount: Int,
-        shelfCount: Int
+        shelfCount: Int,
+        drawerFrontHeightsMM:
+            [Double]? = nil
     ) {
         self.id = id
         self.kind = kind
         self.heightMM = heightMM
         self.drawerCount = drawerCount
         self.shelfCount = shelfCount
+        self.drawerFrontHeightsMM =
+            drawerFrontHeightsMM
     }
 }
 

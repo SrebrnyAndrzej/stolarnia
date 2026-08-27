@@ -1,0 +1,61 @@
+{
+  "sourceFileName": "ARCH_KAMIEN_WN_26-06-29-out.dwg",
+  "unit": "centimeters",
+  "detectedItems": [
+    {
+      "id": "meble-422104",
+      "sourceHandle": "422104",
+      "sourceBlock": "meble",
+      "layer": "0",
+      "rawName": "wyspa kuchenna",
+      "kind": "island",
+      "footprint": { "x": 58479.1, "y": -3927.9, "width": 200.0, "depth": 140.0, "rotationDegrees": 0 },
+      "estimatedModuleCount": 3,
+      "confidence": 0.92
+    },
+    {
+      "id": "meble-422076",
+      "sourceHandle": "422076",
+      "sourceBlock": "meble",
+      "layer": "0",
+      "rawName": "modul 60x60",
+      "kind": "baseCabinetRun",
+      "footprint": { "x": 58874.1, "y": -3516.4, "width": 60.0, "depth": 60.0, "rotationDegrees": 0 },
+      "estimatedModuleCount": 1,
+      "confidence": 0.86
+    },
+    {
+      "id": "meble-422070",
+      "sourceHandle": "422070",
+      "sourceBlock": "meble",
+      "layer": "0",
+      "rawName": "lodowka",
+      "kind": "refrigerator",
+      "footprint": { "x": 58934.1, "y": -3516.4, "width": 60.0, "depth": 60.0, "rotationDegrees": 180 },
+      "estimatedModuleCount": 1,
+      "confidence": 0.93
+    },
+    {
+      "id": "meble-422069",
+      "sourceHandle": "422069",
+      "sourceBlock": "meble",
+      "layer": "0",
+      "rawName": "plyta grzewcza",
+      "kind": "cooktop",
+      "footprint": { "x": 59054.1, "y": -3516.4, "width": 60.0, "depth": 60.0, "rotationDegrees": 0 },
+      "estimatedModuleCount": 1,
+      "confidence": 0.91
+    },
+    {
+      "id": "meble-422213",
+      "sourceHandle": "422213",
+      "sourceBlock": "meble",
+      "layer": "0",
+      "rawName": "zmywarka 45",
+      "kind": "dishwasher",
+      "footprint": { "x": 59174.1, "y": -3576.4, "width": 60.0, "depth": 45.0, "rotationDegrees": 0 },
+      "estimatedModuleCount": 1,
+      "confidence": 0.90
+    }
+  ]
+}

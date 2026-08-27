@@ -237,6 +237,7 @@ public extension FurnitureAssembly {
             name: name,
             kind: kind,
             size: size,
+            drawerRunnerNominalLength: drawerRunnerNominalLength,
             components: newComponents,
             subassemblies: subassemblies,
             constraints: constraints,

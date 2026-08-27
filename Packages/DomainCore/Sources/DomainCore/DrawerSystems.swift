@@ -30,7 +30,7 @@ public enum DrawerSystem: String, Codable, CaseIterable, Sendable, Identifiable 
     public var defaultProfileName: String {
         switch self {
         case .blumLegrabox: return "M"
-        case .gtvAxisPro: return "H116"
+        case .gtvAxisPro: return "H120"
         case .amixSlimbox: return "SB12"
         }
     }
@@ -75,7 +75,11 @@ public struct DrawerProfile: Codable, Hashable, Sendable, Identifiable {
             return [
                 DrawerProfile(system: system, name: "H69", profileHeight: 69, minimumOpening: 100),
                 DrawerProfile(system: system, name: "H86", profileHeight: 86, minimumOpening: 116),
-                DrawerProfile(system: system, name: "H116", profileHeight: 116, minimumOpening: 148),
+                // Poprawione z H116 na H120 po weryfikacji w katalogu producenta
+                // (`scraper/catalogs/gtv_axis_pro.pdf`): warianty to
+                // H69, H86, **H120**, H168, H200. Wartość 116 nie istnieje
+                // w ofercie i przy zamówieniu dawała zły profil.
+                DrawerProfile(system: system, name: "H120", profileHeight: 120, minimumOpening: 152),
                 DrawerProfile(system: system, name: "H168", profileHeight: 168, minimumOpening: 200),
                 DrawerProfile(system: system, name: "H200", profileHeight: 200, minimumOpening: 234)
             ]
@@ -89,6 +93,44 @@ public struct DrawerProfile: Codable, Hashable, Sendable, Identifiable {
             ]
         }
     }
+
+    /// Długości nominalne prowadnic oferowane przez dany system.
+    ///
+    /// Źródła (zweryfikowane 2026-08-26):
+    /// - GTV AXIS PRO — `scraper/catalogs/gtv_axis_pro.pdf`: 250…600 co 50;
+    /// - Amix Slim Box — `scraper/catalogs/amix_slim_box.pdf`;
+    /// - Blum LEGRABOX — strona produktowa: 270…600 w klasie 40 kg,
+    ///   450…650 w klasie 70 kg.
+    ///
+    /// **To nie jest lista uniwersalna.** Każdy system ma własną drabinkę
+    /// i dobieranie „najbliższej okrągłej" długości kończy się zamówieniem
+    /// prowadnicy, której producent nie robi.
+    public static func nominalLengths(for system: DrawerSystem) -> [Millimeters] {
+        switch system {
+        case .gtvAxisPro:
+            return [250, 300, 350, 400, 450, 500, 550, 600]
+        case .amixSlimbox:
+            return [270, 300, 350, 400, 450, 500, 550]
+        case .blumLegrabox:
+            return [270, 300, 350, 400, 450, 500, 550, 600, 650]
+        }
+    }
+
+    /// Najdłuższa prowadnica mieszcząca się w korpusie o zadanej głębokości.
+    ///
+    /// Reguła z danych producenta: prowadnica o długości nominalnej NL wymaga
+    /// **głębokości wewnętrznej co najmniej NL + 22 mm** (Blum podaje 555 mm
+    /// dla NL 533). Zapas obejmuje płytę tylną i luz montażowy.
+    public static func nominalLength(
+        for system: DrawerSystem,
+        cabinetInnerDepth: Millimeters
+    ) -> Millimeters? {
+        let dostepne = cabinetInnerDepth - requiredDepthMargin
+        return nominalLengths(for: system).filter { $0 <= dostepne }.max()
+    }
+
+    /// Zapas głębokości ponad długość nominalną prowadnicy.
+    public static let requiredDepthMargin: Millimeters = 22
 
     public static func profile(system: DrawerSystem, name: String) -> DrawerProfile? {
         catalog(for: system).first { $0.name == name }
@@ -118,7 +160,11 @@ public struct DrawerLayout: Hashable, Sendable {
 public enum DrawerLayoutCalculator {
     public static let bottomMargin: Millimeters = 3
     public static let topMargin: Millimeters = 3
-    public static let frontGap: Millimeters = 3
+
+    /// Fuga między frontami szuflad — ta sama, co między frontami drzwiowymi.
+    /// Wcześniej było tu własne 3 mm, przez co jedna zabudowa miała dwa różne
+    /// odstępy w zależności od tego, czy front należał do szuflady, czy do drzwi.
+    public static var frontGap: Millimeters { ProductionRules.frontToFrontGap }
 
     public static func layout(
         zoneHeight: Millimeters,

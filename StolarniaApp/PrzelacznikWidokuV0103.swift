@@ -24,6 +24,13 @@ struct PrzelacznikWidokuV0103: View {
     let widoki: [Widok]
     @Binding var wybrany: String
 
+    /// Czy przełącznik ma własne tło i kreskę u dołu.
+    ///
+    /// `false`, gdy stoi w jednym wierszu z paskiem następnego kroku —
+    /// wtedy tło daje wspólna obudowa, a dwa materiały jeden na drugim
+    /// robiłyby na styku ciemniejszy pas.
+    var wlasneTlo: Bool = true
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
@@ -38,9 +45,24 @@ struct PrzelacznikWidokuV0103: View {
         // projektu podmienia materiał na kolor, gdy system ma włączone
         // Reduce Transparency. Pasek leży nad rysunkiem, więc przezroczystość
         // bez tej obsługi zlewałaby etykiety z liniami planu.
-        .stolarniaMaterial(.thinMaterial)
-        .overlay(alignment: .bottom) {
-            Divider()
+        .modifier(
+            TloPaskaV0108(wlaczone: wlasneTlo)
+        )
+    }
+
+    private struct TloPaskaV0108: ViewModifier {
+        let wlaczone: Bool
+
+        func body(content: Content) -> some View {
+            if wlaczone {
+                content
+                    .stolarniaMaterial(.thinMaterial)
+                    .overlay(alignment: .bottom) {
+                        Divider()
+                    }
+            } else {
+                content
+            }
         }
     }
 

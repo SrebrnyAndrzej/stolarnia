@@ -354,7 +354,9 @@ struct WorkspaceProjektowyViewV063: View {
     ///
     /// Elewacja wyspy i garderoby są tu wyszarzone, gdy w pomieszczeniu nie
     /// ma czego pokazać — zostają widoczne, żeby było wiadomo, że istnieją.
-    private var przelacznikWidokuProjektuV0103: some View {
+    private func przelacznikWidokuProjektuV0103(
+        wlasneTlo: Bool = true
+    ) -> some View {
         PrzelacznikWidokuV0103(
             widoki: WorkspaceDestinationV074
                 .cele(etapu: .projekt)
@@ -373,7 +375,8 @@ struct WorkspaceProjektowyViewV063: View {
                         destinationV074 = cel
                     }
                 }
-            )
+            ),
+            wlasneTlo: wlasneTlo
         )
     }
 
@@ -440,25 +443,7 @@ struct WorkspaceProjektowyViewV063: View {
     {
         centralContent
             .safeAreaInset(edge: .top, spacing: 0) {
-                przelacznikWidokuProjektuV0103
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                workspaceNextStepStripV084
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
-                    .padding(.bottom, 8)
-                    .background {
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                            .overlay(alignment: .bottom) {
-                                Rectangle()
-                                    .fill(
-                                        StolarniaPalette
-                                            .frostStroke
-                                    )
-                                    .frame(height: 1)
-                            }
-                    }
+                paskiNadRysunkiemV0108
             }
             .frame(
                 maxWidth: .infinity,
@@ -533,6 +518,61 @@ struct WorkspaceProjektowyViewV063: View {
                     max: 390
                 )
             }
+    }
+
+    /// Jeden pasek nad rysunkiem zamiast dwóch.
+    ///
+    /// Przełącznik widoków i pasek następnego kroku stały jeden pod drugim
+    /// i zabierały razem ok. 110 pt. Przy elewacji dochodzi jeszcze pasek
+    /// akcji, więc **rysunek — czyli to, po co się tu przyszło — dostawał
+    /// niecałe cztery piąte ekranu**.
+    ///
+    /// Obie rzeczy są krótkie: przełącznik to rząd kafli, pasek to zdanie
+    /// z przyciskiem. Na iPadzie w poziomie mieszczą się obok siebie.
+    /// `ViewThatFits` wraca do dwóch wierszy, gdy nie ma miejsca — nic nie
+    /// znika i nic się nie ściska poniżej celu dotyku.
+    private var paskiNadRysunkiemV0108: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                // `fixedSize` jest tu konieczne: przełącznik ma w środku
+                // poziomy `ScrollView`, który bez tego zgłasza dowolnie małą
+                // szerokość — `ViewThatFits` uznałby, że wiersz zawsze się
+                // mieści, i ścisnąłby pasek następnego kroku.
+                przelacznikWidokuProjektuV0103(wlasneTlo: false)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Divider()
+                    .frame(height: 30)
+
+                workspaceNextStepStripV084
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            VStack(spacing: 0) {
+                przelacznikWidokuProjektuV0103(wlasneTlo: false)
+
+                Divider()
+
+                workspaceNextStepStripV084
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+            }
+        }
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(
+                            StolarniaPalette
+                                .frostStroke
+                        )
+                        .frame(height: 1)
+                }
+        }
     }
 
     private var workspaceNextStepStripV084:

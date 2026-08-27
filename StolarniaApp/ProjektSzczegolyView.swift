@@ -850,18 +850,23 @@ struct ProjektSzczegolyView: View {
     @ViewBuilder
     private var roomRows: some View {
         ForEach(roomViewModel.rooms) { room in
-            Button {
-                activeWorkflowRoomID =
-                    room.id
-            } label: {
-                roomRowLabel(room)
+            HStack(spacing: 10) {
+                Button {
+                    activeWorkflowRoomID =
+                        room.id
+                } label: {
+                    roomRowLabel(room)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityHint(
+                    "Ustawia pomieszczenie jako aktywne w procesie."
+                )
+                .stolarniaPressable()
+
+                akcjePomieszczeniaV0107(room)
             }
-            .buttonStyle(.plain)
             .padding(.vertical, 4)
-            .contentShape(Rectangle())
-            .accessibilityHint(
-                "Ustawia pomieszczenie jako aktywne w procesie."
-            )
             .swipeActions(
                 edge: .trailing
             ) {
@@ -915,6 +920,88 @@ struct ProjektSzczegolyView: View {
                 }
             }
         }
+    }
+
+    /// Dwie realne akcje pomieszczenia **widoczne w wierszu**.
+    ///
+    /// Wcześniej `Pomiary` i `Projekt` istniały wyłącznie w menu
+    /// kontekstowym, czyli pod przytrzymaniem palca. Stuknięcie wiersza
+    /// ustawiało pomieszczenie jako aktywne i **na tym się kończyło** —
+    /// żeby cokolwiek w nim zrobić, trzeba było wiedzieć o geście, którego
+    /// nic nie zapowiada. Reguła projektu mówi wprost: ważna akcja ma być
+    /// widoczna, a ikona zawsze z podpisem.
+    ///
+    /// Menu kontekstowe zostaje jako droga na skróty dla tych, którzy je
+    /// znają — nie jest już jednak jedyną drogą.
+    private func akcjePomieszczeniaV0107(
+        _ room: RoomDefinition
+    ) -> some View {
+        HStack(spacing: 8) {
+            przyciskPomieszczeniaV0107(
+                "Pomiar",
+                ikona: "ruler",
+                wyrozniony: !roomIsMeasured(room)
+            ) {
+                openMeasurements(for: room)
+            }
+
+            przyciskPomieszczeniaV0107(
+                "Projekt",
+                ikona: "square.grid.2x2",
+                wyrozniony: roomIsMeasured(room)
+            ) {
+                openProject(for: room)
+            }
+        }
+    }
+
+    /// Wyróżniony jest **następny sensowny krok** dla tego pomieszczenia:
+    /// niezmierzone woła o pomiar, zmierzone o projekt. Oba przyciski
+    /// zostają aktywne — do pomiarów wraca się przy każdej korekcie na
+    /// budowie, a nie tylko raz na początku.
+    private func przyciskPomieszczeniaV0107(
+        _ tytul: String,
+        ikona: String,
+        wyrozniony: Bool,
+        akcja: @escaping () -> Void
+    ) -> some View {
+        Button(action: akcja) {
+            Label(tytul, systemImage: ikona)
+                .font(.subheadline.weight(.semibold))
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: 10,
+                        style: .continuous
+                    )
+                    .fill(
+                        wyrozniony
+                        ? StolarniaPalette.accent.opacity(0.16)
+                        : StolarniaPalette.canvasInset
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: 10,
+                        style: .continuous
+                    )
+                    .stroke(
+                        wyrozniony
+                        ? StolarniaPalette.accent.opacity(0.55)
+                        : Color.secondary.opacity(0.22),
+                        lineWidth: 1
+                    )
+                }
+                .foregroundStyle(
+                    wyrozniony
+                    ? StolarniaPalette.accent
+                    : Color.primary
+                )
+        }
+        .buttonStyle(.plain)
+        .stolarniaPressable()
     }
 
     private func roomRowLabel(

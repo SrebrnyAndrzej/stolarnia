@@ -81,7 +81,6 @@ struct KontrolkaPoziomuWymiarowania2D: View {
             )
         }
         .buttonStyle(.bordered)
-        .controlSize(.small)
         .help(poziom.accessibilityDescription)
         .accessibilityLabel("Zakres wymiarów")
         .accessibilityValue(poziom.title)

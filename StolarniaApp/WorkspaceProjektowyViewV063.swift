@@ -2971,7 +2971,6 @@ struct InspektorWorkspaceV063: View {
                         )
                     }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
             }
 
@@ -3148,7 +3147,6 @@ struct InspektorWorkspaceV063: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-        .controlSize(.small)
         .disabled(
             !selectionSummaryV066.moznaWykonac(operation)
         )
@@ -3279,11 +3277,23 @@ struct InspektorWorkspaceV063: View {
         key: KeyEquivalent,
         modifiers: EventModifiers
     ) -> some View {
-        Button(title) {
+        Button {
             onNudge(dx, dy)
+        } label: {
+            // Cel dotyku podany wprost, nie wynikający z długości napisu.
+            // Tymi przyciskami poprawia się położenie mebla o milimetr,
+            // czyli używa się ich seriami — `controlSize(.small)` dawało
+            // 28 pt, czyli 5,4 mm, przy progu komfortu 9,2 mm.
+            // Wysokość jest twarda, szerokość ustępliwa: cztery przyciski
+            // („← 10 / ← 1 / → 1 / → 10") muszą zmieścić się w inspektorze
+            // szerokości ok. 270 pt, więc rośnie ten wymiar, który decyduje
+            // o trafianiu palcem, a nie ten, który rozsadza wiersz.
+            Text(title)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(minWidth: 34, minHeight: 44)
         }
         .buttonStyle(.bordered)
-        .controlSize(.small)
         .keyboardShortcut(key, modifiers: modifiers)
     }
 

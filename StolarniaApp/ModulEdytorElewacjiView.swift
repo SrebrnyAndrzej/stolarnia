@@ -992,7 +992,6 @@ struct ModulEdytorElewacjiView: View {
                 Label(tytul, systemImage: ikona).frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.small)
         } else {
             Button {
                 narzedzie = wartosc
@@ -1188,7 +1187,7 @@ struct ModulEdytorElewacjiView: View {
             }
 
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 118), spacing: 8)],
+                columns: [GridItem(.adaptive(minimum: 136), spacing: 8)],
                 alignment: .leading,
                 spacing: 8
             ) {
@@ -1260,9 +1259,12 @@ struct ModulEdytorElewacjiView: View {
                 }
                 .disabled(modul.frontSpans.isEmpty)
             }
-            .font(.caption)
+            // Pełny rozmiar kontrolki, nie `.small`. Te przyciski zmieniają
+            // typ komory i zakres frontu — przy 28 pt cel dotyku ma 5,4 mm,
+            // czyli połowę progu komfortu przyjętego w tym projekcie.
+            // Siatka jest adaptacyjna, więc rosną w dół, nie w bok.
+            .font(.subheadline)
             .buttonStyle(.bordered)
-            .controlSize(.small)
         }
         .padding(12)
         .background(
@@ -1383,7 +1385,7 @@ struct ModulEdytorElewacjiView: View {
             )
 
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 118), spacing: 8)],
+                columns: [GridItem(.adaptive(minimum: 136), spacing: 8)],
                 alignment: .leading,
                 spacing: 8
             ) {
@@ -1410,9 +1412,12 @@ struct ModulEdytorElewacjiView: View {
                     Label("Usuń front", systemImage: "trash")
                 }
             }
-            .font(.caption)
+            // Pełny rozmiar kontrolki, nie `.small`. Te przyciski zmieniają
+            // typ komory i zakres frontu — przy 28 pt cel dotyku ma 5,4 mm,
+            // czyli połowę progu komfortu przyjętego w tym projekcie.
+            // Siatka jest adaptacyjna, więc rosną w dół, nie w bok.
+            .font(.subheadline)
             .buttonStyle(.bordered)
-            .controlSize(.small)
         }
         .padding(12)
         .background(
@@ -1520,10 +1525,9 @@ struct ModulEdytorElewacjiView: View {
                         systemImage:
                             "ruler"
                     )
-                    .font(.caption)
+                    .font(.subheadline)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
             }
 
             if zone.kind == .hanging {
@@ -1580,10 +1584,9 @@ struct ModulEdytorElewacjiView: View {
                     }
                 } label: {
                     Label("Usuń podział pod strefą", systemImage: "trash")
-                        .font(.caption)
+                        .font(.subheadline)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         }
         .padding(12)

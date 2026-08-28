@@ -4,6 +4,7 @@ struct BOMProjektuViewV062: View {
     @Environment(\.dismiss) private var dismiss
 
     let bom: BOMProjektuV062
+    var onPrzejdzDoPlanuV0108: (() -> Void)?
 
     @State private var exportURL: URL?
     @State private var exportError: String?
@@ -32,7 +33,10 @@ struct BOMProjektuViewV062: View {
                         StolarniaEmptyState(
                             title: "Pusty BOM",
                             description: "Bill of Materials generowany jest z modułów i wybranego wariantu wyceny. Dodaj moduły w Planie 2D i uzupełnij wycenę, żeby zobaczyć szczegółowe zestawienie płyt, frontów, okuć i akcesoriów.",
-                            systemImage: "list.bullet.clipboard"
+                            systemImage: "list.bullet.clipboard",
+                            actionTitle: "Przejdź do Planu 2D",
+                            actionSystemImage: "square.grid.2x2",
+                            action: onPrzejdzDoPlanuV0108
                         )
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)

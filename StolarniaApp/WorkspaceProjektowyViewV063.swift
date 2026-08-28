@@ -568,17 +568,16 @@ struct WorkspaceProjektowyViewV063: View {
                     .padding(.bottom, 8)
             }
         }
-        .background {
+        // `stolarniaMaterial`, nie surowy `Rectangle().fill(.ultraThinMaterial)`
+        // — respektuje Reduce Transparency, zamieniając materiał na kolor.
+        .stolarniaMaterial(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(
-                            StolarniaPalette
-                                .frostStroke
-                        )
-                        .frame(height: 1)
-                }
+                .fill(
+                    StolarniaPalette
+                        .frostStroke
+                )
+                .frame(height: 1)
         }
     }
 
@@ -1487,21 +1486,20 @@ struct WorkspaceProjektowyViewV063: View {
                 .padding(.vertical, 10)
                 .padding(.bottom, 12)
                 .frame(maxWidth: .infinity)
-                .background {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .overlay {
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.14),
-                                    StolarniaPalette.paper.opacity(0.06),
-                                    StolarniaPalette.accent.opacity(0.06),
-                                    Color.clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        }
+                // `stolarniaMaterial`, nie surowy `Rectangle().fill(...)` —
+                // respektuje Reduce Transparency.
+                .stolarniaMaterial(.ultraThinMaterial)
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.14),
+                            StolarniaPalette.paper.opacity(0.06),
+                            StolarniaPalette.accent.opacity(0.06),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 }
                 .overlay(alignment: .top) {
                     Rectangle()

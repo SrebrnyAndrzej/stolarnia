@@ -554,21 +554,21 @@ struct WidokElewacjiSciany: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.14),
-                            StolarniaPalette.paper.opacity(0.06),
-                            StolarniaPalette.accent.opacity(0.06),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                }
+        // `stolarniaMaterial`, nie surowe `Rectangle().fill(.ultraThinMaterial)`
+        // — modyfikator projektu podmienia materiał na kolor zastępczy, gdy
+        // system ma włączone Reduce Transparency. Surowy `.fill` tego nie robi.
+        .stolarniaMaterial(.ultraThinMaterial)
+        .overlay {
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.14),
+                    StolarniaPalette.paper.opacity(0.06),
+                    StolarniaPalette.accent.opacity(0.06),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
         .overlay(alignment: .top) {
             Rectangle()

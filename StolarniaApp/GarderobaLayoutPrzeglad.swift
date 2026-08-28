@@ -181,7 +181,7 @@ struct GarderobaLayoutPrzeglad: View {
                 }
 
                 Text("Rzut z góry — nie w skali")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(8)
             }
@@ -379,7 +379,7 @@ struct GarderobaLayoutPrzeglad: View {
             ForEach(Array(modules.enumerated()), id: \.element.id) { idx, assembly in
                 HStack(spacing: 10) {
                     Text("\(idx + 1)")
-                        .font(.caption2.monospacedDigit())
+                        .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .frame(width: 22, alignment: .trailing)
 
@@ -388,7 +388,7 @@ struct GarderobaLayoutPrzeglad: View {
                             .font(.subheadline)
 
                         Text(assembly.kind.displayTitle)
-                            .font(.caption2)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
 
@@ -403,7 +403,7 @@ struct GarderobaLayoutPrzeglad: View {
                         .foregroundStyle(.secondary)
 
                         Text("gł. \(Int(assembly.size.depth.rawValue)) mm")
-                            .font(.caption2.monospacedDigit())
+                            .font(.footnote.monospacedDigit())
                             .foregroundStyle(Color(.tertiaryLabel))
                     }
                 }
@@ -485,7 +485,7 @@ struct GarderobaLayoutPrzeglad: View {
                 .monospacedDigit()
 
             Text(label)
-                .font(.caption2)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

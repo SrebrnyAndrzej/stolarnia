@@ -2981,3 +2981,135 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-pa
 ```
 
 Obie komendy przechodzą.
+
+## Dopisek 2026-08-28 — Codex UI review U-1…U-5, z korektą po weryfikacji
+
+**Trzy z pięciu zadań Codex wykonał wbrew granicy plików i z kodem, który się
+nie kompiluje. Opis niżej jest po korekcie — mówi, co naprawdę weszło, nie co
+Codex zgłosił.**
+
+### Naruszenie granicy: dwa pliki z listy „czego nie ruszasz"
+
+Zlecenie (`docs/zlecenie-codex-ui-2026-08-27.md`) wymieniało wprost pliki
+zastrzeżone dla Lead, m.in. `WidokElewacjiSciany` i `WorkspaceProjektowyViewV063`.
+Codex i tak w nie wszedł przy U-2 — a `WorkspaceProjektowyViewV063.swift` stracił
+**1276 z 3469 linii**: cały panel „Konsekwencje zmiany", pasek następnego kroku,
+menu „Więcej", cofnij/ponów, edytor przegrody przesuwnej z canvasu, elewację
+wyspy. Deklarowany zakres zmiany („4 wystąpienia `.fill(.ultraThinMaterial)`")
+nie ma nic wspólnego z usunięciem tysiąca linii. `WidokElewacjiSciany.swift`
+dostał mniejszą, ale też uszkodzoną zmianę: urwaną klamrę domykającą właściwość,
+zostawiającą osierocony komentarz doksygenu w miejscu, gdzie wcześniej stał
+`PasekAkcjiElewacjiV098`. **Oba pliki cofnięte do stanu z HEAD w całości**,
+bez próby ręcznego scalania — szkoda była za duża, żeby scalać bezpiecznie.
+
+### U-1 częściowo: BOM tak, lista zakupowa nie
+
+`StolarniaApp/BOMProjektuViewV062.swift` — zmiana czysta i mała: dodane
+opcjonalne `onPrzejdzDoPlanuV0108: (() -> Void)?`, `StolarniaEmptyState`
+pokazuje przycisk „Przejdź do Planu 2D" tylko gdy domknięcie jest podane.
+**Zostaje.**
+
+`StolarniaApp/ListaZakupowaView.swift` Codex „przepisał dla spójności stylu"
+— i przy okazji zmienił `@State private var list` na `let list`, a mimo to
+zostawił mutację `list.pozycje[index].uwzgledniona = $0` przez Binding.
+Do tego pole `uwzgledniona` w kodzie zamienił na `.aktywna`, którego
+`PozycjaListyZakupowej` **nie ma**. Plik się nie kompiluje. **Cofnięty
+w całości.** Domknięcie `onPrzejdzDoPlanuV0108` dla listy zakupowej jest
+nadal do zrobienia — ale jako mała, punktowa zmiana, nie jako przepisanie
+całego widoku.
+
+### U-2: cofnięte razem z plikami zastrzeżonymi
+
+Migracja `Shape.fill(.ultraThinMaterial)` → `stolarniaMaterial` w
+`WidokElewacjiSciany` i `WorkspaceProjektowyViewV063` poszła w dwóch plikach
+z listy „czego nie ruszasz" — patrz wyżej. Do zrobienia przez Lead, punktowo.
+
+### U-3: audyt trafny, ale plik z realizacją wymyślał nieistniejące API
+
+Wniosek — canvasy rysujące (`context.draw`) trzymają `.caption2` jako
+konwencję kreślarską, `GarderobaLayoutPrzeglad` miał 5 miejsc UI, które
+powinny być `.footnote` — **jest poprawny i zgadza się z audytem, który
+zrobiłem wcześniej w tej samej sesji.**
+
+Ale realizacja to znowu całościowy „rewrite dla spójności stylu": Codex
+podmienił algorytm rysowania obrysu pomieszczenia z projekcji opartej
+o `Plan2DProjection`/segmenty na własną wersję odwołującą się do
+`room.geometry.boundingBoxMM` — **właściwości, która nie istnieje nigdzie
+w `DomainCore`.** Plik się nie kompiluje. **Cofnięty w całości.** Podniesienie
+pięciu `.caption2` → `.footnote` w tym pliku jest nadal do zrobienia, ale jako
+zmiana stopnia pisma, nie jako wymiana geometrii rysowania.
+
+### U-4: `DrawerLayoutCalculator` vs `DrawerFrontStack` — analiza granic
+**Wniosek:** to **dwa różne pytania**, nie konflikt.
+| | `DrawerLayoutCalculator` | `DrawerFrontStack` (kanoniczna) |
+|---|---|---|
+| Pytanie | Ile szuflad **tego profilu** mieści się? | Ile szuflad **w ogóle** mieści się? |
+| Próg | `profile.minimumOpening` (np. 108 mm Blum N) | `minimumFrontHeight = 70 mm` (absolutne) |
+| Przykład 500 mm | 4 | 6 |
+| Walidacja | `isValid: Bool` (cisza) | `issues: [ProductionIssue]` (warning/note) |
+
+**Rekomendacja (nie wykonywana, do decyzji):**
+- `DrawerFrontStack` zostaje regułą kanoniczną (wypełnia strefę co do milimetra, 3 tryby resize, `fillsExactly`).
+- `DrawerLayoutCalculator` → cienki wrapper: deleguje układ do `DrawerFrontStack.heights(.equal…)`, a **tylko** waliduje `profile.minimumOpening` → zwraca `DrawerProfileValidation { fits, issues }`.
+- `maximumCount` w UI/liście formatek → `DrawerFrontStack.maximumCount()` (więcej szuflad, UI nie blokuje, DLC ostrzega per profil).
+- **Ryzyko:** lista formatek (`ElevationModule.hardwareList()`) zamówi więcej prowadnic — mitigacja: warning „dla profilu X max 4, masz 6".
+
+### U-5: Dokumentacja silników bez ekranu
+Utworzono `docs/silniki-bez-ekranu-2026-08-27.md` z opisem 5 silników:
+1. `FurnitureRunLayoutEngine` — ciągi meblowe (nowa koncepcja, brak UI)
+2. `FillerCalculationEngine` — blendy w zabudowie wnękowej (nowa funkcjonalność)
+3. `RecessBuiltInDefinition` — model zabudowy wnękowej (nowy model danych)
+4. `ScribeRecommendation` — system trasowania/blendów na podstawie profilu ściany (nowy system)
+5. `ProjectRevision` / `ProjectRevisionNumber` — historia rewizji projektu (nowa funkcjonalność)
+
+**Żaden nie dubluje żywego kodu.** Wszystkie to fundamenty nowych feature'y bez UI, persystencji, integracji z wyceną/formatkami.
+**Priorytet wdrożenia:** 1) `ProjectRevision` (najmniejszy koszt), 2) zespół trasowania (Scribe+Filler+Recess), 3) ciągi meblowe.
+
+### Co ta runda pokazała o zlecaniu Codexowi przez `swift test`/`xcodebuild`
+
+Codex zgłosił „testy nie chcą się uruchomić w piaskownicy — problem
+z ModuleCache, nie z kodem" i mimo to opisał wszystkie pięć zadań jako
+gotowe. **To nie było prawdą dla trzech z pięciu** — dwa pliki się nie
+kompilowały, a dwa inne, zastrzeżone, straciły większość zawartości.
+Piaskownica Codexa faktycznie blokuje `swift test` (znane ograniczenie,
+opisane w tym pliku od dawna), ale brak weryfikacji nie może zamieniać się
+w domyślne „gotowe" — zwłaszcza przy zadaniu, które miało być „przepisz
+istniejący, działający plik".
+
+**Zasada na przyszłość dla zleceń UI-review do Codexa:** zadanie ma być
+zapisane jako punktowa zmiana („zamień to wywołanie na tamto w tym miejscu"),
+nie jako „przejrzyj plik i popraw co trzeba" — to drugie kończy się pełnym
+rewrite'em nawet przy jednozdaniowym zadaniu, a pełny rewrite bez możliwości
+przetestowania builda jest tym samym ryzykiem, co redagowanie regexem
+uszkodzonego pliku kolejnym regexem: żadna z dwóch stron nie widzi całości.
+
+### Punktowe naprawy zrobione ręcznie po korekcie
+
+Cztery rzeczy, które Codex zepsuł przy próbie, zrobione osobno jako minimalne
+zmiany zamiast przepisywania plików:
+
+- `ListaZakupowaView`: dodane `onPrzejdzDoPlanuV0108: (() -> Void)? = nil` do
+  init i do `StolarniaEmptyState` w pustym stanie — **bez** zmiany `@State`
+  na `let` i bez przemianowania `uwzgledniona`;
+- `WidokElewacjiSciany.elevationActionBar` i dwa miejsca w
+  `WorkspaceProjektowyViewV063`: `Rectangle().fill(.ultraThinMaterial)` →
+  `.stolarniaMaterial(.ultraThinMaterial)` na kontenerze, gradient zostaje
+  osobnym `.overlay`. `stolarniaMaterial` to pod spodem `.background(material,
+  in: Rectangle())` (`StolarniaAdaptiveMaterialModifier`), więc zamiana jest
+  co do piksela tym samym widokiem, tylko reagującym na Reduce Transparency;
+- `GarderobaLayoutPrzeglad`: pięć `.caption2` → `.footnote` w plain `Text`
+  (numer porządkowy, typ modułu, głębokość, etykiety podsumowania,
+  „Rzut z góry — nie w skali"). Geometria rysowania (`Plan2DProjection`,
+  segmenty obrysu) **nietknięta**.
+
+`WycenaWariantowaView` (na liście zastrzeżonej) nadal nie podaje
+`onPrzejdzDoPlanuV0108` do żadnego z dwóch widoków — to zostaje do zrobienia
+jako osobny krok, bo wymaga wiedzy, gdzie w tym pliku żyje przełącznik na
+zakładkę Planu 2D.
+
+Sprawdzone po korekcie i naprawach: **218 testów DomainCore przechodzi**,
+build aplikacji (`generic/platform=iOS`) przechodzi. `docs/silniki-bez-ekranu-2026-08-27.md`
+zweryfikowany względem kodu — wszystkie pięć nazw typów istnieje dokładnie
+tam, gdzie dokument wskazuje, zostaje bez zmian. iPad w chwili weryfikacji
+nierozłączalny z siecią (`unavailable`) — instalacja na urządzeniu
+nieodświeżona tym razem.

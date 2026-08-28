@@ -15,13 +15,24 @@ struct ListaZakupowaView:
     @State private var errorMessage:
         String?
 
+    /// Wyjście z pustego stanu wprost do Planu 2D.
+    ///
+    /// Bez tego opis „Dodaj moduły w Planie 2D" był instrukcją bez drzwi —
+    /// projektant czytał, co ma zrobić, i sam szukał drogi.
+    var onPrzejdzDoPlanuV0108:
+        (() -> Void)? = nil
+
     init(
         list:
-            ListaZakupowaProjektu
+            ListaZakupowaProjektu,
+        onPrzejdzDoPlanuV0108:
+            (() -> Void)? = nil
     ) {
         _list = State(
             initialValue: list
         )
+        self.onPrzejdzDoPlanuV0108 =
+            onPrzejdzDoPlanuV0108
     }
 
     private var categories:
@@ -64,7 +75,10 @@ struct ListaZakupowaView:
                         StolarniaEmptyState(
                             title: "Brak pozycji do zakupu",
                             description: "Lista zakupowa generowana jest z materiałów, okuć i akcesoriów użytych w projekcie. Dodaj moduły w Planie 2D i wybierz wariant wyceny, żeby zobaczyć tutaj skonsolidowaną listę do zakupu.",
-                            systemImage: "cart.badge.plus"
+                            systemImage: "cart.badge.plus",
+                            actionTitle: "Przejdź do Planu 2D",
+                            actionSystemImage: "square.grid.2x2",
+                            action: onPrzejdzDoPlanuV0108
                         )
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)

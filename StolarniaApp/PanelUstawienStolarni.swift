@@ -1,13 +1,6 @@
 import Combine
 import SwiftUI
 
-enum PanelUstawienTrybPrezentacji:
-    Equatable
-{
-    case osadzony
-    case modalny
-}
-
 private enum PanelUstawienSekcja:
     String,
     CaseIterable,
@@ -57,11 +50,19 @@ private enum PanelUstawienSekcja:
     }
 }
 
+/// Ustawienia warsztatu — **wyłącznie jako ekran bazy, nie jako okno**.
+///
+/// Do 2026-08-27 typ niósł drugi tryb, `.modalny`: własny `NavigationStack`,
+/// przycisk „Zamknij" i **osobne wejście do bazy materiałów jako arkusz**.
+/// Był to układ sprzed pulpitu kaflowego, kiedy ustawienia otwierało się
+/// oknem znad listy. Po zmianie nawigacji nic go nie otwierało, ale kod
+/// żył dalej — razem z drugą drogą do bazy, która ma dziś własny kafel.
+///
+/// Martwy tryb prezentacji jest gorszy niż brak: wygląda na obsługiwany
+/// i pierwsza osoba, która go użyje, dostanie okno w środku ekranu bazy.
 struct PanelUstawienStolarni:
     View
 {
-    @Environment(\.dismiss)
-    private var dismiss
 
     @StateObject private var repository =
         UstawieniaStolarniRepository()
@@ -76,62 +77,13 @@ struct PanelUstawienStolarni:
     @State private var pokazPotwierdzenieResetu =
         false
     @State private var zapisano = false
-    @State private var pokazBazeMaterialow =
-        false
-
-    let trybPrezentacji:
-        PanelUstawienTrybPrezentacji
-
-    init(
-        trybPrezentacji:
-            PanelUstawienTrybPrezentacji =
-                .modalny
-    ) {
-        self.trybPrezentacji =
-            trybPrezentacji
-    }
 
     var body: some View {
-        Group {
-            if trybPrezentacji
-                == .modalny
-            {
-                NavigationStack {
-                    screenContent
-                }
-            } else {
-                screenContent
-            }
-        }
+        screenContent
         .onAppear {
             repository.odswiez()
             draft =
                 repository.ustawienia
-        }
-        .sheet(
-            isPresented:
-                $pokazBazeMaterialow
-        ) {
-            NavigationStack {
-                BazaMaterialowView()
-                    .toolbar {
-                        ToolbarItem(
-                            placement:
-                                .cancellationAction
-                        ) {
-                            Button {
-                                pokazBazeMaterialow =
-                                    false
-                            } label: {
-                                Label(
-                                    "Zamknij",
-                                    systemImage:
-                                        "xmark"
-                                )
-                            }
-                        }
-                    }
-            }
         }
         .alert(
             "Przywrócić ustawienia domyślne?",
@@ -254,24 +206,6 @@ struct PanelUstawienStolarni:
                 )
             }
 
-            if trybPrezentacji
-                == .modalny
-            {
-                Divider()
-                    .frame(height: 24)
-
-                Button {
-                    pokazBazeMaterialow =
-                        true
-                } label: {
-                    Label(
-                        "Baza materiałów",
-                        systemImage:
-                            "square.grid.2x2"
-                    )
-                }
-                .stolarniaFilterControl()
-            }
         }
     }
 
@@ -299,25 +233,6 @@ struct PanelUstawienStolarni:
     private var toolbarContent:
         some ToolbarContent
     {
-        if trybPrezentacji
-            == .modalny
-        {
-            ToolbarItem(
-                placement:
-                    .cancellationAction
-            ) {
-                Button {
-                    dismiss()
-                } label: {
-                    Label(
-                        "Zamknij",
-                        systemImage:
-                            "xmark"
-                    )
-                }
-            }
-        }
-
         ToolbarItemGroup(
             placement:
                 .primaryAction

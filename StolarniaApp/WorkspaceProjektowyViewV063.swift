@@ -38,7 +38,8 @@ private enum WorkspacePresentationV084: Identifiable {
     case layoutPrzeglad
     case wykonczeniaKuchni
     case dwgImport
-    case elevationCreator
+    // `elevationCreator` usunięty 2026-08-27 — patrz komentarz przy
+    // `style`, ostatnia rzecz, która została po tej ścieżce.
 
     var id: String {
         switch self {
@@ -64,19 +65,25 @@ private enum WorkspacePresentationV084: Identifiable {
             return "wykończenia-kuchni"
         case .dwgImport:
             return "dwg-import"
-        case .elevationCreator:
-            return "elevation-creator"
         }
     }
 
-    var style: WorkspacePresentationStyleV084 {
-        switch self {
-        case .elevationCreator:
-            return .fullScreen
-        default:
-            return .sheet
-        }
-    }
+    /// **Usunięte 2026-08-27: `elevationCreator`.**
+    ///
+    /// Menu „Więcej" miało pozycję `Kreator rysunkowy`, która otwierała
+    /// `ModulEdytorElewacjiView()` **bez argumentów**, czyli na pełny ekran
+    /// i bez `onZapisz`. Edytor wchodził wtedy w tryb podglądu presetu:
+    /// dawało się rysować moduł, którego **nie da się zapisać** i który nie
+    /// należy do żadnej ściany. Wejście pochodziło sprzed `KartaModuluV097`,
+    /// gdzie ten sam edytor stoi w sekcji „Rysunek", związany z konkretnym
+    /// modułem i z zapisem.
+    ///
+    /// Deska kreślarska gubiąca pracę jest gorsza niż jej brak, dlatego
+    /// pozycja znika, a nie zostaje wyszarzona.
+    ///
+    /// Po tej zmianie wszystkie prezentacje są arkuszami, więc `style`
+    /// przestał być potrzebny — pełny ekran miał tylko ten jeden przypadek.
+    var style: WorkspacePresentationStyleV084 { .sheet }
 }
 
 private enum WorkspaceNextStepActionV084 {
@@ -980,15 +987,6 @@ struct WorkspaceProjektowyViewV063: View {
         Divider()
 
         Button {
-            activePresentationV084 = .elevationCreator
-        } label: {
-            Label(
-                "Kreator rysunkowy",
-                systemImage: "pencil.and.ruler"
-            )
-        }
-
-        Button {
             activePresentationV084 = .dwgImport
         } label: {
             Label(
@@ -1265,8 +1263,6 @@ struct WorkspaceProjektowyViewV063: View {
                 walls: room.geometry.walls
             )
 
-        case .elevationCreator:
-            ModulEdytorElewacjiView()
         }
     }
 

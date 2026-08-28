@@ -37,3 +37,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Katalog roboczy agentów (worktree izolacyjny) — nie należy do repo
+.claude/

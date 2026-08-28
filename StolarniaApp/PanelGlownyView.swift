@@ -306,10 +306,7 @@ struct PanelGlownyView: View {
     {
         switch selectedCompanySection {
         case .ustawienia:
-            PanelUstawienStolarni(
-                trybPrezentacji:
-                    .osadzony
-            )
+            PanelUstawienStolarni()
 
         case .materialy:
             BazaMaterialowView()

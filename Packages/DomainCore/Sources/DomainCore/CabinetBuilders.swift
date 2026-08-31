@@ -323,6 +323,11 @@ private struct CabinetStableIDResolver {
 }
 
 private enum CabinetComponentFactory {
+    /// Zawsze dwa pełne boki (BOK-L, BOK-P) — nigdy współdzielone z sąsiednim
+    /// modułem w ciągu. Każdy moduł w tej stolarni jest osobnym meblem
+    /// montowanym obok sąsiada, nie skrzynią z dzielonymi przegrodami.
+    /// Reguła z [[regula-modul-w-ciagu-osobny-mebel]] — patrz komentarz przy
+    /// `ElevationModule.makeAssembly` po drugą, symetryczną implementację.
     static func standardCarcassComponents(
         parameters: CabinetBuildParameters,
         ids: CabinetStableIDResolver,

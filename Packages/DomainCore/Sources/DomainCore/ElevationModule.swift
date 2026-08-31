@@ -1966,6 +1966,16 @@ public extension ElevationModule {
         // Kontrola sprawdzała fronty, których lista formatek nie zamawiała.
         let useFrontLayer = !frontSpans.isEmpty
 
+        // Bezwarunkowo dwa pełne boki — celowo, nie do "optymalizacji".
+        //
+        // Każdy moduł w ciągu (szafa przesuwna, zabudowa wnękowa, ciąg
+        // kuchenny) jest w tej stolarni osobnym meblem, montowanym obok
+        // sąsiada, nie jedną ciągłą skrzynią z dzielonymi przegrodami.
+        // Bok nigdy nie jest współdzielony z sąsiednim modułem, nawet gdy
+        // stoją bezpośrednio przy sobie — reguła potwierdzona po realnym
+        // błędzie w ręcznym rozkroju poza tym silnikiem (projekt NATALIA,
+        // 2026-08), gdzie policzenie boków jako "wspólne w ciągu" (N+1
+        // zamiast 2×N) dało rozkrój krótszy o realne formatki.
         try add("BOK-L", .side, w: t, h: height, d: depth, x: .zero, y: .zero, z: .zero)
         try add("BOK-P", .side, w: t, h: height, d: depth, x: width - t, y: .zero, z: .zero)
         try add("DNO", .bottom, w: innerWidth, h: t, d: depth, x: t, y: .zero, z: .zero)
